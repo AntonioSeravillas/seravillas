@@ -92,6 +92,8 @@ function renderProperties(){
     +'</div>'
     +(SV_STORAGE.getItem(BACKUP_DATE_KEY)?'<div style="font-size:11px;color:var(--accent);font-weight:600">✓ Auto-backup from '+SV_STORAGE.getItem(BACKUP_DATE_KEY)+'</div>':'<div style="font-size:11px;color:var(--text3)">No auto-backup yet</div>')
     +'</div>'
+    +'<button class="sv-btn sv-btn-secondary sv-btn-sm" style="width:100%;margin-bottom:10px" onclick="openExcelImport()">Import bookings from Excel</button>'
+    +(SV_STORAGE.getItem(DB+'_beforeExcelImport')?'<button class="sv-btn sv-btn-ghost sv-btn-sm" style="width:100%;margin-bottom:20px" onclick="restoreBeforeExcelImport()">Restore before last Excel import</button>':'')
     +'<div class="sv-card">'
     +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Cloud Sync</div>'
     +'<div class="sync-bar" style="margin-bottom:10px"><div class="sync-dot '+syncStatus+'" id="sync-dot-props"></div><span id="sync-label-props">'+(DEV_MODE?'Cloud sync disabled (development preview)':{idle:'Not synced',syncing:'Syncing…',ok:'Synced',error:'Sync failed'}[syncStatus])+'</span><button class="sync-btn" onclick="syncNow()"'+(DEV_MODE?' disabled title="Cloud sync is disabled in the development preview" style="opacity:.5;cursor:not-allowed"':'')+'>Sync now</button></div>'
@@ -186,7 +188,7 @@ function renderPropHub(pid){
         +(b.guestCount?'<span style="font-size:10px;font-weight:600;color:var(--text3)">👥 '+b.guestCount+'</span>':'')
         +'</div></div>'
         +'<div class="ph-bk-right">'
-        +(b.totalPrice?'<div class="ph-bk-price">'+fmtEur(b.totalPrice)+'</div>':'')
+        +(b._excel&&b._excel.priceUnknown?'<div class="ph-bk-price">Price unknown</div>':b.totalPrice||b._excel?'<div class="ph-bk-price">'+fmtEur(b.totalPrice)+'</div>':'')
         +'<div class="ph-bk-nights">'+nights+'n</div>'
         +'</div></div>';
     });

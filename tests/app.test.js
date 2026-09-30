@@ -131,3 +131,57 @@ test('old backups without sync metadata still load', () => {
   assert.equal(app.run('D._savedAt'), 0);
   assert.deepEqual(plain(app.run('D._migrations')), []);
 });
+
+test('Excel UI saves an isolated rollback backup and persists import history after reload', () => {
+  const app = runtime();
+  const before = app.run('JSON.stringify(D)');
+  app.run(`openExcelImport();
+    excelImportState.parsed={errors:[],sheets:[{name:'DEMO',property:D.props[0].name,count:1}],rows:[{key:'DEMO:4',sheet:'DEMO',row:4,property:D.props[0].name,sourceChannel:'PRIVATE',platform:'direct',agencyName:'',guestName:'Synthetic Import Guest',reference:'demo-123',guestCount:null,guestCountRaw:'',totalPrice:0,checkIn:'2026-11-01',checkOut:'2026-11-08',originalCheckIn:'2026-11-01',originalCheckOut:'2026-11-08'}]};
+    excelImportState.fileName='fictional.xlsx';renderExcelImport();applyExcelBookingImport();`);
+  assert.equal(app.run('D.bookings.length'),7);
+  assert.equal(app.run('D.importHistory.length'),1);
+  assert.equal(app.run('D.importHistory[0].counts.add'),1);
+  assert.equal(app.records.get('seravillas_dev:seravillas_v1_beforeExcelImport'),before);
+  assert.equal(app.requests.length,0);
+  assert.ok(app.writes.every(key=>key.startsWith('seravillas_dev:')));
+  const reloaded = runtime({records:app.records});
+  assert.equal(reloaded.run('D.importHistory.length'),1);
+  assert.equal(reloaded.run('D.bookings.at(-1).totalPrice'),0);
+  assert.equal(reloaded.run('D.bookings.at(-1).guestCount'),null);
+  assert.equal(reloaded.run('D.bookings.at(-1)._excel.reference'),'demo-123');
+  reloaded.run('restoreBeforeExcelImport()');
+  assert.equal(reloaded.run('D.bookings.length'),6);
+  assert.ok(reloaded.run('D._migrations.includes(BOOKING_MIGRATION_KEY)'));
+  assert.equal(reloaded.requests.length,0);
+});
+
+test('failed import storage leaves the in-memory and stored current bookings untouched', () => {
+  const app = runtime();
+  const before = app.run('JSON.stringify(D)');
+  const stored = app.records.get('seravillas_dev:seravillas_v1');
+  app.records.set('seravillas_dev:seravillas_v1_beforeExcelImport','PREVIOUS_BACKUP_SENTINEL');
+  app.run(`openExcelImport();
+    excelImportState.parsed={errors:[],sheets:[{name:'DEMO',property:D.props[0].name,count:1}],rows:[{key:'DEMO:4',sheet:'DEMO',row:4,property:D.props[0].name,sourceChannel:'PRIVATE',platform:'direct',agencyName:'',guestName:'Synthetic Import Guest',reference:'demo-123',guestCount:2,guestCountRaw:'2',totalPrice:100,checkIn:'2026-11-01',checkOut:'2026-11-08',originalCheckIn:'2026-11-01',originalCheckOut:'2026-11-08'}]};
+    renderExcelImport();`);
+  const setItem = app.context.localStorage.setItem;
+  app.context.localStorage.setItem = (key,value) => {
+    if(key==='seravillas_dev:seravillas_v1')throw new Error('Simulated storage full');
+    setItem(key,value);
+  };
+  app.run('applyExcelBookingImport()');
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.records.get('seravillas_dev:seravillas_v1'),stored);
+  assert.equal(app.records.get('seravillas_dev:seravillas_v1_beforeExcelImport'),'PREVIOUS_BACKUP_SENTINEL');
+  assert.equal(app.run('excelImportState.error'),'Simulated storage full');
+  assert.equal(app.requests.length,0);
+});
+
+test('unknown imported prices remain unknown on reload and reports label incomplete totals', () => {
+  const saved = {props:[{id:'p',name:'Villa Mar'}],sessions:[],cleaners:[],bookings:[{id:'unknown',propId:'p',guestName:'Synthetic Guest',checkIn:'2026-11-01',checkOut:'2026-11-08',guestCount:null,totalPrice:null,platform:'direct',_excel:{priceUnknown:true}}],importHistory:[{id:'batch-test',source:'excel'}]};
+  const app = runtime({records:new Map([['seravillas_dev:seravillas_v1',JSON.stringify(saved)]])});
+  assert.equal(app.run('D.bookings[0].totalPrice'),null);
+  assert.equal(app.run('D.bookings[0].guestCount'),null);
+  assert.equal(app.run('D.importHistory[0].id'),'batch-test');
+  assert.match(app.run('renderBookingReport()'),/Revenue totals are incomplete/);
+  assert.match(app.run('renderBookingReport()'),/>Direct</);
+});

@@ -27,6 +27,7 @@ function propBarColor(propId){
   return palette[idx]||palette[0];
 }
 function platformBadge(platform,agencyName){
+  if(platform==='direct') return'<span class="plat-ag">Direct</span>';
   if(platform==='airbnb') return'<span class="plat-ab">Airbnb</span>';
   if(platform==='booking') return'<span class="plat-bk">Booking.com</span>';
   return'<span class="plat-ag">'+(agencyName?esc(agencyName):'Agency')+'</span>';

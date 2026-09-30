@@ -1,0 +1,5 @@
+# Private booking workbooks and exported app backups
+*.xlsx
+*.xls
+*.csv
+seravillas-backup-*.json

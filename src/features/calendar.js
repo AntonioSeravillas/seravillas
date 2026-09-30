@@ -563,7 +563,8 @@ function renderTLDetailPanel(){
   h+='<div class="tl-dp-row"><span class="tl-dp-label">Check-out</span><span class="tl-dp-val">'+esc(fmtFull(b.checkOut))+(b.checkOutTime?' · '+esc(b.checkOutTime):'')+'</span></div>';
   h+='<div class="tl-dp-row"><span class="tl-dp-label">Nights</span><span class="tl-dp-val">'+nights+'</span></div>';
   if(b.guestCount)h+='<div class="tl-dp-row"><span class="tl-dp-label">Guests</span><span class="tl-dp-val">'+esc(String(b.guestCount))+'</span></div>';
-  if(b.totalPrice)h+='<div class="tl-dp-row"><span class="tl-dp-label">Total</span><span class="tl-dp-val">€'+esc(String(b.totalPrice))+'</span></div>';
+  if(b._excel&&b._excel.priceUnknown)h+='<div class="tl-dp-row"><span class="tl-dp-label">Total</span><span class="tl-dp-val">Price unknown</span></div>';
+  else if(b.totalPrice||b._excel)h+='<div class="tl-dp-row"><span class="tl-dp-label">Total</span><span class="tl-dp-val">€'+esc(String(b.totalPrice))+'</span></div>';
   if(linkedSess){
     var cnames='';
     if(linkedSess.cleanerIds&&linkedSess.cleanerIds.length){
@@ -1016,6 +1017,7 @@ function openAddBookingModal(prefillDate){
     +'<button type="button" class="chip on" onclick="setBkPlatform(\'airbnb\')">Airbnb</button>'
     +'<button type="button" class="chip" onclick="setBkPlatform(\'booking\')">Booking.com</button>'
     +'<button type="button" class="chip" onclick="setBkPlatform(\'agency\')">Agency</button>'
+    +'<button type="button" class="chip" onclick="setBkPlatform(\'direct\')">Direct</button>'
     +'</div></div>'
     +'<div class="field" id="bk-agency-field" style="display:none"><label>Agency name</label><input type="text" id="bk-agency" placeholder="e.g. Costa Rentals"></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
@@ -1037,7 +1039,7 @@ function openAddBookingModal(prefillDate){
 function setBkPlatform(p){
   window._bkPlatform=p;
   document.querySelectorAll('#modal-root .chips .chip').forEach(c=>{
-    const matches=(c.textContent==='Airbnb'&&p==='airbnb')||(c.textContent==='Booking.com'&&p==='booking')||(c.textContent==='Agency'&&p==='agency');
+    const matches=(c.textContent==='Airbnb'&&p==='airbnb')||(c.textContent==='Booking.com'&&p==='booking')||(c.textContent==='Agency'&&p==='agency')||(c.textContent==='Direct'&&p==='direct');
     c.classList.toggle('on',matches);
   });
   const af=document.getElementById('bk-agency-field');
@@ -1090,13 +1092,14 @@ function openBookingDetail(id){
     +'</div>'
     +'<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">'
     +'<div style="font-size:12px;font-weight:600;color:'+clr.text+';opacity:0.7">'+nights+' night'+(nights!==1?'s':'')+'</div>'
-    +(b.totalPrice?'<div style="font-size:18px;font-weight:800;color:'+clr.text+';font-family:\'DM Mono\',monospace;letter-spacing:-0.5px">€'+b.totalPrice.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:2})+'</div>':'')
+    +(b._excel&&b._excel.priceUnknown?'<div style="font-size:12px">Price unknown</div>':b.totalPrice||b._excel?'<div style="font-size:18px;font-weight:800;color:'+clr.text+';font-family:\'DM Mono\',monospace;letter-spacing:-0.5px">€'+b.totalPrice.toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:2})+'</div>':'')
     +'</div>'
     +'</div>'
     +(b.guestName||b.guestCount?'<div style="display:flex;gap:10px;margin-bottom:12px">'
     +(b.guestName?'<div style="flex:1;background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Guest</div><div style="font-size:13px;font-weight:600">'+esc(b.guestName)+'</div></div>':'')
     +(b.guestCount?'<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Guests</div><div style="font-size:13px;font-weight:600">'+b.guestCount+'</div></div>':'')
     +'</div>':'')
+    +(b._excel&&b._excel.cleaningNeedsReview?'<p style="font-size:12px;color:var(--amber);margin-bottom:12px">Linked cleaning needs review after the Excel import. Check its date and assignment.</p>':'')
     +(b.notes?'<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px;border-left:3px solid var(--border2)">'+esc(b.notes)+'</div>':'')
     +'<div class="divider"></div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
@@ -1116,6 +1119,7 @@ function openEditBooking(id){
     +'<button type="button" class="chip'+(b.platform==='airbnb'?' on':'')+'" onclick="setBkPlatform(\'airbnb\')">Airbnb</button>'
     +'<button type="button" class="chip'+(b.platform==='booking'?' on':'')+'" onclick="setBkPlatform(\'booking\')">Booking.com</button>'
     +'<button type="button" class="chip'+(b.platform==='agency'?' on':'')+'" onclick="setBkPlatform(\'agency\')">Agency</button>'
+    +'<button type="button" class="chip'+(b.platform==='direct'?' on':'')+'" onclick="setBkPlatform(\'direct\')">Direct</button>'
     +'</div></div>'
     +'<div class="field" id="bk-agency-field" style="display:'+(b.platform==='agency'?'block':'none')+'"><label>Agency name</label><input type="text" id="bk-agency" value="'+esc(b.agencyName)+'"></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
@@ -1126,7 +1130,7 @@ function openEditBooking(id){
     +'<div class="field"><label>Guest name</label><input type="text" id="bk-guest" value="'+esc(b.guestName)+'"></div>'
     +'<div class="field"><label>Guests</label><input type="number" id="bk-gcount" value="'+(b.guestCount||'')+'"></div>'
     +'</div>'
-    +'<div class="field"><label>Total price (€)</label><input type="number" id="bk-rate" value="'+(b.totalPrice||'')+'"></div>'
+    +'<div class="field"><label>Total price (€)</label><input type="number" id="bk-rate" value="'+(b.totalPrice===null?'':b.totalPrice)+'"></div>'
     +'<div class="field"><label>Notes</label><textarea id="bk-notes" style="height:60px">'+esc(b.notes)+'</textarea></div>'
     +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="saveEditBooking(\''+id+'\')">Save changes</button><button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Cancel</button></div>');
 }
@@ -1140,8 +1144,11 @@ function saveEditBooking(id){
   b.agencyName=b.platform==='agency'?((document.getElementById('bk-agency')||{}).value||'').trim():'';
   b.checkIn=checkIn;b.checkOut=checkOut;
   b.guestName=((document.getElementById('bk-guest')||{}).value||'').trim();
-  b.guestCount=parseInt((document.getElementById('bk-gcount')||{}).value)||0;
-  b.totalPrice=parseFloat((document.getElementById('bk-rate')||{}).value)||0;
+  const guestInput=((document.getElementById('bk-gcount')||{}).value||'').trim();
+  const priceInput=((document.getElementById('bk-rate')||{}).value||'').trim();
+  b.guestCount=guestInput===''&&b.guestCount===null?null:(parseInt(guestInput)||0);
+  b.totalPrice=priceInput===''&&b._excel&&b._excel.priceUnknown?null:(parseFloat(priceInput)||0);
+  if(b._excel)b._excel.priceUnknown=b.totalPrice===null;
   b.notes=((document.getElementById('bk-notes')||{}).value||'').trim();
   save();closeModal();render();toast('Booking updated!');
 }

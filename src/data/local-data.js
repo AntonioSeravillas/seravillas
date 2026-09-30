@@ -7,6 +7,7 @@ function load(){
       // Keep sync version and completed imports across reloads, including offline starts.
       D._savedAt=typeof p._savedAt==='number'&&Number.isFinite(p._savedAt)?p._savedAt:0;
       D._migrations=Array.isArray(p._migrations)?p._migrations.filter(marker=>typeof marker==='string'):[];
+      D.importHistory=Array.isArray(p.importHistory)?p.importHistory:[];
       D.props=p.props||[];D.cleaners=p.cleaners||[];D.sessions=p.sessions||[];
       D.tasks=p.tasks||[];D.issues=p.issues||[];D.scratch=p.scratch||'';D.supplies=p.supplies||[];
       D.sessions.forEach(s=>{if(!s.status)s.status='scheduled';if(s.note===undefined)s.note='';});
@@ -23,7 +24,7 @@ function load(){
         if(!b.status)b.status='confirmed';
         if(!b.guestName)b.guestName='';
         if(b.guestCount===undefined)b.guestCount=0;
-        if(!b.totalPrice)b.totalPrice=0;
+        if(!b.totalPrice&&!(b._excel&&b._excel.priceUnknown))b.totalPrice=0;
         if(!b.notes)b.notes='';
         if(!b.agencyName)b.agencyName='';
         if(!b.linkedCleaningId)b.linkedCleaningId='';

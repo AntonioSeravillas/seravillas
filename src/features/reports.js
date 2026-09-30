@@ -134,7 +134,9 @@ function renderBookingReport(){
   const yrBks=D.bookings.filter(b=>b.status!=='cancelled'&&b.checkIn>=yrS&&b.checkIn<=yrE);
   const totalRev=yrBks.reduce((s,b)=>s+(b.totalPrice||0),0);
   const totalBks=yrBks.length;
-  const avgBk=totalBks?Math.round(totalRev/totalBks):0;
+  const unknownPrices=yrBks.filter(b=>b._excel&&b._excel.priceUnknown).length;
+  const pricedBks=totalBks-unknownPrices;
+  const avgBk=pricedBks?Math.round(totalRev/pricedBks):0;
 
   // Monthly revenue
   const MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -224,6 +226,8 @@ function renderBookingReport(){
     +'</div></div>';
   h+='<div style="font-size:11px;color:var(--text3);font-weight:500;margin-bottom:14px">'+totalBks+' bookings · '+totalGapNights+' gap nights across all properties</div>';
 
+  if(unknownPrices)h+='<p style="font-size:12px;color:var(--amber);margin-bottom:12px">'+unknownPrices+' booking prices are unknown. Revenue totals are incomplete; average value uses known prices.</p>';
+
   // Hero stats
   h+='<div class="wr-hero" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:8px">';
   h+=statChipBR('€'+fmtThousands(totalRev),'Total<br>revenue','var(--accent)');
@@ -264,7 +268,7 @@ function renderBookingReport(){
   platList.forEach(pl=>{
     const pct=totalRev>0?Math.round(pl.revenue/totalRev*100):0;
     const clr=platColor(pl.platform,pl.name);
-    const label=pl.platform==='airbnb'?'Airbnb':pl.platform==='booking'?'Booking.com':pl.name;
+    const label=pl.platform==='airbnb'?'Airbnb':pl.platform==='booking'?'Booking.com':pl.platform==='direct'?'Direct':pl.name;
     h+='<div style="margin-bottom:13px">';
     h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">';
     h+='<div style="display:flex;align-items:center;gap:8px">';

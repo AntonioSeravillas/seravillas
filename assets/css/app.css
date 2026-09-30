@@ -2010,3 +2010,22 @@ html[data-theme="light"] .ph-strip-item{background:#fff;box-shadow:0 1px 4px rgb
 
 /* Development preview label (only created in development mode) */
 .dev-banner{position:fixed;top:env(safe-area-inset-top,0px);left:50%;transform:translateX(-50%);z-index:99999;background:#B45309;color:#fff;font:700 11px/1 var(--font,system-ui,sans-serif);letter-spacing:.03em;padding:4px 12px;border-radius:0 0 8px 8px;pointer-events:none;white-space:nowrap}
+
+/* Excel import review only. Existing pages retain their styles. */
+.excel-import .ei-help{color:var(--text2);font-size:12px;line-height:1.55;margin:10px 0}
+.excel-import .ei-heading{font-size:14px;margin:18px 0 10px}
+.excel-import .ei-notice,.excel-import .ei-error{padding:10px;border-radius:8px;font-size:12px;line-height:1.5;background:var(--surface2);color:var(--amber-text,var(--text))}
+.excel-import .ei-error{color:var(--red,var(--text))}
+.excel-import .ei-check{display:flex;align-items:flex-start;gap:9px;font-size:12px;line-height:1.5;margin:12px 0;color:var(--text)}
+.excel-import .ei-check input{width:auto;flex:none;margin-top:3px;accent-color:var(--accent)}
+.excel-import .ei-counts{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:16px 0}
+.excel-import .ei-counts div{background:var(--surface2);border-radius:8px;padding:10px 3px;text-align:center}
+.excel-import .ei-counts strong{display:block;font-size:19px}.excel-import .ei-counts span{font-size:10px;color:var(--text2)}
+.excel-import .ei-toolbar{display:flex;gap:8px;margin:10px 0}
+.excel-import .ei-row{border:1px solid var(--border);border-radius:9px;margin:8px 0;background:var(--surface)}
+.excel-import .ei-row summary{padding:10px;cursor:pointer;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.excel-import .ei-row summary strong,.excel-import .ei-row summary span{display:block}
+.excel-import .ei-row summary span{color:var(--text2);font-size:11px}
+.excel-import .ei-row-body{padding:0 10px 10px}.excel-import .ei-row-body .field{margin-bottom:8px}
+.excel-import select{width:100%;min-height:40px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px}
+.excel-import button:disabled{opacity:.45;cursor:not-allowed}
