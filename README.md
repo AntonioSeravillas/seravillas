@@ -1,56 +1,52 @@
 # SeraVillas
 
-SeraVillas is a web app for managing a group of holiday villas: properties, bookings, cleaning and team tasks.
+A web app for managing holiday villas, bookings, cleaning schedules, tasks, issues, contacts, and reports.
 
-## What exists today
+## Open the project in VS Code
 
-### Project structure
+Open this repository folder. The local working branch is `app-structure`.
 
-| File | What it is | Edit it when you want to change... |
-| --- | --- | --- |
-| `index.html` | The page itself: the HTML structure and the small theme script in the `<head>` | Page layout, sections, buttons, forms |
-| `assets/css/app.css` | All styling | Colours, spacing, fonts, how things look |
-| `src/app.js` | All application logic | What the app does: bookings, calendar, tasks, sync, voice actions |
-| `src/config.js` | Runtime configuration: decides production vs development mode | Which environments count as development |
-| `src/storage.js` | Storage adapter: all browser-storage access goes through it | How storage keys are named |
-| `src/dev-seed.js` | Fictional sample data for the development preview | The sample properties, bookings, tasks, etc. |
+## Development preview
 
-`app.js` is a classic script (not a module) because the HTML uses inline click handlers such as `onclick="..."`. Keep it that way for now.
+In the VS Code terminal, run:
 
-### How it works today
-
-- The app keeps its data in the browser's storage (`localStorage`).
-- It also uses an existing cloud-sync service to share data.
-- **Warning:** opening the app can trigger production sync and booking migrations. Use the development preview (below) instead of opening the hosted app with real data. Keep exported data backups outside this repository.
-
-## Development preview (safe mode)
-
-The app switches to **development mode** automatically on `localhost`, `127.0.0.1`, `[::1]` and `file://`. It is never on for the hosted GitHub Pages site.
-
-In development mode:
-
-- There is no cloud access: no sync requests, no timers, no login check, and the production access key is never read.
-- Both booking migrations are skipped.
-- There is no access-key screen. The app opens straight away.
-- All browser-storage keys start with `seravillas_dev:`, so production data is never touched.
-- On first use it fills only that development storage with fictional sample properties, cleaners, bookings, cleaning sessions, tasks and issues, dated around today. Your edits are kept after reloading.
-- A label reads **Development preview — sample data**, and the sync controls say cloud sync is disabled.
-
-To start it, open the VS Code terminal in this repository and run:
-
-```
+```powershell
 py -m http.server 5500 --bind 127.0.0.1
 ```
 
-Then open <http://127.0.0.1:5500/>.
+Open <http://127.0.0.1:5500/> and leave the terminal running. Stop the server with Ctrl+C.
 
-To reset the sample data, clear the `seravillas_dev:` entries in your browser's storage (DevTools → Application → Local Storage).
+The preview displays **Development preview — sample data**. It opens without an access key, uses fictional records dated around today, and keeps edits after refresh. Cloud requests and both historical booking migrations are disabled. Every preview storage key starts with `seravillas_dev:`. Existing production storage and access keys are kept separate.
 
-## Planned (not built yet)
+Preview mode activates on localhost, 127.0.0.1, IPv6 loopback, and file://. Use the local server for normal development. Opening the hosted GitHub Pages app still uses production login, data, sync, and migrations.
 
-These are plans only. None of them exist in the app today.
+To reset the fictional data, remove only the `seravillas_dev:` entries in your browser's developer tools under Local Storage. Keep real exported backups outside this repository.
 
-- **Manager access:** managers can see and do everything.
-- **Cleaner logins:** cleaners see the full team calendar and cleaning schedule, without guest details or prices.
-- **Bookings from Excel for 2026:** bookings will be imported from Excel.
-- **Uplisting integration:** deferred to 2027.
+## Where to make changes
+
+| Location | Responsibility |
+| --- | --- |
+| `index.html` | Page shell and script loading order |
+| `assets/css/app.css` | Styling and the existing responsive design |
+| `src/app.js` | Startup only |
+| `src/config.js`, `src/storage.js` | Environment detection and isolated browser storage |
+| `src/dev-seed.js` | Fictional preview records |
+| `src/state/store.js` | Shared in-memory app and screen state |
+| `src/data/` | Load/save, backups, cloud sync, historical migrations |
+| `src/utils/dates.js` | Calendar and date helpers |
+| `src/features/` | Home, calendar/bookings, tasks, cleanings, issues, management, properties, reports |
+| `src/ui/` | Navigation, theme, animations, modals, shared actions, voice commands |
+| `src/auth/session.js` | Existing access-key login and sign-out |
+| `docs/architecture.md` | How the files fit together and the next development stages |
+
+These remain classic JavaScript scripts. Existing inline button handlers still use global functions. Keep the script order in `index.html`; load startup last. The feature split preserves the original code and does not introduce a framework or build requirement.
+
+## Current data and future work
+
+The current app uses browser storage (`localStorage`) and an existing Cloudflare Worker for whole-app synchronization. Individual user accounts, restricted cleaner access, and reliable conflict handling are future work.
+
+- You need full manager access to your workspace.
+- Cleaner accounts should show the **full team calendar and cleaning schedule**, excluding guest details and prices.
+- Your Excel table is the booking source for **2026**; a reusable workbook importer remains to be built.
+- Uplisting integration is deferred to **2027**.
+- Installable offline opening, a durable edit queue, and record-level conflict handling remain to be built. Existing local data persistence is not the complete offline/cloud design.
