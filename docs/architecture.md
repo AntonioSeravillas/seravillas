@@ -34,7 +34,7 @@ Some related actions are still in shared files because this stage preserves the 
 
 ## Data boundaries
 
-`data/local-data.js` owns the current load/save and daily backup behaviour. `data/cloud-sync.js` owns whole-object GET/POST synchronization. `auth/session.js` owns the existing shared access-key login. The Worker source was not supplied and must be reviewed before replacing its data/authentication model.
+`data/local-data.js` owns the current load/save and daily backup behaviour. It restores `_savedAt` and `_migrations` from stored data so offline reloads retain the sync version and completed import markers. Old backups without valid metadata use safe defaults. `data/cloud-sync.js` owns whole-object GET/POST synchronization. `auth/session.js` owns the existing shared access-key login. The Worker source was not supplied and must be reviewed before replacing its data/authentication model.
 
 The local preview never needs a production key. Cloud functions and both historical migrations return without action in development. Preview edits and backups use separate storage keys.
 

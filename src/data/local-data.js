@@ -4,6 +4,9 @@ function load(){
     const raw=SV_STORAGE.getItem(DB)||SV_STORAGE.getItem('cleanly_v1');
     if(raw){
       const p=JSON.parse(raw);
+      // Keep sync version and completed imports across reloads, including offline starts.
+      D._savedAt=typeof p._savedAt==='number'&&Number.isFinite(p._savedAt)?p._savedAt:0;
+      D._migrations=Array.isArray(p._migrations)?p._migrations.filter(marker=>typeof marker==='string'):[];
       D.props=p.props||[];D.cleaners=p.cleaners||[];D.sessions=p.sessions||[];
       D.tasks=p.tasks||[];D.issues=p.issues||[];D.scratch=p.scratch||'';D.supplies=p.supplies||[];
       D.sessions.forEach(s=>{if(!s.status)s.status='scheduled';if(s.note===undefined)s.note='';});

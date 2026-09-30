@@ -50,3 +50,13 @@ The current app uses browser storage (`localStorage`) and an existing Cloudflare
 - Your Excel table is the booking source for **2026**; a reusable workbook importer remains to be built.
 - Uplisting integration is deferred to **2027**.
 - Installable offline opening, a durable edit queue, and record-level conflict handling remain to be built. Existing local data persistence is not the complete offline/cloud design.
+
+## Run the checks
+
+Using Node.js in the VS Code terminal:
+
+```powershell
+node --test tests/app.test.js
+```
+
+The checks use fictional records and stubbed storage/network. They cover preview isolation and reload persistence, existing production key mappings, date boundaries, exact voice property matching, cleaning crew coverage, and preservation of saved sync/import metadata. They never contact the live Worker. UI rendering is checked separately in the local preview.
