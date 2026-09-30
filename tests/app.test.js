@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-const scripts = [...html.matchAll(/<script src="\.\/([^"]+)"[^>]*><\/script>/g)].map(match => match[1]);
+const scripts = [...html.matchAll(/<script src="\.\/([^"]+)"[^>]*><\/script>/g)].map(match => match[1].split('?')[0]);
 const plain = value => JSON.parse(JSON.stringify(value));
 const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 
@@ -184,4 +184,32 @@ test('unknown imported prices remain unknown on reload and reports label incompl
   assert.equal(app.run('D.importHistory[0].id'),'batch-test');
   assert.match(app.run('renderBookingReport()'),/Revenue totals are incomplete/);
   assert.match(app.run('renderBookingReport()'),/>Direct</);
+});
+
+test('cancellation confirmation keeps history and does not save until the manager confirms', () => {
+  const app = runtime();
+  app.run(`D.bookings=[{id:'cancel-me',propId:D.props[0].id,guestName:'Synthetic Missing Guest',checkIn:'2026-11-10',checkOut:'2026-11-15',status:'confirmed',notes:'Keep this note',linkedCleaningId:D.sessions[0].id}];
+    showModal=function(html){window.lastModal=html;};
+    openExcelImport();
+    excelImportState.parsed={errors:[],sheets:[{name:'DEMO',property:D.props[0].name,count:1}],rows:[{key:'DEMO:4',sheet:'DEMO',row:4,property:D.props[0].name,sourceChannel:'PRIVATE',platform:'direct',agencyName:'',guestName:'Synthetic New Guest',reference:'demo-123',guestCount:2,guestCountRaw:'2',totalPrice:100,checkIn:'2026-11-01',checkOut:'2026-11-08',originalCheckIn:'2026-11-01',originalCheckOut:'2026-11-08'}]};
+    excelImportState.completeSnapshot=true;renderExcelImport();
+    document.querySelectorAll=function(){return [{dataset:{excelCancel:'cancel-me'}}];};
+    confirm=function(){throw new Error('Native confirmation must not be used');};`);
+  const before = app.run('JSON.stringify(D)'), sessions = app.run('JSON.stringify(D.sessions)'), writes = app.writes.length;
+  app.run('applyExcelBookingImport()');
+  assert.match(app.context.lastModal,/Confirm booking cancellations/);
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.writes.length,writes);
+  app.run('renderExcelImport()');
+  assert.match(app.context.lastModal,/data-excel-cancel="cancel-me" checked/);
+  app.run('applyExcelBookingImport(true)');
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  app.run('applyExcelBookingImport();applyExcelBookingImport(true)');
+  assert.equal(app.run('D.bookings[0].status'),'cancelled');
+  assert.equal(app.run('D.bookings[0].notes'),'Keep this note');
+  assert.equal(app.run('D.bookings[0]._excel.cleaningNeedsReview'),true);
+  assert.equal(app.run('JSON.stringify(D.sessions)'),sessions);
+  assert.equal(app.run('D.bookings.length'),2);
+  assert.equal(app.run('D.importHistory[0].counts.cancel'),1);
+  assert.equal(app.requests.length,0);
 });

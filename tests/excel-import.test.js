@@ -168,6 +168,36 @@ test('approved year correction records the original workbook dates', () => {
   assert.equal(result.bookings[0]._excel.originalCheckIn,'2025-07-01');
 });
 
+test('reviewed year corrections repair the exact existing source record without duplicating it', () => {
+  const original = data([booking({checkIn:'2025-07-01',checkOut:'2025-07-08',notes:'Year correction note'}),booking({id:'unrelated-2025',checkIn:'2025-08-01',checkOut:'2025-08-08',guestName:'Different Guest'}),booking({id:'keep-2027',checkIn:'2027-07-01',checkOut:'2027-07-08'})]);
+  const incoming = parsed(row({reference:'',checkIn:'2025-07-01',checkOut:'2025-07-08',originalCheckIn:'2025-07-01',originalCheckOut:'2025-07-08'}));
+  const plan = api.planImport(incoming,original,{overrides:{'VILLA MAR:4':{checkIn:'2026-07-01',checkOut:'2026-07-08'}}});
+  assert.equal(plan.counts.add,0);
+  assert.equal(plan.counts.update,1);
+  assert.equal(plan.rows[0].bookingId,'b1');
+  const result = apply(original,plan);
+  assert.equal(result.bookings.length,3);
+  assert.equal(result.bookings[0].id,'b1');
+  assert.equal(result.bookings[0].notes,'Year correction note');
+  assert.equal(result.bookings[0].linkedCleaningId,'c1');
+  assert.equal(result.bookings[0].checkIn,'2026-07-01');
+  assert.equal(result.bookings[0]._excel.cleaningNeedsReview,true);
+  assert.deepEqual(plain(result.bookings.slice(1)),original.bookings.slice(1));
+  assert.deepEqual(plain(result.sessions),original.sessions);
+});
+
+test('a corrected current-year booking takes precedence over its cancelled wrong-year history', () => {
+  const original = data([booking({notes:'Ref: 001-234'}),booking({id:'cancelled-history',checkIn:'2025-07-01',checkOut:'2025-07-08',status:'cancelled',notes:'Ref: 001-234'})]);
+  const incoming = parsed(row({checkIn:'2025-07-01',checkOut:'2025-07-08',originalCheckIn:'2025-07-01',originalCheckOut:'2025-07-08'}));
+  const plan = api.planImport(incoming,original,{overrides:{'VILLA MAR:4':{checkIn:'2026-07-01',checkOut:'2026-07-08'}}});
+  assert.equal(plan.counts.review,0);
+  assert.equal(plan.counts.add,0);
+  assert.equal(plan.rows[0].bookingId,'b1');
+  const result = apply(original,plan);
+  assert.equal(result.bookings.length,2);
+  assert.deepEqual(plain(result.bookings[1]),original.bookings[1]);
+});
+
 test('cancelled bookings require explicit reactivation', () => {
   const original = data([booking({status:'cancelled'})]);
   const incoming = parsed(row());

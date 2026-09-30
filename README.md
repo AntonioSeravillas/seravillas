@@ -16,7 +16,7 @@ py -m http.server 5500 --bind 127.0.0.1
 
 Open <http://127.0.0.1:5500/> and leave the terminal running. Stop the server with Ctrl+C.
 
-The preview displays **Development preview — sample data**. It opens without an access key, uses fictional records dated around today, and keeps edits after refresh. Cloud requests and both historical booking migrations are disabled. Every preview storage key starts with `seravillas_dev:`. Existing production storage and access keys are kept separate.
+The preview displays **Development preview — cloud sync disabled**. It opens without an access key, starts with fictional records dated around today, and keeps edits after refresh. You can restore a private backup into a separate localhost preview to review real records locally. Cloud requests and both historical booking migrations are disabled. Every preview storage key starts with `seravillas_dev:`. Existing production storage and access keys are kept separate.
 
 Preview mode activates on localhost, 127.0.0.1, IPv6 loopback, and file://. Use the local server for normal development. Opening the hosted GitHub Pages app still uses production login, data, sync, and migrations.
 
@@ -43,6 +43,8 @@ To reset the fictional data, remove only the `seravillas_dev:` entries in your b
 | `docs/architecture.md` | How the files fit together and the next development stages |
 
 These remain classic JavaScript scripts. Existing inline button handlers still use global functions. Keep the script order in `index.html`; load startup last. The feature split preserves the original code and does not introduce a framework or build requirement.
+
+Some script URLs have a `?v=` release suffix so returning browsers fetch the updated file. When changing one of these scripts for a release, update its suffix in `index.html`; it does not change the file name on disk.
 
 ## Import bookings from Excel
 

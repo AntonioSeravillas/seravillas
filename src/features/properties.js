@@ -89,6 +89,7 @@ function renderProperties(){
     +'<div style="display:flex;gap:8px;margin-bottom:8px">'
     +'<button class="sv-btn sv-btn-primary sv-btn-sm" style="flex:1" onclick="exportData()">⬇ Export</button>'
     +'<button class="sv-btn sv-btn-ghost sv-btn-sm" style="flex:1" onclick="restoreBackup()">↩ Restore</button>'
+    +'<button class="sv-btn sv-btn-ghost sv-btn-sm" style="flex:1" onclick="document.getElementById(\'import-file\').click()">Import backup</button>'
     +'</div>'
     +(SV_STORAGE.getItem(BACKUP_DATE_KEY)?'<div style="font-size:11px;color:var(--accent);font-weight:600">✓ Auto-backup from '+SV_STORAGE.getItem(BACKUP_DATE_KEY)+'</div>':'<div style="font-size:11px;color:var(--text3)">No auto-backup yet</div>')
     +'</div>'

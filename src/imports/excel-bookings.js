@@ -96,7 +96,7 @@
     options=options||{};
     const year=options.year||2026,mappings=options.mappings||{},decisions=options.decisions||{},statusDecisions=options.statusDecisions||{},overrides=options.overrides||{};
     const plan={year,fingerprint:fingerprint(data),rows:[],newProperties:[],cancellations:[],errors:parsed.errors.slice(),scope:[],counts:{add:0,update:0,unchanged:0,review:0,skip:0}};
-    const properties=data.props||[],bookings=(data.bookings||[]).filter(b=>text(b.checkIn).slice(0,4)===String(year));
+    const properties=data.props||[],allBookings=data.bookings||[],bookings=allBookings.filter(b=>text(b.checkIn).slice(0,4)===String(year));
     const matched=new Set(),used=new Set(),keys=new Map();
     for(const sheet of parsed.sheets){
       const matches=properties.filter(p=>norm(propertyName(p.name))===norm(sheet.property));
@@ -125,17 +125,30 @@
           }else{
             keys.set(entry.sourceKey,entry);
             const ref=usableReference(row.reference,row.sourceChannel)?norm(row.reference):'';
-            let candidates=bookings.filter(b=>b.propId===propId&&((b._excel||{}).sourceKey===entry.sourceKey||(ref&&b.platform===row.platform&&norm(b.agencyName)===norm(row.agencyName)&&norm(existingReference(b))===ref)));
-            if(!candidates.length)candidates=bookings.filter(b=>b.propId===propId&&b.checkIn===row.checkIn&&b.checkOut===row.checkOut&&norm(b.guestName)===norm(row.guestName));
+            // An explicitly reviewed year correction can repair its exact old source record.
+            // Other bookings outside the import year remain outside every matching decision.
+            const correctedYear=validDate(row.originalCheckIn)&&validDate(row.originalCheckOut)
+              &&row.originalCheckIn.slice(0,4)!==String(year)
+              &&row.checkIn===String(year)+row.originalCheckIn.slice(4)
+              &&row.checkOut===String(year)+row.originalCheckOut.slice(4);
+            const currentMatch=bookings.some(b=>b.propId===propId&&((b._excel||{}).sourceKey===entry.sourceKey
+              ||(ref&&b.platform===row.platform&&norm(b.agencyName)===norm(row.agencyName)&&norm(existingReference(b))===ref)
+              ||(b.checkIn===row.checkIn&&b.checkOut===row.checkOut&&norm(b.guestName)===norm(row.guestName))));
+            const correctedBookings=correctedYear&&!currentMatch?allBookings.filter(b=>b.propId===propId
+              &&b.checkIn===row.originalCheckIn&&b.checkOut===row.originalCheckOut
+              &&(norm(b.guestName)===norm(row.guestName)||(ref&&b.platform===row.platform&&norm(b.agencyName)===norm(row.agencyName)&&norm(existingReference(b))===ref))):[];
+            const rowBookings=[...bookings,...correctedBookings];
+            let candidates=rowBookings.filter(b=>b.propId===propId&&((b._excel||{}).sourceKey===entry.sourceKey||(ref&&b.platform===row.platform&&norm(b.agencyName)===norm(row.agencyName)&&norm(existingReference(b))===ref)));
+            if(!candidates.length)candidates=rowBookings.filter(b=>b.propId===propId&&((b.checkIn===row.checkIn&&b.checkOut===row.checkOut)||correctedBookings.includes(b))&&norm(b.guestName)===norm(row.guestName));
             let booking=candidates.length===1?candidates[0]:null;
             if(candidates.length>1){entry.reason='Multiple existing bookings match';entry.candidates=candidates;}
             else if(!booking){
-              const uncertain=bookings.filter(b=>b.propId===propId&&((b.checkIn===row.checkIn&&b.checkOut===row.checkOut)||norm(b.guestName)===norm(row.guestName)));
+              const uncertain=rowBookings.filter(b=>b.propId===propId&&((b.checkIn===row.checkIn&&b.checkOut===row.checkOut)||norm(b.guestName)===norm(row.guestName)));
               if(uncertain.length){entry.reason='Review a possible existing booking';entry.candidates=uncertain;}
               else entry.kind='add';
             }
             if(decision&&decision.startsWith('match:')){
-              booking=bookings.find(b=>b.id===decision.slice(6)&&b.propId===propId)||null;
+              booking=rowBookings.find(b=>b.id===decision.slice(6)&&b.propId===propId)||null;
               if(!booking){entry.reason='The selected booking is unavailable';entry.kind='review';}
               else entry.reason='';
             }else if(decision==='new'){booking=null;entry.kind='add';entry.reason='';}

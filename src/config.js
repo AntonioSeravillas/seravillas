@@ -11,6 +11,6 @@
     isDev:isDev,
     cloudEnabled:!isDev,
     storagePrefix:isDev?'seravillas_dev:':'',
-    devLabel:'Development preview — sample data'
+    devLabel:'Development preview — cloud sync disabled'
   };
 })();

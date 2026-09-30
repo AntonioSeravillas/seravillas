@@ -8,9 +8,11 @@
 4. Review **New**, **Updates**, **Unchanged**, **Review**, and **Excluded** counts. Open **All bookings** to inspect every row.
 5. Resolve flagged dates, cancellation markers, uncertain matches, and missing prices. For a missing price, enter the value and click **Use this price**. Zero is a valid price. Unknown is a separate choice.
 6. Only if the workbook contains all bookings for the matched villas, check the complete-snapshot box. Select missing bookings for cancellation individually. This is optional; absence alone never cancels a booking.
-7. Click **Apply reviewed changes to preview** to apply locally. On a production host, the button applies to the current manager dataset and the existing cloud sync follows normal save behaviour.
+7. Click **Apply reviewed changes to preview** to apply locally. If you selected cancellations, check the final list and click **Confirm and apply to preview**. **Back to review** preserves your selections. On a production host, the button applies to the current manager dataset and the existing cloud sync follows normal save behaviour.
 
 The local preview has a visible development label and disabled cloud sync. The workbook is read in the browser; selecting it does not upload it. Applying records to production subsequently sends the normal app dataset to its existing Worker.
+
+The **Import backup** button under Data & Backup opens the existing JSON restore workflow. It replaces the whole dataset after confirmation; use workbook import for normal booking updates. A private copy of a live backup can be restored into a separate localhost preview for comparison without contacting production.
 
 ## Supported workbook format
 
@@ -28,7 +30,7 @@ The local preview has a visible development label and disabled cloud sync. The w
 
 Only bookings arriving in **2026** are in scope. A stay arriving in December 2026 and departing in January 2027 is included. Existing 2027 arrivals and villas absent from the workbook are preserved.
 
-Rows dated 2025 can be explicitly shifted to 2026 using the review checkbox. Check the listed source rows before doing so. The original workbook dates remain in import metadata; the workbook itself is never edited.
+Rows dated 2025 can be explicitly shifted to 2026 using the review checkbox. Check the listed source rows before doing so. The original workbook dates remain in import metadata; the workbook itself is never edited. If a corrected booking already exists in 2026, it takes precedence over its old cancelled history. Otherwise the exact original-date record can be repaired while keeping its ID; unrelated records in other years stay outside the import scope.
 
 A reservation field containing `CANCELED`, `CANCELLED`, or a supported Spanish cancellation marker requires an explicit decision. The manager can exclude the row, keep cancelled history, or mark it active. Excluding a source row already marked cancelled does not invalidate the active-booking snapshot. Excluding any other row disables missing-booking cancellation.
 

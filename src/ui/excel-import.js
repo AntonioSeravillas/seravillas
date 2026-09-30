@@ -2,12 +2,13 @@
 let excelImportState=null;
 
 function openExcelImport(){
-  excelImportState={parsed:null,fileName:'',mappings:{},overrides:{},decisions:{},statusDecisions:{},completeSnapshot:false,fixYear:false,filter:'review',error:'',plan:null};
+  excelImportState={parsed:null,fileName:'',mappings:{},overrides:{},decisions:{},statusDecisions:{},cancelIds:[],pendingCancelIds:null,completeSnapshot:false,fixYear:false,filter:'review',error:'',plan:null};
   renderExcelImport();
 }
 
 function renderExcelImport(){
   const state=excelImportState;if(!state)return;
+  state.pendingCancelIds=null;
   let h='<div class="modal-title">Import bookings from Excel</div>'
     +'<p class="ei-help">Review the workbook before applying changes. Import year: <strong>2026</strong>. Existing notes, booking IDs and cleaning assignments are kept.</p>'
     +(DEV_MODE?'<p class="ei-notice">Local preview: changes stay in preview storage. Cloud sync is disabled.</p>':'')
@@ -40,7 +41,7 @@ function renderExcelImport(){
       h+='<h3 class="ei-heading">Bookings missing from this workbook ('+plan.cancellations.length+')</h3>'
         +'<p class="ei-help">Select cancellations individually. Cancelled history and linked cleanings will be kept.</p>';
       if(!plan.canCancel)h+='<p class="ei-notice">Cancellation selection is available after confirming a complete snapshot and resolving every review row. Excluding an active row makes the snapshot incomplete.</p>';
-      h+=plan.cancellations.map(b=>'<label class="ei-check"><input type="checkbox" data-excel-cancel="'+esc(b.id)+'"'+(!plan.canCancel?' disabled':'')+'><span>'+esc(propName(b.propId))+' · '+esc(b.guestName)+' · '+esc(b.checkIn)+' → '+esc(b.checkOut)+(b.linkedCleaningId?'<br>Linked cleaning needs review if cancelled.':'')+'</span></label>').join('');
+      h+=plan.cancellations.map(b=>'<label class="ei-check"><input type="checkbox" data-excel-cancel="'+esc(b.id)+'"'+(state.cancelIds.includes(b.id)?' checked':'')+(!plan.canCancel?' disabled':'')+' onchange="setExcelCancellation(this.dataset.excelCancel,this.checked)"><span>'+esc(propName(b.propId))+' · '+esc(b.guestName)+' · '+esc(b.checkIn)+' → '+esc(b.checkOut)+(b.linkedCleaningId?'<br>Linked cleaning needs review if cancelled.':'')+'</span></label>').join('');
     }
     h+='<p class="ei-help">A pre-import backup is saved before applying. Missing guest counts stay unknown. Missing prices must be entered or explicitly marked unknown.</p>'
       +'<button id="excel-apply" class="btn btn-primary" style="width:100%" onclick="applyExcelBookingImport()"'+(!plan.canApply&&!(plan.canCancel&&plan.cancellations.length)?' disabled':'')+'>Apply reviewed changes'+(DEV_MODE?' to preview':'')+'</button>';
@@ -76,7 +77,7 @@ async function readExcelBookingFile(event){
     const book=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false,cellNF:true,cellText:true});
     if(excelImportState!==state)return;
     state.parsed=SV_EXCEL.parseWorkbook(book);state.fileName=file.name;state.error='';
-    state.mappings={};state.overrides={};state.decisions={};state.statusDecisions={};state.fixYear=false;state.completeSnapshot=false;
+    state.mappings={};state.overrides={};state.decisions={};state.statusDecisions={};state.cancelIds=[];state.pendingCancelIds=null;state.fixYear=false;state.completeSnapshot=false;
     if(!state.parsed.rows.length)throw new Error('No booking rows were found. Check the RESERVES column headings.');
   }catch(error){state.error=error.message;state.parsed=null;}
   renderExcelImport();
@@ -86,6 +87,11 @@ function setExcelFilter(value){excelImportState.filter=value;renderExcelImport()
 function setExcelDecision(key,value){excelImportState.decisions[key]=value;renderExcelImport();}
 function setExcelSourceStatus(key,value){excelImportState.statusDecisions[key]=value;renderExcelImport();}
 function setExcelCompleteSnapshot(value){excelImportState.completeSnapshot=value;renderExcelImport();}
+function setExcelCancellation(id,checked){
+  const state=excelImportState;if(!state)return;
+  state.cancelIds=state.cancelIds.filter(value=>value!==id);
+  if(checked)state.cancelIds.push(id);
+}
 function setExcelYearCorrection(value){
   const state=excelImportState;state.fixYear=value;
   for(const row of state.parsed.rows){
@@ -101,10 +107,19 @@ function setExcelPrice(key,value){
 }
 function setExcelUnknownPrice(key,value){excelImportState.overrides[key]={...(excelImportState.overrides[key]||{}),priceUnknown:value};renderExcelImport();}
 
-function applyExcelBookingImport(){
+function applyExcelBookingImport(confirmed){
   const state=excelImportState;if(!state||!state.plan)return;
-  const cancelIds=Array.from(document.querySelectorAll('[data-excel-cancel]:checked')).map(el=>el.dataset.excelCancel);
-  if(cancelIds.length&&!confirm('Cancel '+cancelIds.length+' selected bookings? Their history and linked cleaning sessions will remain.'))return;
+  const cancelIds=confirmed===true?state.pendingCancelIds:Array.from(document.querySelectorAll('[data-excel-cancel]:checked')).map(el=>el.dataset.excelCancel);
+  if(!Array.isArray(cancelIds))return;
+  if(cancelIds.length&&confirmed!==true){
+    state.cancelIds=cancelIds.slice();state.pendingCancelIds=cancelIds.slice();
+    const selected=state.plan.cancellations.filter(b=>cancelIds.includes(b.id));
+    showModal('<div class="modal-title">Confirm booking cancellations</div><p>This import will add '+state.plan.counts.add+' bookings, update '+state.plan.counts.update+' and cancel '+cancelIds.length+'.</p>'
+      +'<p class="ei-help">Cancelled history and linked cleaning sessions will be kept.</p><ul>'+selected.map(b=>'<li>'+esc(propName(b.propId))+' · '+esc(b.guestName)+' · '+esc(b.checkIn)+' → '+esc(b.checkOut)+'</li>').join('')+'</ul>'
+      +'<button class="btn btn-primary" style="width:100%" onclick="applyExcelBookingImport(true)">Confirm and apply'+(DEV_MODE?' to preview':'')+'</button>'
+      +'<button class="btn btn-secondary" style="width:100%;margin-top:10px" onclick="renderExcelImport()">Back to review</button>');
+    return;
+  }
   try{
     const next=SV_EXCEL.applyPlan(D,state.plan,{cancelIds,fileName:state.fileName,makeId:uid,supersededMigrationId:BOOKING_MIGRATION_KEY});
     next._savedAt=Date.now();
