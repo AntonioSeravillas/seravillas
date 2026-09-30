@@ -2783,7 +2783,7 @@ function renderHome(){
   let h='<div class="tc-page">';
   h+='<div class="sv-page-header" style="margin-bottom:16px">';
   h+='<div class="sv-page-heading"><div class="sv-title">Today</div><div class="sv-subtitle">'+gr+' · '+dayLabel+'</div></div>';
-  h+='<div class="sv-actions"><button class="sv-btn sv-btn-secondary sv-btn-sm" onclick="openVoiceCommandModal()" title="Voice command">🎙 Voice Command</button><button class="sv-btn sv-btn-primary sv-btn-sm" onclick="showHomeQuickAdd()">+ Quick Add</button></div>';
+  h+='<div class="sv-actions"><button class="sv-btn sv-btn-primary sv-btn-sm" onclick="showHomeQuickAdd()">+ Quick Add</button></div>';
   h+='</div>';
   h+='<div class="tc-board"><div class="tc-primary">';
   h+='<div class="tc-stats">'
@@ -2794,7 +2794,7 @@ function renderHome(){
     +'</div>';
   h+='<div class="tc-columns"><div class="tc-panel"><div class="tc-panel-hd"><div><div class="tc-panel-title">Today’s Operations</div><div class="tc-panel-sub">Grouped by property · all times local</div></div><button class="tc-view" onclick="tab=\'calendar\';calView=\'timeline\';render()">Timeline</button></div>'+propertyCards()+'</div><div class="tc-panel"><div class="tc-panel-hd"><div><div class="tc-panel-title">Needs Attention</div><div class="tc-panel-sub">Exceptions, risks and overdue loops</div></div><div class="tc-pill">'+openIssues.length+' open issues</div></div>'+attentionItems()+'</div></div>';
   h+=weekPanel()+'</div><div class="tc-side">'+focusPanel()+upcomingPanel()+'</div></div>';
-  h+='<button class="home-fab" onclick="showHomeQuickAdd()" aria-label="Quick add task"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
+  h+='<button class="home-fab" onclick="openVoiceCommandModal()" aria-label="Voice command" title="Voice command"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2.5"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg></button>';
   h+='</div>';
   return h;
 }
@@ -2861,37 +2861,75 @@ function openTcWeekDay(el){
 /* Strict property alias map — exact word-boundary matching ONLY.
    Villa Mar must never match Villa Marjals. */
 const VOICE_PROP_ALIASES = [
-  ['Villa Marjals',  ['villa marjals','can marjals','marjals']],
-  ['Villa Diagonal', ['villa diagonal','diagonal']],
-  ['Villa Mar',      ['villa mar','mar']],
-  ['La Forca',       ['la forca','forca']],
-  ['Can Vallori',    ['can vallori','vallori']]
+  ['Villa Marjals',  ['villa marjals','villamarjals','can marjals','canmarjals','marjals']],
+  ['Villa Diagonal', ['villa diagonal','villadiagonal','diagonal']],
+  ['Villa Mar',      ['villa mar','villamar','mar']],
+  ['La Forca',       ['la forca','laforca','forca']],
+  ['Can Vallori',    ['can vallori','canvallori','vallori']]
 ];
 
 function normalizePropName(name){return String(name||'').toLowerCase().trim();}
 
 function _voiceEscRe(s){return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 
-/* Returns {id,name,found} for a matched property, or null if none mentioned.
-   Uses \b word boundaries so "mar" never matches inside "marjals". */
-function voiceFindProperty(text){
-  const norm=' '+normalizePropName(text)+' ';
+/* Normalize free text for property matching:
+   lowercase, strip punctuation, collapse whitespace. */
+function normalizeVoiceText(s){
+  return String(s||'')
+    .toLowerCase()
+    .replace(/[^\w\s]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+/* True if `seq` (array of tokens) appears as a consecutive run inside `tokens`. */
+function _voiceTokenSeq(tokens,seq){
+  for(let i=0;i+seq.length<=tokens.length;i++){
+    let ok=true;
+    for(let j=0;j<seq.length;j++){if(tokens[i+j]!==seq[j]){ok=false;break;}}
+    if(ok)return true;
+  }
+  return false;
+}
+
+/* Build a flat alias list sorted longest/most-specific first.
+   So "villa marjals" is tested before "villa mar", and multi-word
+   aliases before single tokens like "mar". */
+const _VOICE_ALIAS_PAIRS=(function(){
+  const pairs=[];
   for(const [canon,aliases] of VOICE_PROP_ALIASES){
     for(const a of aliases){
-      const re=new RegExp('\\b'+_voiceEscRe(a)+'\\b','i');
-      if(re.test(norm)){
-        const prop=D.props.find(p=>{
-          const pn=normalizePropName(p.name);
-          return pn===normalizePropName(canon)||aliases.includes(pn);
-        });
-        return prop?{id:prop.id,name:prop.name,found:true}:{id:'',name:canon,found:false};
-      }
+      const an=normalizeVoiceText(a);
+      pairs.push({canon:canon,alias:an,words:an.split(' ')});
+    }
+  }
+  pairs.sort(function(x,y){return (y.words.length-x.words.length)||(y.alias.length-x.alias.length);});
+  return pairs;
+})();
+
+/* STRICT property resolver — explicit aliases only, no loose substring.
+   Multi-word aliases match as a consecutive token run; single-word aliases
+   ("mar") match ONLY as a standalone normalized token, never inside another
+   word ("marjals" / "villamar"). Returns {id,name,found,alias} or null. */
+function resolveVoiceProperty(text){
+  const tokens=normalizeVoiceText(text).split(' ').filter(Boolean);
+  if(!tokens.length)return null;
+  for(const p of _VOICE_ALIAS_PAIRS){
+    const hit=p.words.length>1?_voiceTokenSeq(tokens,p.words):tokens.indexOf(p.alias)>=0;
+    if(hit){
+      const prop=D.props.find(pr=>normalizeVoiceText(pr.name)===normalizeVoiceText(p.canon));
+      return prop?{id:prop.id,name:prop.name,found:true,alias:p.alias}
+                 :{id:'',name:p.canon,found:false,alias:p.alias};
     }
   }
   return null;
 }
 
-/* Remove any matched property alias phrases from a string (word-boundary). */
+/* Back-compat wrapper: all voice parsers go through the strict resolver. */
+function voiceFindProperty(text){return resolveVoiceProperty(text);}
+
+/* Remove any matched property alias phrases from a string, preserving the
+   rest of the original casing. Handles spaced and compact forms. */
 function voiceStripPropAliases(text){
   let out=text;
   for(const [,aliases] of VOICE_PROP_ALIASES){
@@ -3237,7 +3275,16 @@ function showVoiceActionPreview(action){
   html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
     +'<span class="sv-chip active">'+esc(typeLabels[action.type]||action.type)+'</span>'
     +'<span class="sv-badge sv-badge-low">'+pct+'% match</span></div>';
-  html+='<div style="font-size:14px;font-weight:600;line-height:1.5;margin-bottom:6px">'+esc(action.summary||'')+'</div>';
+  if(action.type==='create_issue'){
+    const p=action.payload||{};
+    const propLine=p.propId?esc(p.propName||''):'General / Not attached';
+    html+='<div style="font-size:13px;line-height:1.7">'
+      +'<div><span style="color:var(--text3);font-weight:700">Property:</span> '+propLine+'</div>'
+      +'<div><span style="color:var(--text3);font-weight:700">Title:</span> '+esc(p.title||'')+'</div>'
+      +'</div>';
+  }else{
+    html+='<div style="font-size:14px;font-weight:600;line-height:1.5;margin-bottom:6px">'+esc(action.summary||'')+'</div>';
+  }
   if(action.missingFields&&action.missingFields.length){
     html+='<div style="font-size:12px;color:var(--amber-text,#b8860b);background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:10px;padding:8px 10px;margin-top:6px">⚠ Missing: '+esc(action.missingFields.join(', '))+'. Add these to the text and parse again.</div>';
   }
