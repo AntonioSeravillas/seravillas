@@ -2008,3 +2008,5 @@ html[data-theme="light"] .ph-strip-item{background:#fff;box-shadow:0 1px 4px rgb
 .ph-bk-price{font-size:13px;font-weight:800;color:var(--text);font-family:'DM Mono',monospace}
 .ph-bk-nights{font-size:10px;font-weight:600;color:var(--text3);margin-top:3px}
 
+/* Development preview label (only created in development mode) */
+.dev-banner{position:fixed;top:env(safe-area-inset-top,0px);left:50%;transform:translateX(-50%);z-index:99999;background:#B45309;color:#fff;font:700 11px/1 var(--font,system-ui,sans-serif);letter-spacing:.03em;padding:4px 12px;border-radius:0 0 8px 8px;pointer-events:none;white-space:nowrap}

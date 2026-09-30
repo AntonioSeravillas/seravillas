@@ -6,7 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#000000">
-<script>(function(){var t=localStorage.getItem('sv_theme')||'dark';document.documentElement.setAttribute('data-theme',t);if(t==='light'){document.querySelector('meta[name="theme-color"]')&&document.querySelector('meta[name="theme-color"]').setAttribute('content','#FBFBFB');}})()</script>
+<script src="./src/config.js"></script>
+<script src="./src/storage.js"></script>
+<script>(function(){var t=SV_STORAGE.getItem('sv_theme')||'dark';document.documentElement.setAttribute('data-theme',t);if(t==='light'){document.querySelector('meta[name="theme-color"]')&&document.querySelector('meta[name="theme-color"]').setAttribute('content','#FBFBFB');}})()</script>
 <title>SeraVillas</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./assets/css/app.css">
@@ -105,6 +107,7 @@
 <input type="file" id="photo-file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
 <input type="file" id="issue-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleIssuePhoto(event)">
 <input type="file" id="task-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleTaskPhoto(event)">
+<script src="./src/dev-seed.js"></script>
 <script src="./src/app.js"></script>
 </body>
 </html>
