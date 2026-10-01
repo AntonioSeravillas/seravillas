@@ -51,9 +51,9 @@ The local preview never needs a production key. Cloud functions and both histori
 
 1. Keep the local preview and focused checks working during restructuring.
 2. Preserve stored metadata, stable IDs, cancelled history, notes, and cleaning links when improving data loading and imports.
-3. The 2026 Excel importer now parses the actual RESERVES format and provides review, exact property mapping, duplicate/match checks, and backup rollback. Missing rows require a complete snapshot plus individually selected cancellations. Existing 2027 records are preserved. See [Excel import details](excel-import.md).
+3. The Excel importer handles 2026 and 2027 RESERVES workbooks with year selection, date/nights review, exact property mapping, duplicate/match checks, and backup rollback. Missing rows require a complete snapshot plus individually selected cancellations. Other arrival years are preserved. See [Excel import details](excel-import.md).
 4. Review the existing Worker; introduce individual accounts, workspace isolation, and server-enforced manager/cleaner permissions. Cleaner responses and caches must exclude guest details and prices while showing the full team schedule.
 5. Add an app-shell cache, IndexedDB records, durable pending edits, and visible record conflicts. Avoid silently choosing one entire device snapshot.
-6. Add Uplisting imports in the 2027 phase, preserving Excel-managed 2026 history and operational notes.
+6. Add Uplisting imports as a separate future feature, preserving Excel-managed history and operational notes.
 
 The current stage keeps the design and operational workflows. It does not yet introduce cleaner accounts, a replacement backend, or a complete offline synchronization system.
