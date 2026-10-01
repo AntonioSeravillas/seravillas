@@ -123,6 +123,39 @@ function platColor(platform,key){
   return cols[h];
 }
 
+// Retained cancellation money is explicit; the original cancelled price is never income.
+function bookingRevenueCents(b){
+  const amount=b.status==='cancelled'?b.cancellationRevenue:b.totalPrice;
+  const cents=typeof amount==='number'&&Number.isFinite(amount)&&amount>0?Math.round(amount*100):0;
+  return Number.isSafeInteger(cents)?cents:0;
+}
+function fmtRevenueAmount(amount){return '€'+amount.toLocaleString('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function bookingRevenueSummary(bookings,year){
+  const start=year+'-01-01',end=year+'-12-31';
+  const yearBookings=bookings.filter(b=>b.checkIn>=start&&b.checkIn<=end);
+  const active=yearBookings.filter(b=>b.status!=='cancelled');
+  const cancelled=yearBookings.filter(b=>b.status==='cancelled');
+  const monthly=Array.from({length:12},()=>({revenueCents:0,count:0}));
+  const platforms=new Map(),properties=new Map();
+  let revenueCents=0,activeRevenueCents=0,cancellationRevenueCents=0;
+  yearBookings.forEach(b=>{
+    const cents=bookingRevenueCents(b),isActive=b.status!=='cancelled';
+    revenueCents+=cents;
+    if(isActive)activeRevenueCents+=cents;else cancellationRevenueCents+=cents;
+    if(!isActive&&!cents)return;
+    const month=monthly[Number(b.checkIn.slice(5,7))-1];
+    if(month){month.revenueCents+=cents;if(isActive)month.count++;}
+    const key=b.platform==='agency'?(b.agencyName||'Agency'):b.platform;
+    if(!platforms.has(key))platforms.set(key,{count:0,revenueCents:0,platform:b.platform,name:key});
+    const channel=platforms.get(key);channel.revenueCents+=cents;if(isActive)channel.count++;
+    if(!properties.has(b.propId))properties.set(b.propId,{count:0,revenueCents:0,activeRevenueCents:0});
+    const property=properties.get(b.propId);property.revenueCents+=cents;
+    if(isActive){property.count++;property.activeRevenueCents+=cents;}
+  });
+  return {active,cancelled,totalRev:revenueCents/100,activeRev:activeRevenueCents/100,
+    cancellationRev:cancellationRevenueCents/100,monthly,platforms:[...platforms.values()],properties};
+}
+
 function renderBookingReport(){
   const yr=reportYear;
   const yrS=yr+'-01-01',yrE=yr+'-12-31';
@@ -130,29 +163,23 @@ function renderBookingReport(){
   const daysInYear=isLeap?366:365;
   const td=today();
 
-  // Bookings with checkIn in this year (for revenue)
-  const yrBks=D.bookings.filter(b=>b.status!=='cancelled'&&b.checkIn>=yrS&&b.checkIn<=yrE);
-  const totalRev=yrBks.reduce((s,b)=>s+(b.totalPrice||0),0);
+  // Revenue uses the scheduled check-in year/month, including explicitly retained cancellation money.
+  const revenue=bookingRevenueSummary(D.bookings,yr);
+  const yrBks=revenue.active;
+  const totalRev=revenue.totalRev;
   const totalBks=yrBks.length;
   const unknownPrices=yrBks.filter(b=>b._excel&&b._excel.priceUnknown).length;
   const pricedBks=totalBks-unknownPrices;
-  const avgBk=pricedBks?Math.round(totalRev/pricedBks):0;
+  const avgBk=pricedBks?Math.round(revenue.activeRev/pricedBks):0;
 
   // Monthly revenue
   const MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const monRev=Array(12).fill(0),monCnt=Array(12).fill(0);
-  yrBks.forEach(b=>{const m=parseInt(b.checkIn.split('-')[1])-1;monRev[m]+=(b.totalPrice||0);monCnt[m]++;});
+  const monRev=revenue.monthly.map(m=>m.revenueCents/100),monCnt=revenue.monthly.map(m=>m.count);
   const maxMon=Math.max(...monRev,1);
   const peakMon=monRev.indexOf(maxMon);
 
   // Platform breakdown
-  const platMap={};
-  yrBks.forEach(b=>{
-    const key=b.platform==='agency'?(b.agencyName||'Agency'):b.platform;
-    if(!platMap[key])platMap[key]={count:0,revenue:0,platform:b.platform,name:key};
-    platMap[key].count++;platMap[key].revenue+=(b.totalPrice||0);
-  });
-  const platList=Object.values(platMap).sort((a,b)=>b.revenue-a.revenue);
+  const platList=revenue.platforms.map(p=>({...p,revenue:p.revenueCents/100})).sort((a,b)=>b.revenue-a.revenue);
 
   // Property performance (occupancy uses bookings overlapping the year)
   const propPerf=D.props.map(p=>{
@@ -164,13 +191,13 @@ function renderBookingReport(){
       booked+=daysBetween(s,e);
     });
     const occ=Math.min(100,Math.round(booked/daysInYear*100));
-    const pRev=yrBks.filter(b=>b.propId===p.id).reduce((s,b)=>s+(b.totalPrice||0),0);
-    const pCnt=yrBks.filter(b=>b.propId===p.id).length;
-    return{prop:p,booked,occ,revenue:pRev,count:pCnt};
-  }).filter(x=>x.count>0||x.booked>0).sort((a,b)=>b.revenue-a.revenue);
+    const amounts=revenue.properties.get(p.id)||{count:0,revenueCents:0,activeRevenueCents:0};
+    return{prop:p,booked,occ,revenue:amounts.revenueCents/100,activeRevenue:amounts.activeRevenueCents/100,count:amounts.count};
+  }).filter(x=>x.count>0||x.booked>0||x.revenue>0).sort((a,b)=>b.revenue-a.revenue);
 
   const totalBooked=propPerf.reduce((s,p)=>s+p.booked,0);
-  const avgOcc=propPerf.length?Math.round(propPerf.reduce((s,p)=>s+p.occ,0)/propPerf.length):0;
+  const occupiedProps=propPerf.filter(p=>p.count>0||p.booked>0);
+  const avgOcc=occupiedProps.length?Math.round(occupiedProps.reduce((s,p)=>s+p.occ,0)/occupiedProps.length):0;
 
   // Gaps analysis — free nights per property within [today..yr-12-31]
   const yrEndStr=yr+'-12-31';
@@ -239,6 +266,8 @@ function renderBookingReport(){
   h+=statChipBR(totalBooked+'n','Total booked<br>nights','var(--accent)');
   h+='</div>';
 
+  if(revenue.cancellationRev>0)h+='<p style="font-size:12px;color:var(--accent);margin-bottom:14px">Includes '+fmtRevenueAmount(revenue.cancellationRev)+' retained from cancelled bookings. Booking counts, average booking value and occupancy exclude cancelled stays.</p>';
+
   // Monthly revenue chart
   h+='<div class="wr-card">';
   h+='<div class="wr-card-title wr-ct-teal">Monthly revenue — '+yr+'</div>';
@@ -248,10 +277,11 @@ function renderBookingReport(){
     const pct=Math.round(rev/maxMon*100);
     const isP=mi===peakMon&&rev>0;
     const hasCnt=monCnt[mi]>0;
+    const hasRevenue=hasCnt||rev>0;
     h+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:0;height:100%">';
-    h+='<div style="font-size:8px;font-weight:700;color:'+(hasCnt?'var(--text2)':'transparent')+';font-family:\'DM Mono\',monospace;line-height:1.2;text-align:center;margin-bottom:2px">'+fmtEur(rev)+'</div>';
+    h+='<div style="font-size:8px;font-weight:700;color:'+(hasRevenue?'var(--text2)':'transparent')+';font-family:\'DM Mono\',monospace;line-height:1.2;text-align:center;margin-bottom:2px">'+fmtEur(rev)+'</div>';
     h+='<div style="flex:1;display:flex;align-items:flex-end;width:100%">';
-    h+='<div style="width:100%;border-radius:4px 4px 1px 1px;min-height:3px;height:'+Math.max(pct,hasCnt?4:1)+'%;background:'+(hasCnt?(isP?'var(--accent)':'rgba(26,122,94,0.45)'):'var(--surface2)')+'"></div>';
+    h+='<div style="width:100%;border-radius:4px 4px 1px 1px;min-height:3px;height:'+Math.max(pct,hasRevenue?4:1)+'%;background:'+(hasRevenue?(isP?'var(--accent)':'rgba(26,122,94,0.45)'):'var(--surface2)')+'"></div>';
     h+='</div>';
     h+='<div style="font-size:8px;font-weight:700;color:'+(isP?'var(--accent)':'var(--text3)')+';line-height:1.2;margin-top:3px">'+MNAMES[mi]+'</div>';
     h+='<div style="font-size:8px;color:var(--text3);font-family:\'DM Mono\',monospace;line-height:1">'+(hasCnt?monCnt[mi]+'bk':'')+'</div>';
@@ -290,9 +320,9 @@ function renderBookingReport(){
   h+='<div class="wr-card">';
   h+='<div class="wr-card-title wr-ct-teal">Property performance</div>';
   if(!propPerf.length){h+='<div class="wr-empty">No bookings this year</div>';}
-  propPerf.forEach(({prop,booked,occ,revenue,count})=>{
+  propPerf.forEach(({prop,booked,occ,revenue,activeRevenue,count})=>{
     const clr=propBarColor(prop.id);
-    const avgBkProp=count?Math.round(revenue/count):0;
+    const avgBkProp=count?Math.round(activeRevenue/count):0;
     h+='<div class="wr-proj-row">';
     h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">';
     h+='<div style="display:flex;align-items:center;gap:7px">';
@@ -313,6 +343,19 @@ function renderBookingReport(){
     h+='</div>';
   });
   h+='</div>';
+
+  // Cancelled history remains accessible for recording full or partial retained payments.
+  if(revenue.cancelled.length){
+    h+='<details class="wr-card"><summary style="cursor:pointer;font-size:13px;font-weight:700">Cancelled bookings — money retained ('+revenue.cancelled.length+')</summary>';
+    h+='<p style="font-size:11px;color:var(--text3);margin:10px 0">Only the money retained is included in revenue, in the scheduled check-in month. Open a booking and choose Edit to record an amount; use €0 for a full refund.</p>';
+    revenue.cancelled.slice().sort((a,b)=>bookingRevenueCents(b)-bookingRevenueCents(a)||b.checkIn.localeCompare(a.checkIn)).forEach(b=>{
+      const prop=D.props.find(p=>p.id===b.propId);
+      h+='<button class="btn btn-ghost" style="width:100%;display:flex;justify-content:space-between;gap:10px;text-align:left;margin-bottom:6px" onclick="openBookingDetail(\''+esc(b.id)+'\')">'
+        +'<span>'+esc(b.guestName||'Guest')+' · '+esc(prop?prop.name:'Property')+'<br><span style="font-size:10px;color:var(--text3)">'+fmtDateRange(b.checkIn,b.checkOut)+' · Cancelled</span></span>'
+        +'<span style="white-space:nowrap">'+fmtRevenueAmount(bookingRevenueCents(b)/100)+'</span></button>';
+    });
+    h+='</details>';
+  }
 
   // Gaps analysis
   h+='<div class="wr-card">';

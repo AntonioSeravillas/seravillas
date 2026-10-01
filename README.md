@@ -52,6 +52,12 @@ Open **Properties → Import bookings from Excel** in the local preview. Choose 
 
 The importer handles 2026 bookings. Selecting a workbook only prepares a review; applying in development stays local. Production application uses the existing cloud save process. Keep private workbooks and app exports outside Git.
 
+## Cancelled bookings and retained payments
+
+In **Properties → Revenue**, expand **Cancelled bookings — money retained**, open the booking, and choose **Edit**. Enter the amount actually kept under **Money retained after cancellation (€)**. Use 0 for a full refund, the full booking price for a fully paid late cancellation, or the amount kept after a partial refund.
+
+Retained money contributes to total, monthly, platform/agency and property revenue in the originally scheduled check-in month. Cancelled stays do not contribute to booking counts, average booking value, occupancy, booked nights or checkout cleanings. A cancelled booking's original price alone does not count as revenue. Excel updates and backups preserve the recorded retained amount; restoring a booking counts its active price once.
+
 ## Current data and future work
 
 The current app uses browser storage (`localStorage`) and an existing Cloudflare Worker for whole-app synchronization. Individual user accounts, restricted cleaner access, and reliable conflict handling are future work.
