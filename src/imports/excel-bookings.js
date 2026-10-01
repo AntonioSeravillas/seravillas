@@ -1,6 +1,7 @@
 /* RESERVES workbook import rules. Pure functions: no storage, DOM, or network. */
 (function(root){
   'use strict';
+  const supportedYears=Object.freeze([2026,2027]);
   const clone=value=>JSON.parse(JSON.stringify(value));
   const text=value=>value==null?'':String(value).trim();
   const norm=value=>text(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ');
@@ -51,7 +52,7 @@
   function parseWorkbook(workbook){
     const result={rows:[],sheets:[],errors:[]};
     const date1904=workbook.Workbook&&workbook.Workbook.WBProps&&workbook.Workbook.WBProps.date1904;
-    const names={agency:['agencia'],checkIn:['fechaentrada','entrada','checkin'],checkOut:['fechasalida','salida','checkout'],guestName:['nombrecliente','cliente','guestname'],reference:['reserva','reference'],guestCount:['npersonas','nopersonas','numeropersonas','personas'],amount:['acobrar','apagar','importe','total']};
+    const names={agency:['agencia'],checkIn:['fechaentrada','entrada','checkin'],checkOut:['fechasalida','salida','checkout'],guestName:['nombrecliente','cliente','guestname'],reference:['reserva','reference'],sourceNights:['noches','nights'],guestCount:['npersonas','nopersonas','numeropersonas','personas'],amount:['acobrar','apagar','importe','total']};
     for(const sheetName of workbook.SheetNames){
       const sheet=workbook.Sheets[sheetName];
       if(!sheet||!sheet['!ref'])continue;
@@ -76,12 +77,22 @@
         const amount=amountCell&&typeof amountCell.v==='number'&&Number.isFinite(amountCell.v)?amountCell.v:null;
         const checkIn=dateValue(cell('checkIn'),date1904),checkOut=dateValue(cell('checkOut'),date1904);
         const reference=text((cell('reference')||{}).v);
-        result.rows.push({key:sheetName+':'+(r+1),sheet:sheetName,row:r+1,property,sourceChannel,...channel(sourceChannel),checkIn,checkOut,originalCheckIn:checkIn,originalCheckOut:checkOut,guestName:text((cell('guestName')||{}).v),reference,cancelledInSource:['canceled','cancelled','cancelado','cancelada','anulado','anulada'].includes(compact(reference)),guestCount:occupancy.value,guestCountRaw:occupancy.raw,totalPrice:amount,originalPriceMissing:amount===null,amountHeader:info.amountHeader});
+        const nightsValue=(cell('sourceNights')||{}).v;
+        const sourceNights=Number.isSafeInteger(nightsValue)&&nightsValue>=0?nightsValue:null;
+        result.rows.push({key:sheetName+':'+(r+1),sheet:sheetName,row:r+1,property,sourceChannel,...channel(sourceChannel),checkIn,checkOut,originalCheckIn:checkIn,originalCheckOut:checkOut,guestName:text((cell('guestName')||{}).v),reference,cancelledInSource:['canceled','cancelled','cancelado','cancelada','anulado','anulada'].includes(compact(reference)),guestCount:occupancy.value,guestCountRaw:occupancy.raw,sourceNights,totalPrice:amount,originalPriceMissing:amount===null,amountHeader:info.amountHeader});
         info.count++;
       }
     }
     return result;
   }
+  function suggestYear(parsed,fallback){
+    let year=supportedYears.includes(fallback)?fallback:2026;
+    const count=y=>parsed.rows.filter(r=>validDate(r.checkIn)&&r.checkIn.startsWith(y+'-')).length;
+    for(const candidate of supportedYears)if(count(candidate)>count(year))year=candidate;
+    return year;
+  }
+  function dateNights(row){return Math.round((Date.parse(row.checkOut+'T12:00:00Z')-Date.parse(row.checkIn+'T12:00:00Z'))/86400000);}
+  function datesDisagreeWithNights(row){return Number.isSafeInteger(row.sourceNights)&&row.sourceNights>=0&&dateNights(row)!==row.sourceNights;}
   function existingReference(booking){
     const note=text(booking.notes).match(/(?:^|\s)Ref:\s*([^\s;]+)/i);
     return text((booking._excel||{}).reference||booking.sourceReference||booking.bookingReference||(note&&note[1]));
@@ -94,8 +105,9 @@
   function fingerprint(data){return JSON.stringify({props:data.props||[],bookings:data.bookings||[],sessions:data.sessions||[]});}
   function planImport(parsed,data,options){
     options=options||{};
-    const year=options.year||2026,mappings=options.mappings||{},decisions=options.decisions||{},statusDecisions=options.statusDecisions||{},overrides=options.overrides||{};
+    const year=options.year===undefined?2026:Number(options.year),mappings=options.mappings||{},decisions=options.decisions||{},statusDecisions=options.statusDecisions||{},overrides=options.overrides||{};
     const plan={year,fingerprint:fingerprint(data),rows:[],newProperties:[],cancellations:[],errors:parsed.errors.slice(),scope:[],counts:{add:0,update:0,unchanged:0,review:0,skip:0}};
+    if(!supportedYears.includes(year))plan.errors.push('Choose import year 2026 or 2027.');
     const properties=data.props||[],allBookings=data.bookings||[],bookings=allBookings.filter(b=>text(b.checkIn).slice(0,4)===String(year));
     const matched=new Set(),used=new Set(),keys=new Map();
     for(const sheet of parsed.sheets){
@@ -114,6 +126,7 @@
         if(decision==='skip'){entry.kind='skip';entry.reason='Excluded by you';}
         else if(!validDate(row.checkIn)||!validDate(row.checkOut)||row.checkOut<=row.checkIn){entry.reason='Check arrival and departure dates';}
         else if(row.checkIn.slice(0,4)!==String(year)){entry.kind='skip';entry.reason='Outside '+year;}
+        else if(datesDisagreeWithNights(row)&&!row.dateMismatchApproved){entry.reason='Dates disagree with the workbook nights; correct the dates or confirm them.';}
         else if(!propId){entry.reason='Choose the villa for this sheet';}
         else if(!row.guestName){entry.reason='Guest name is missing';}
         else if(!row.sourceChannel){entry.reason='Agency or channel is missing';}
@@ -127,7 +140,7 @@
             const ref=usableReference(row.reference,row.sourceChannel)?norm(row.reference):'';
             // An explicitly reviewed year correction can repair its exact old source record.
             // Other bookings outside the import year remain outside every matching decision.
-            const correctedYear=validDate(row.originalCheckIn)&&validDate(row.originalCheckOut)
+            const correctedYear=year===2026&&validDate(row.originalCheckIn)&&row.originalCheckIn.startsWith('2025-')&&validDate(row.originalCheckOut)
               &&row.originalCheckIn.slice(0,4)!==String(year)
               &&row.checkIn===String(year)+row.originalCheckIn.slice(4)
               &&row.checkOut===String(year)+row.originalCheckOut.slice(4);
@@ -187,6 +200,7 @@
   }
   function applyPlan(data,plan,options){
     options=options||{};
+    if(!supportedYears.includes(plan.year))throw new Error('Choose import year 2026 or 2027.');
     if(fingerprint(data)!==plan.fingerprint)throw new Error('Bookings changed after the preview. Review the file again.');
     if(plan.errors.length||plan.counts.review)throw new Error('Resolve or exclude the rows requiring review first.');
     const cancelIds=options.cancelIds||[];
@@ -208,7 +222,7 @@
       for(const field of ['checkIn','checkOut','guestName','platform','agencyName','guestCount','totalPrice'])if(row[field]!=null)b[field]=row[field];
       b.propId=propId;b.status=entry.status;
       if(b.status==='cancelled')b.cancelledAt=b.cancelledAt||at;
-      b._excel={sourceKey:sourceKey(row,propId),reference:row.reference,sourceChannel:row.sourceChannel,sheet:row.sheet,row:row.row,fileName:options.fileName||'',importedAt:at,guestCountRaw:row.guestCountRaw,originalCheckIn:row.originalCheckIn,originalCheckOut:row.originalCheckOut,amountHeader:row.amountHeader,priceUnknown:b.totalPrice===null,cleaningNeedsReview:entry.warnings.some(w=>w.startsWith('Linked cleaning'))||!!(b._excel||{}).cleaningNeedsReview};
+      b._excel={sourceKey:sourceKey(row,propId),reference:row.reference,sourceChannel:row.sourceChannel,sheet:row.sheet,row:row.row,fileName:options.fileName||'',importedAt:at,guestCountRaw:row.guestCountRaw,originalCheckIn:row.originalCheckIn,originalCheckOut:row.originalCheckOut,sourceNights:row.sourceNights==null?null:row.sourceNights,dateMismatchApproved:!!row.dateMismatchApproved,amountHeader:row.amountHeader,priceUnknown:b.totalPrice===null,cleaningNeedsReview:entry.warnings.some(w=>w.startsWith('Linked cleaning'))||!!(b._excel||{}).cleaningNeedsReview};
       changed.push({id:b.id,kind:entry.kind,fields:entry.changes});
       if(b._excel.cleaningNeedsReview)cleaningReview.push(b.id);
     }
@@ -222,5 +236,5 @@
     if(options.supersededMigrationId){next._migrations=next._migrations||[];if(!next._migrations.includes(options.supersededMigrationId))next._migrations.push(options.supersededMigrationId);}
     return next;
   }
-  root.SV_EXCEL=Object.freeze({parseWorkbook,planImport,applyPlan,propertyName,guests,validDate,fingerprint});
+  root.SV_EXCEL=Object.freeze({parseWorkbook,planImport,applyPlan,propertyName,guests,validDate,fingerprint,supportedYears,suggestYear,dateNights,datesDisagreeWithNights});
 })(typeof window!=='undefined'?window:globalThis);

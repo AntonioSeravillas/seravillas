@@ -297,3 +297,87 @@ test('cloud pulls preserve retained cancellation payments', async () => {
   assert.equal(app.run('bookingRevenueSummary(D.bookings,2026).totalRev'),2500.23);
   assert.equal(JSON.parse(app.records.get('seravillas_v1')).bookings[0].status,'cancelled');
 });
+
+test('2027 workbook selection suggests the right year and saves its migration marker without touching 2026', async () => {
+  const app=runtime();
+  const before2026=app.run('JSON.stringify(D.bookings)');
+  app.run(`showModal=function(html){window.lastModal=html;};openExcelImport();
+    window.syntheticBook={SheetNames:['VILLA MAR'],Sheets:{'VILLA MAR':XLSX.utils.aoa_to_sheet([['AGENCIA','Fecha entrada','Fecha salida','Noches','Nombre cliente','$ a cobrar'],['AIRBNB','01/07/2027','08/07/2027',7,'Next Year Example Guest',1200]])}};`);
+  await app.run(`readExcelBookingFile({target:{files:[{name:'fictional-2027.xlsx',arrayBuffer:async()=>XLSX.write(window.syntheticBook,{type:'array',bookType:'xlsx'})}]}})`);
+  assert.equal(app.run('excelImportState.year'),2027);
+  assert.match(app.context.lastModal,/Import year: <strong>2027<\/strong>/);
+  assert.match(app.context.lastModal,/all 2027 bookings/);
+  app.run("setExcelMapping('VILLA MAR',D.props[0].id);applyExcelBookingImport()");
+  assert.equal(app.run('D.importHistory.at(-1).year'),2027);
+  assert.equal(app.run('D._migrations.includes(BOOKING_2027_KEY)'),true);
+  assert.equal(app.run('D._migrations.includes(BOOKING_MIGRATION_KEY)'),false);
+  assert.equal(app.run('JSON.stringify(D.bookings.slice(0,-1))'),before2026);
+  assert.equal(app.run('D.bookings.at(-1).checkIn'),'2027-07-01');
+  assert.match(app.context.lastModal,/2027 · 1 added/);
+  assert.equal(app.requests.length,0);
+  const reloaded=runtime({records:app.records});
+  assert.equal(reloaded.run('D._migrations.includes(BOOKING_2027_KEY)'),true);
+  assert.equal(reloaded.run('D.importHistory.at(-1).year'),2027);
+});
+
+test('changing import year discards old review decisions and scopes the rebuilt preview', () => {
+  const app=runtime();
+  app.run(`showModal=function(html){window.lastModal=html;};openExcelImport();
+    excelImportState.parsed={errors:[],sheets:[{name:'DEMO',property:D.props[0].name,count:1}],rows:[{key:'DEMO:4',sheet:'DEMO',row:4,property:D.props[0].name,sourceChannel:'PRIVATE',platform:'direct',agencyName:'',guestName:'Next Year Example',reference:'test',guestCount:2,totalPrice:100,checkIn:'2027-11-01',checkOut:'2027-11-08',originalCheckIn:'2027-11-01',originalCheckOut:'2027-11-08'}]};
+    excelImportState.overrides={'DEMO:4':{checkIn:'2026-11-01'}};excelImportState.decisions={'DEMO:4':'skip'};excelImportState.cancelIds=['keep'];excelImportState.completeSnapshot=true;
+    setExcelImportYear('2027');`);
+  assert.equal(app.run('excelImportState.year'),2027);
+  assert.deepEqual(plain(app.run('excelImportState.overrides')),{});
+  assert.deepEqual(plain(app.run('excelImportState.decisions')),{});
+  assert.deepEqual(plain(app.run('excelImportState.cancelIds')),[]);
+  assert.equal(app.run('excelImportState.completeSnapshot'),false);
+  assert.equal(app.run('excelImportState.plan.counts.add'),1);
+  app.run("setExcelImportYear('2028')");
+  assert.equal(app.run('excelImportState.year'),2027);
+  assert.equal(app.requests.length,0);
+});
+
+test('date review corrects a 2027 row, rejects invalid edits, and preserves source dates', () => {
+  const app=runtime();
+  app.run(`showModal=function(html){window.lastModal=html;};openExcelImport();setExcelImportYear('2027');
+    excelImportState.parsed={errors:[],sheets:[{name:'DEMO',property:D.props[0].name,count:1}],rows:[{key:'DEMO:4',sheet:'DEMO',row:4,property:D.props[0].name,sourceChannel:'PRIVATE',platform:'direct',agencyName:'',guestName:'Next Year Example',reference:'test',guestCount:2,totalPrice:100,sourceNights:6,checkIn:'2027-09-06',checkOut:'2027-12-09',originalCheckIn:'2027-09-06',originalCheckOut:'2027-12-09'}]};renderExcelImport();`);
+  assert.equal(app.run('excelImportState.plan.counts.review'),1);
+  assert.match(app.context.lastModal,/Use these dates/);
+  assert.match(app.context.lastModal,/keep 94 nights instead of the workbook’s 6/);
+  app.run("setExcelDates('DEMO:4','2027-09-06','2027-09-06')");
+  assert.equal(app.run('excelImportState.plan.counts.review'),1);
+  assert.match(app.context.lastModal,/Check-out must be after/);
+  app.run("setExcelDates('DEMO:4','2027-09-06','2027-09-12');applyExcelBookingImport()");
+  assert.equal(app.run('D.bookings.at(-1).checkOut'),'2027-09-12');
+  assert.equal(app.run('D.bookings.at(-1)._excel.originalCheckOut'),'2027-12-09');
+  assert.equal(app.run('D.bookings.at(-1)._excel.sourceNights'),6);
+  assert.equal(app.requests.length,0);
+});
+
+test('timeline month navigation reaches next year and preserves cancelled history and data', () => {
+  const app=runtime();
+  app.run(`today=function(){return '2026-10-01';};window.innerWidth=1024;
+    D.props=[{id:'p',name:'Example Villa'}];D.sessions=[];
+    D.bookings=[{id:'next-summer',propId:'p',guestName:'Future Example',platform:'airbnb',checkIn:'2027-06-11',checkOut:'2027-06-17',status:'confirmed',totalPrice:100},
+    {id:'next-cancelled',propId:'p',guestName:'Cancelled Example',checkIn:'2027-06-21',checkOut:'2027-06-26',status:'cancelled',cancellationRevenue:100}];`);
+  const before=app.run('JSON.stringify(D)'),writes=app.writes.length;
+  assert.doesNotMatch(app.run('renderCalendarTimeline()'),/data-bk="next-summer"/);
+  app.run("setTimelineMonth('2027-06')");
+  const future=app.run('renderCalendarTimeline()');
+  assert.match(future,/value="2027-06"/);
+  assert.match(future,/data-date="2027-06-01" id="tl-focus-hdr"/);
+  assert.match(future,/data-bk="next-summer"/);
+  assert.doesNotMatch(future,/data-bk="next-cancelled"/);
+  app.run("setTimelineMonth('2027-13')");
+  assert.equal(app.run('calTimelineDate'),'2027-06-01');
+  const outer={scrollLeft:0};
+  app.context.document.getElementById=id=>id==='tl-outer'?outer:id==='tl-focus-hdr'?{offsetLeft:2000}:null;
+  app.run('tlScrollFocus()');
+  assert.equal(outer.scrollLeft,1800);
+  app.run('tlScrollToday()');
+  assert.equal(app.run('calTimelineDate'),'');
+  assert.match(app.run('renderCalendarTimeline()'),/data-date="2026-10-01" id="tl-focus-hdr"/);
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.writes.length,writes);
+  assert.equal(app.requests.length,0);
+});

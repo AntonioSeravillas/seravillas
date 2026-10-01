@@ -125,7 +125,7 @@ function _doRender(){
   updateBadge();
   attachSwipeNav();
   runAnimations();
-  if(tab==='calendar'&&calView==='timeline')setTimeout(tlScrollToday,30);
+  if(tab==='calendar'&&calView==='timeline')setTimeout(tlScrollFocus,30);
 }
 
 /* ── ANIMATION ENGINE — polished ── */

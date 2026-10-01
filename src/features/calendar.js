@@ -315,8 +315,8 @@ function deleteEvent(id){
 
 let TL_DAY_W=46;
 let TL_PROP_W=80;
-const TL_BEFORE=30;  // days before today to render
-const TL_AFTER=150;  // days after today to render
+const TL_BEFORE=30;  // days before the selected date to render
+const TL_AFTER=150;  // minimum days after the selected date to render
 
 function daysBetween(a,b){
   const pa=a.split('-'),pb=b.split('-');
@@ -329,10 +329,11 @@ function renderCalendarTimeline(){
   TL_PROP_W=window.innerWidth>=768?180:80;
   const isTLDesktop=window.innerWidth>=768;
   const td=today();
-  const yrEnd=td.slice(0,4)+'-12-31';
-  const tlAfter=Math.max(TL_AFTER,daysBetween(td,yrEnd));
-  const winStart=addDays(td,-TL_BEFORE);
-  const winEnd=addDays(td,tlAfter);
+  const focusDate=calTimelineDate||td;
+  const yrEnd=focusDate.slice(0,4)+'-12-31';
+  const tlAfter=Math.max(TL_AFTER,daysBetween(focusDate,yrEnd));
+  const winStart=addDays(focusDate,-TL_BEFORE);
+  const winEnd=addDays(focusDate,tlAfter);
   const totalDays=TL_BEFORE+tlAfter+1;
 
   const days=[];for(let i=0;i<totalDays;i++)days.push(addDays(winStart,i));
@@ -340,8 +341,9 @@ function renderCalendarTimeline(){
   const filterPropId=calFilter.startsWith('prop-')?calFilter.slice(5):null;
   const props=filterPropId?D.props.filter(p=>p.id===filterPropId):D.props;
 
-  let h='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px">';
+  let h='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px;gap:8px">';
   h+='<div style="font-size:11px;color:var(--text3);font-weight:500">'+totalDays+' days · scroll to navigate</div>';
+  h+='<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)">Go to month <input type="month" aria-label="Timeline month" class="sv-input" style="width:165px;padding:6px 8px" min="1900-01" max="2099-12" value="'+focusDate.slice(0,7)+'" onchange="setTimelineMonth(this.value)"></label>';
   h+='<button class="sv-btn sv-btn-ghost" style="font-size:11px;padding:5px 12px" onclick="tlScrollToday()">Today ↩</button>';
   h+='</div>';
 
@@ -364,7 +366,7 @@ function renderCalendarTimeline(){
     const dayName=dObj.toLocaleDateString('en-GB',{weekday:'short'}).slice(0,2);
     const dayNum=parts[2].replace(/^0/,'');
     const monthName=isFirst?dObj.toLocaleDateString('en-GB',{month:'short'}):'';
-    h+='<div class="tl-day-hdr'+(isT?' is-today':'')+'"'+(isT?' id="tl-today-hdr"':'')+' style="background:'+(isT?'rgba(224,106,58,0.09)':isWk?'var(--surface2)':'transparent')+'">';
+    h+='<div class="tl-day-hdr'+(isT?' is-today':'')+'" data-date="'+d+'"'+(d===focusDate?' id="tl-focus-hdr"':'')+' style="background:'+(isT?'rgba(224,106,58,0.09)':isWk?'var(--surface2)':'transparent')+'">';
     h+=(monthName?'<div style="font-size:8px;font-weight:800;color:var(--accent);letter-spacing:0.06em;line-height:1;margin-bottom:1px">'+monthName.toUpperCase()+'</div>':'<div style="font-size:8px;line-height:1;margin-bottom:1px">&nbsp;</div>');
     h+='<div class="tl-day-hdr-name">'+dayName+'</div>';
     h+='<div class="tl-day-hdr-num">'+dayNum+'</div>';
@@ -500,9 +502,18 @@ function renderCalendarTimeline(){
   }
   return h;
 }
+function setTimelineMonth(value){
+  if(!/^(19|20)\d{2}-(0[1-9]|1[0-2])$/.test(value))return;
+  calTimelineDate=value+'-01';
+  render();
+}
 function tlScrollToday(){
+  calTimelineDate='';
+  render();
+}
+function tlScrollFocus(){
   const outer=document.getElementById('tl-outer');
-  const hdr=document.getElementById('tl-today-hdr');
+  const hdr=document.getElementById('tl-focus-hdr');
   if(!outer||!hdr)return;
   outer.scrollLeft=hdr.offsetLeft-TL_PROP_W-20;
 }

@@ -9,6 +9,7 @@ let calY=new Date().getFullYear(),calM=new Date().getMonth();
 let calView='timeline';
 let calSelectedBk=null;
 let calWeekStart=null;
+let calTimelineDate='';
 let calFilter='all'; // 'all' | 'cleanings' | 'prop-{id}'
 let reportYear=new Date().getFullYear();
 let _showPastEvents=false;

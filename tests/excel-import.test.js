@@ -261,3 +261,87 @@ test('Excel price updates preserve explicitly retained cancellation revenue and 
   assert.equal(excluded.counts.skip,1);
   assert.equal(result.bookings[0].cancellationRevenue,1200);
 });
+
+test('2027 import changes only the selected arrival year, preserves paid cancellations, and is repeatable', () => {
+  const old=booking({id:'paid-2026',status:'cancelled',cancellationRevenue:1200});
+  const current=booking({id:'stay-2027',checkIn:'2027-07-01',checkOut:'2027-07-08'});
+  const future=booking({id:'stay-2028',checkIn:'2028-07-01',checkOut:'2028-07-08'});
+  const original=data([old,current,future]);
+  const incoming=parsed(row({checkIn:'2027-07-01',checkOut:'2027-07-08',originalCheckIn:'2027-07-01',originalCheckOut:'2027-07-08',totalPrice:1400}),row({key:'VILLA MAR:5',row:5,guestName:'Next Year Guest',reference:'002-345',checkIn:'2027-12-29',checkOut:'2028-01-04',originalCheckIn:'2027-12-29',originalCheckOut:'2028-01-04',totalPrice:1800}));
+  const plan=api.planImport(incoming,original,{year:2027,completeSnapshot:true});
+  assert.deepEqual(plain(plan.counts),{add:1,update:1,unchanged:0,review:0,skip:0});
+  assert.equal(plan.cancellations.length,0);
+  const result=apply(original,plan,{supersededMigrationId:'legacy-2027'});
+  assert.deepEqual(plain(result.bookings[0]),old);
+  assert.deepEqual(plain(result.bookings[2]),future);
+  assert.equal(result.bookings[1].id,'stay-2027');
+  assert.equal(result.bookings[1].notes,current.notes);
+  assert.equal(result.bookings[1].linkedCleaningId,'c1');
+  assert.equal(result.bookings[1].totalPrice,1400);
+  assert.deepEqual(plain(result.sessions),original.sessions);
+  assert.equal(result.importHistory.at(-1).year,2027);
+  assert.ok(result._migrations.includes('legacy-2027'));
+  const repeated=api.planImport(incoming,result,{year:2027,completeSnapshot:true});
+  assert.deepEqual(plain(repeated.counts),{add:0,update:0,unchanged:2,review:0,skip:0});
+  assert.equal(result.bookings.length,4);
+  assert.throws(()=>apply(result,repeated),/no changes/i);
+});
+
+test('2027 cancellation candidates never include other arrival years or villas', () => {
+  const original=data([booking({id:'missing-2027',checkIn:'2027-07-01',checkOut:'2027-07-08'}),booking({id:'keep-2026'}),booking({id:'keep-2028',checkIn:'2028-07-01',checkOut:'2028-07-08'}),booking({id:'keep-other-villa',propId:'vallori',checkIn:'2027-07-01',checkOut:'2027-07-08'})]);
+  const incoming=parsed(row({guestName:'New Guest',reference:'009-888',checkIn:'2027-08-01',checkOut:'2027-08-08',originalCheckIn:'2027-08-01',originalCheckOut:'2027-08-08'}));
+  const plan=api.planImport(incoming,original,{year:2027,completeSnapshot:true});
+  assert.deepEqual(plain(plan.cancellations.map(b=>b.id)),['missing-2027']);
+  const result=apply(original,plan,{cancelIds:['missing-2027']});
+  assert.equal(result.bookings[0].status,'cancelled');
+  assert.deepEqual(plain(result.bookings.slice(1,4)),original.bookings.slice(1));
+});
+
+test('import year suggestion uses valid arrivals and unsupported years cannot be applied', () => {
+  assert.deepEqual(plain(api.supportedYears),[2026,2027]);
+  const mixed=parsed(row(),row({checkIn:'2027-07-01'}),row({checkIn:'2027-08-01'}));
+  assert.equal(api.suggestYear(mixed,2026),2027);
+  assert.equal(api.suggestYear(parsed(row(),row({checkIn:'2027-07-01'})),2026),2026);
+  assert.equal(api.suggestYear(parsed(row({checkIn:'2027-02-30'})),2026),2026);
+  for(const year of [2028,0,NaN,'invalid']){
+    const plan=api.planImport(parsed(row()),data(),{year});
+    assert.match(plan.errors[0],/2026 or 2027/);
+    assert.equal(plan.canApply,false);
+    assert.throws(()=>apply(data(),plan),/2026 or 2027/);
+  }
+});
+
+test('workbook nights expose date errors and reviewed corrections keep source provenance', () => {
+  const sheet=XLSX.utils.aoa_to_sheet([['AGENCIA','Fecha entrada','Fecha salida','Noches','Nombre cliente','$ a cobrar'],['AIRBNB','06/09/2027','09/12/2027',6,'Example Guest',600]]);
+  const incoming=api.parseWorkbook({SheetNames:['VILLA MAR'],Sheets:{'VILLA MAR':sheet}});
+  assert.equal(incoming.rows[0].sourceNights,6);
+  const original=data();
+  const review=api.planImport(incoming,original,{year:2027});
+  assert.equal(review.counts.review,1);
+  assert.match(review.rows[0].reason,/workbook nights/);
+  const corrected=api.planImport(incoming,original,{year:2027,overrides:{'VILLA MAR:2':{checkOut:'2027-09-12'}}});
+  assert.equal(corrected.counts.add,1);
+  const result=apply(original,corrected);
+  assert.equal(result.bookings[0].checkOut,'2027-09-12');
+  assert.equal(result.bookings[0]._excel.originalCheckOut,'2027-12-09');
+  assert.equal(result.bookings[0]._excel.sourceNights,6);
+  assert.equal(result.bookings[0]._excel.dateMismatchApproved,false);
+  const confirmed=api.planImport(incoming,original,{year:2027,overrides:{'VILLA MAR:2':{dateMismatchApproved:true}}});
+  assert.equal(confirmed.counts.add,1);
+  assert.equal(apply(original,confirmed).bookings[0]._excel.dateMismatchApproved,true);
+  const invalid=api.planImport(incoming,original,{year:2027,overrides:{'VILLA MAR:2':{checkOut:'2027-09-06',dateMismatchApproved:true}}});
+  assert.equal(invalid.counts.review,1);
+  assert.match(invalid.rows[0].reason,/arrival and departure/);
+});
+
+test('correcting a 2027 workbook year never moves matching historical 2026 bookings', () => {
+  const historical=booking();
+  const original=data([historical]);
+  const incoming=parsed(row());
+  const plan=api.planImport(incoming,original,{year:2027,overrides:{'VILLA MAR:4':{checkIn:'2027-07-01',checkOut:'2027-07-08'}}});
+  assert.equal(plan.counts.add,1);
+  const result=apply(original,plan);
+  assert.deepEqual(plain(result.bookings[0]),historical);
+  assert.equal(result.bookings[1].checkIn,'2027-07-01');
+  assert.equal(result.bookings[1]._excel.originalCheckIn,'2026-07-01');
+});

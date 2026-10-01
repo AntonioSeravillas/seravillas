@@ -50,7 +50,11 @@ Some script URLs have a `?v=` release suffix so returning browsers fetch the upd
 
 Open **Properties → Import bookings from Excel** in the local preview. Choose the workbook, match its villa sheets, review changes, and resolve flagged rows before applying. The importer keeps IDs, notes, cancelled history, and cleaning links; a pre-import backup supports rollback. Your workbook stays unchanged. See [the step-by-step import guide](docs/excel-import.md).
 
-The importer handles 2026 bookings. Selecting a workbook only prepares a review; applying in development stays local. Production application uses the existing cloud save process. Keep private workbooks and app exports outside Git.
+The importer handles 2026 and 2027 bookings. Confirm the year, review the dates and resolve any mismatch with the workbook nights before applying. Selecting a workbook only prepares a review; applying in development stays local. Production application uses the existing cloud save process. Keep private workbooks and app exports outside Git.
+
+## View next year in the calendar
+
+In **Calendar → Timeline**, use **Go to month** to select a month in 2027. The timeline opens at that month and includes the following bookings and cleanings. **Today** returns to the current date. Changing this view does not edit booking data.
 
 ## Cancelled bookings and retained payments
 
@@ -64,8 +68,8 @@ The current app uses browser storage (`localStorage`) and an existing Cloudflare
 
 - You need full manager access to your workspace.
 - Cleaner accounts should show the **full team calendar and cleaning schedule**, excluding guest details and prices.
-- Your Excel table is the booking source for **2026**; the workbook importer and review screen are built.
-- Uplisting integration is deferred to **2027**.
+- Your Excel tables are the booking source for **2026 and 2027**; the workbook importer and review screen are built.
+- Uplisting integration remains a separate planned feature.
 - Installable offline opening, a durable edit queue, and record-level conflict handling remain to be built. Existing local data persistence is not the complete offline/cloud design.
 
 ## Run the checks

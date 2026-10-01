@@ -4,7 +4,7 @@
 
 1. Start the local preview from VS Code as described in the README.
 2. Open **Properties → Import bookings from Excel** and choose the RESERVES `.xlsx` workbook.
-3. Match every sheet to its villa. Existing exact villa names are matched automatically. In an empty/sample workspace, choose **Create [villa]** when appropriate.
+3. Confirm **Import year** (2026 or 2027). The most common supported arrival year in the workbook is suggested; review it before applying. Match every sheet to its villa. Existing exact villa names are matched automatically. In an empty/sample workspace, choose **Create [villa]** when appropriate.
 4. Review **New**, **Updates**, **Unchanged**, **Review**, and **Excluded** counts. Open **All bookings** to inspect every row.
 5. Resolve flagged dates, cancellation markers, uncertain matches, and missing prices. For a missing price, enter the value and click **Use this price**. Zero is a valid price. Unknown is a separate choice.
 6. Only if the workbook contains all bookings for the matched villas, check the complete-snapshot box. Select missing bookings for cancellation individually. This is optional; absence alone never cancels a booking.
@@ -28,9 +28,11 @@ The **Import backup** button under Data & Backup opens the existing JSON restore
 
 `AIRBNB`, `BOOKING`, and `PRIVATE` map to Airbnb, Booking.com, and Direct. Other channels retain their agency names. Formula totals and empty formatted rows are skipped.
 
-Only bookings arriving in **2026** are in scope. A stay arriving in December 2026 and departing in January 2027 is included. Existing 2027 arrivals and villas absent from the workbook are preserved.
+Only bookings arriving in the selected **2026 or 2027** year are in scope. A December stay departing in January of the following year belongs to its arrival year. Other arrival years and villas absent from the workbook are preserved. Changing the year clears row decisions and cancellation selections so the review can be rebuilt for that year.
 
-Rows dated 2025 can be explicitly shifted to 2026 using the review checkbox. Check the listed source rows before doing so. The original workbook dates remain in import metadata; the workbook itself is never edited. If a corrected booking already exists in 2026, it takes precedence over its old cancelled history. Otherwise the exact original-date record can be repaired while keeping its ID; unrelated records in other years stay outside the import scope.
+Rows dated in the previous year can be explicitly shifted to the selected year using the review checkbox. Check the listed source rows before doing so. The original workbook dates remain in import metadata; the workbook itself is never edited. If a corrected booking already exists in the selected year, it takes precedence over its old cancelled history. The legacy 2025-to-2026 correction can repair the exact original-date record while keeping its ID. Corrections in a 2027 workbook keep existing 2026 records unchanged and import the corrected row into 2027.
+
+Arrival and departure fields on each review row allow specific date corrections. The source **Noches** value is checked against the dates when available. A mismatch blocks application until the dates are corrected or explicitly confirmed. Corrections retain original workbook dates and the source nights value in metadata. Editing the review does not alter the workbook.
 
 A reservation field containing `CANCELED`, `CANCELLED`, or a supported Spanish cancellation marker requires an explicit decision. The manager can exclude the row, keep cancelled history, or mark it active. Excluding a source row already marked cancelled does not invalidate the active-booking snapshot. Excluding any other row disables missing-booking cancellation.
 
@@ -50,7 +52,7 @@ Application saves a full copy under `seravillas_v1_beforeExcelImport` before rep
 
 **Properties → Data & Backup → Restore before last Excel import** restores that copy. It replaces edits made after the import, so export current data first if those edits matter. The backup is overwritten by the next successful import attempt; keep independent exports for longer history.
 
-Each applied batch is recorded in `D.importHistory` with counts, changed booking IDs/fields, file name, timestamp, and cleaning-review IDs. Each imported booking retains `_excel` source provenance. Load/save preserves both across reloads. The 2026 legacy migration marker is retained so old embedded bookings cannot undo the import.
+Each applied batch is recorded in `D.importHistory` with counts, changed booking IDs/fields, file name, timestamp, and cleaning-review IDs. Each imported booking retains `_excel` source provenance. Load/save preserves both across reloads. The selected year’s legacy migration marker is retained so old embedded bookings cannot undo the import.
 
 Import history and the rollback backup are currently data records, not a separate history screen or multi-step undo system. Existing whole-app cloud synchronization still needs replacement before multiple accounts can edit concurrently.
 
