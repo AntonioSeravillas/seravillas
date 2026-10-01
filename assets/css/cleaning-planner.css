@@ -1,0 +1,25 @@
+/* Cleaning planning, using the existing app theme. */
+.cp-controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:0 0 18px}
+.cp-controls label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--text2);font-weight:600;min-width:160px;flex:1}
+.cp-controls input,.cp-controls select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font:inherit;font-size:13px;width:100%;box-sizing:border-box;color-scheme:dark}
+.cp-controls .sv-tabs{flex-shrink:0}
+.cp-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px}
+.cp-panel h3,.cp-day h3{font-size:13px;font-weight:700;margin:0 0 10px;color:var(--text)}
+.cp-panel h3 span{color:var(--accent);margin-left:8px}
+.cp-help{font-size:12px;line-height:1.5;color:var(--text3);margin:4px 0}
+.cp-pending{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--border);font-size:13px}
+.cp-pending>div{min-width:0}
+.cp-days{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cp-day{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.cp-card{border-left:3px solid;border-radius:8px;background:var(--surface2);padding:12px;margin-top:10px}
+.cp-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;flex-wrap:wrap}
+.cp-card-head span{font-size:12px;color:var(--text2)}
+.cp-context,.cp-staff{display:flex;gap:5px 12px;flex-wrap:wrap;font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6}
+.cp-staff{flex-direction:column;gap:3px}
+.cp-turnaround,.cp-alert{color:var(--amber);font-weight:600}
+.cp-alert{font-size:11px;line-height:1.5;margin-top:8px}
+.cp-coverage{font-size:12px;font-weight:600;margin-top:10px;color:var(--text)}
+.cp-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+@media(max-width:767px){.cp-days{grid-template-columns:1fr}.cp-pending{align-items:start;flex-direction:column}.cp-controls .sv-tabs{width:100%}}
+
+html[data-theme="light"] .cp-controls input,html[data-theme="light"] .cp-controls select{color-scheme:light}

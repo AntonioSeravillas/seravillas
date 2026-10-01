@@ -299,7 +299,7 @@ function openSess(id){
 }
 function openSessEdit(id){
   const s=D.sessions.find(x=>x.id===id);if(!s)return;
-  window._ec=[...(s.cleanerIds||[])];
+  window._ec=getCleaningCrew(s).main.filter(m=>m.status!=='cancelled').map(m=>m.cleanerId);
   const chips=D.cleaners.map(c=>'<button type="button" class="chip'+(window._ec.includes(c.id)?' on':'')+'" data-id="'+c.id+'" onclick="toggleEC(\''+c.id+'\')">'+esc(c.name)+'</button>').join('');
   showModal('<div class="modal-handle"></div><div class="modal-title">Edit session</div>'
     +'<div class="field"><label>Date</label><input type="date" id="e-date" value="'+s.date+'"></div>'
@@ -309,7 +309,26 @@ function openSessEdit(id){
     +'<div style="display:flex;gap:8px;margin-top:6px"><button class="btn btn-teal" style="flex:1" onclick="saveSessEdit(\''+s.id+'\')">Save</button><button class="btn btn-ghost" style="flex:1" onclick="openSess(\''+s.id+'\')">Cancel</button></div>');
 }
 function toggleEC(id){if(!window._ec)window._ec=[];const i=window._ec.indexOf(id);if(i>=0)window._ec.splice(i,1);else window._ec.push(id);document.querySelectorAll('#edit-chips .chip').forEach(c=>c.classList.toggle('on',window._ec.includes(c.dataset.id)));}
-function saveSessEdit(id){const s=D.sessions.find(x=>x.id===id);if(!s)return;const date=(document.getElementById('e-date')||{}).value;const time=(document.getElementById('e-time')||{}).value||'';const note=(document.getElementById('e-note')||{}).value||'';const cids=window._ec||[];if(!date){alert('Please pick a date.');return;}if(!cids.length){alert('At least one cleaner needed.');return;}s.date=date;s.time=time;s.note=note;s.cleanerIds=cids;save();closeModal();render();toast('Session updated!');}
+function saveSessEdit(id){
+  const s=D.sessions.find(x=>x.id===id);if(!s)return;
+  const date=(document.getElementById('e-date')||{}).value;
+  const time=(document.getElementById('e-time')||{}).value||'';
+  const note=(document.getElementById('e-note')||{}).value||'';
+  const cids=[...new Set(window._ec||[])];
+  if(!SV_EXCEL.validDate(date)){toast('Please pick a valid date');return;}
+  if(cids.some(cid=>!D.cleaners.some(c=>c.id===cid))){toast('Choose a cleaner from the team');return;}
+  const oldCrew=getCleaningCrew(s);
+  const nextMain=cids.map(cid=>oldCrew.main.find(m=>m.cleanerId===cid&&m.status!=='cancelled')||{cleanerId:cid,name:D.cleaners.find(c=>c.id===cid).name,status:'confirmed'});
+  if(nextMain.some(m=>getCleanerDailyConflict(m.cleanerId,date,s.id))){toast('A cleaner is already assigned elsewhere that day');return;}
+  const usedOthers=D.sessions.filter(x=>x.id!==s.id&&x.date===date&&x.status!=='cancelled').reduce((n,x)=>{const c=getCleaningCrew(x);return n+(c.alinaStatus!=='cancelled'?c.alinaSpots:0);},0);
+  if(oldCrew.alinaStatus!=='cancelled'&&oldCrew.alinaSpots+usedOthers>ALINA_MAX_SPOTS_PER_DAY){toast('Alina capacity is already allocated that day');return;}
+  const moved=s.date!==date||(s.time||'')!==time;
+  if(moved){nextMain.forEach(m=>{m.status='offered';delete m.completedAt;});if(oldCrew.alinaSpots&&oldCrew.alinaStatus!=='cancelled')oldCrew.alinaStatus='offered';delete oldCrew.alinaCompletedAt;}
+  s.date=date;s.time=time;s.note=note;
+  s.crew={...oldCrew,main:nextMain.concat(oldCrew.main.filter(m=>m.status==='cancelled'&&!cids.includes(m.cleanerId)))};
+  syncCleaningCleanerIds(s);save();closeModal();render();toast('Session updated!');
+}
+
 function setStatus(id,status){const s=D.sessions.find(x=>x.id===id);if(!s)return;s.status=status;save();openSess(id);render();}
 
 /* ── PROP NOTES ── */

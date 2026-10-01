@@ -16,6 +16,7 @@ let _showPastEvents=false;
 let evView='list';
 let evCalY=new Date().getFullYear();
 let evCalM=new Date().getMonth();
+let schedView='villas',schedPropFilter='';
 let schedWeekOffset=0; // 0=this week, +1=next, -1=last
 // ── Cloud sync ──
 const DEV_MODE=!!(window.SV_CONFIG&&window.SV_CONFIG.isDev);

@@ -31,7 +31,7 @@ function getRequiredCleanersForProperty(propId){
 var MAIN_CLEANER_NAMES=['maribel','lutfyie','tanja','emi'];
 var ALINA_MAX_SPOTS_PER_DAY=4;
 
-function getMainCleanerNames(){return MAIN_CLEANER_NAMES.slice();}
+function getMainCleanerNames(){return D.cleaners.filter(c=>c.name&&String(c.name).toLowerCase().trim()!=='alina').map(c=>String(c.name).toLowerCase().trim());}
 
 function isMainCleaner(cleaner){
   if(!cleaner||!cleaner.name)return false;
@@ -42,18 +42,9 @@ function isMainCleaner(cleaner){
    cleaning.crew shape:
      { main:[{cleanerId,name,status}], alinaSpots:0, alinaStatus:'offered'|'confirmed'|'cancelled' }
    Returns a safe empty default for any old session without a crew field. */
-function getCleaningCrew(cleaning){
-  if(!cleaning||!cleaning.crew)return{main:[],alinaSpots:0,alinaStatus:'offered'};
-  return{
-    main:Array.isArray(cleaning.crew.main)?cleaning.crew.main:[],
-    alinaSpots:Number(cleaning.crew.alinaSpots)||0,
-    alinaStatus:cleaning.crew.alinaStatus||'offered',
-  };
-}
+function getCleaningCrew(cleaning){return SV_CLEANING.crew(cleaning,D.cleaners);}
+/* Legacy assigned cleaners count as confirmed. Explicit crew records own their status. */
 
-/* ── Confirmed crew count ──
-   Counts main crew with status==='confirmed' plus alinaSpots when alinaStatus==='confirmed'.
-   Offered and cancelled entries do not count as confirmed. */
 function getConfirmedCrewCount(cleaning){
   var crew=getCleaningCrew(cleaning);
   var n=crew.main.filter(function(m){return m.status==='confirmed';}).length;
@@ -216,7 +207,7 @@ function schedSessCrewHtml(s){
 /* Initialise crew field safely on a session object in memory only.
    Does not save — call save() explicitly after mutations. */
 function crewEnsure(s){
-  if(!s.crew)s.crew={main:[],alinaSpots:0,alinaStatus:'offered'};
+  if(!s.crew)s.crew=getCleaningCrew(s);
   if(!Array.isArray(s.crew.main))s.crew.main=[];
   if(typeof s.crew.alinaSpots!=='number')s.crew.alinaSpots=0;
   if(!s.crew.alinaStatus)s.crew.alinaStatus='offered';
@@ -259,27 +250,24 @@ function openCrewModal(sessId){
   // ── Main cleaners ──
   h+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px">Main Cleaners</div>';
   h+='<div style="margin-bottom:16px">';
-  MAIN_CLEANER_NAMES.forEach(function(nm){
-    var displayName=nm.charAt(0).toUpperCase()+nm.slice(1);
-    var assigned=crew.main.find(function(m){return String(m.name||'').toLowerCase()===nm;});
-    var dbCleaner=D.cleaners.find(function(c){return String(c.name||'').toLowerCase()===nm;});
-    var cid=dbCleaner?dbCleaner.id:'name_'+nm;
-    h+='<div class="crew-modal-row">';
-    h+='<div style="font-size:13px;font-weight:700;color:var(--text);min-width:72px">'+esc(displayName)+'</div>';
+  getMainCleanerNames().forEach(function(nm){
+    const dbCleaner=D.cleaners.find(c=>String(c.name||'').toLowerCase().trim()===nm);
+    const displayName=dbCleaner?dbCleaner.name:nm;
+    const assigned=crew.main.find(m=>String(m.name||'').toLowerCase().trim()===nm);
+    const cid=dbCleaner?dbCleaner.id:'name_'+nm;
+    const attrs=' data-session="'+esc(sessId)+'" data-cleaner-name="'+esc(nm)+'"';
+    function crewButton(label,operation,status){
+      return '<button class="btn btn-sm btn-ghost"'+attrs+(status?' data-crew-status="'+status+'"':'')+' onclick="'+operation+'(this.dataset.session,this.dataset.cleanerName'+(status?',this.dataset.crewStatus':'')+')">'+label+'</button>';
+    }
+    h+='<div class="crew-modal-row"><div style="font-size:13px;font-weight:700;min-width:72px">'+esc(displayName)+'</div>';
     if(!assigned){
-      var conflict=getCleanerDailyConflict(cid,s.date,s.id);
-      h+=conflict
-        ?'<span style="font-size:11px;color:var(--amber-text);font-weight:600">⚠ Busy today</span>'
-        :'<button class="btn btn-sm btn-accent-sm" onclick="crewAddMain(\''+sessId+'\',\''+nm+'\')">+ Offered</button>';
+      h+=getCleanerDailyConflict(cid,s.date,s.id)?'<span style="font-size:11px;color:var(--amber)">Assigned elsewhere today</span>':crewButton('+ Offered','crewAddMain');
     }else{
-      var stStyles={offered:'color:var(--text2);background:var(--surface2);border:1px solid var(--border)',confirmed:'color:var(--accent-text);background:var(--accent-bg)',cancelled:'color:var(--text3);background:var(--surface2);text-decoration:line-through'};
-      h+='<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;'+(stStyles[assigned.status]||stStyles.offered)+'">'+assigned.status+'</span>';
-      h+='<div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">';
-      if(assigned.status!=='offered')h+='<button class="btn btn-sm btn-ghost" onclick="crewSetMainStatus(\''+sessId+'\',\''+nm+'\',\'offered\')">Offered</button>';
-      if(assigned.status!=='confirmed')h+='<button class="btn btn-sm btn-accent-sm" onclick="crewSetMainStatus(\''+sessId+'\',\''+nm+'\',\'confirmed\')">Confirm</button>';
-      if(assigned.status!=='cancelled')h+='<button class="btn btn-sm btn-ghost" style="color:var(--text3)" onclick="crewSetMainStatus(\''+sessId+'\',\''+nm+'\',\'cancelled\')">Cancel</button>';
-      h+='<button class="btn btn-sm btn-red-sm" onclick="crewRemoveMain(\''+sessId+'\',\''+nm+'\')">✕</button>';
-      h+='</div>';
+      h+='<span style="font-size:11px;color:var(--text2)">'+esc(assigned.status)+'</span><div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">';
+      if(assigned.status!=='offered')h+=crewButton('Offered','crewSetMainStatus','offered');
+      if(assigned.status!=='confirmed')h+=crewButton('Confirm','crewSetMainStatus','confirmed');
+      if(assigned.status!=='cancelled')h+=crewButton('Cancel','crewSetMainStatus','cancelled');
+      h+=crewButton('Remove','crewRemoveMain')+'</div>';
     }
     h+='</div>';
   });
@@ -313,25 +301,28 @@ function openCrewModal(sessId){
 
 function crewAddMain(sessId,cleanerName){
   var s=D.sessions.find(function(x){return x.id===sessId;});if(!s)return;
-  crewEnsure(s);
   var nm=String(cleanerName).toLowerCase();
-  if(s.crew.main.find(function(m){return String(m.name||'').toLowerCase()===nm;})){openCrewModal(sessId);return;}
+  if(getCleaningCrew(s).main.find(function(m){return String(m.name||'').toLowerCase()===nm;})){openCrewModal(sessId);return;}
   var dbCleaner=D.cleaners.find(function(c){return String(c.name||'').toLowerCase()===nm;});
   var cid=dbCleaner?dbCleaner.id:'name_'+nm;
   if(getCleanerDailyConflict(cid,s.date,s.id)){
     toast('⚠ '+cleanerName.charAt(0).toUpperCase()+cleanerName.slice(1)+' is already assigned to another cleaning today');
     openCrewModal(sessId);return;
   }
-  s.crew.main.push({cleanerId:cid,name:cleanerName.charAt(0).toUpperCase()+cleanerName.slice(1),status:'offered'});
+  crewEnsure(s);
+  s.crew.main.push({cleanerId:cid,name:dbCleaner?dbCleaner.name:cleanerName,status:'offered'});
+  syncCleaningCleanerIds(s);
   save();render();openCrewModal(sessId);
 }
 
 function crewSetMainStatus(sessId,cleanerName,status){
-  var s=D.sessions.find(function(x){return x.id===sessId;});if(!s)return;
-  crewEnsure(s);
-  var nm=String(cleanerName).toLowerCase();
-  var m=s.crew.main.find(function(m){return String(m.name||'').toLowerCase()===nm;});
-  if(m){m.status=status;save();render();openCrewModal(sessId);}
+  const s=D.sessions.find(x=>x.id===sessId);if(!s)return;
+  const nm=String(cleanerName).toLowerCase();
+  const m=getCleaningCrew(s).main.find(m=>String(m.name||'').toLowerCase()===nm);
+  if(!m||!['offered','confirmed','cancelled'].includes(status))return;
+  if(status!=='cancelled'&&getCleanerDailyConflict(m.cleanerId,s.date,s.id)){toast('This cleaner is already assigned elsewhere that day');return;}
+  crewEnsure(s);const member=s.crew.main.find(m=>String(m.name||'').toLowerCase()===nm);member.status=status;if(status!=='confirmed')delete member.completedAt;
+  syncCleaningCleanerIds(s);save();render();openCrewModal(sessId);
 }
 
 function crewRemoveMain(sessId,cleanerName){
@@ -339,27 +330,20 @@ function crewRemoveMain(sessId,cleanerName){
   crewEnsure(s);
   var nm=String(cleanerName).toLowerCase();
   s.crew.main=s.crew.main.filter(function(m){return String(m.name||'').toLowerCase()!==nm;});
+  syncCleaningCleanerIds(s);
   save();render();openCrewModal(sessId);
 }
 
 function crewSetAlina(sessId,spots,status){
-  var s=D.sessions.find(function(x){return x.id===sessId;});if(!s)return;
-  crewEnsure(s);
-  if(spots!==null&&spots!==undefined){
-    var usedOthers=D.sessions.filter(function(sx){
-      return sx.id!==sessId&&sx.date===s.date&&sx.status!=='cancelled';
-    }).reduce(function(sum,sx){
-      var cx=getCleaningCrew(sx);return sum+(cx.alinaSpots>0&&cx.alinaStatus!=='cancelled'?cx.alinaSpots:0);
-    },0);
-    var maxForThis=Math.max(0,ALINA_MAX_SPOTS_PER_DAY-usedOthers);
-    if(spots>maxForThis){
-      toast('⚠ Only '+maxForThis+' Alina spot'+(maxForThis===1?'':'s')+' available today');
-      openCrewModal(sessId);return;
-    }
-    s.crew.alinaSpots=spots;
-  }
-  if(status!==null&&status!==undefined){s.crew.alinaStatus=status;}
-  save();render();openCrewModal(sessId);
+  const s=D.sessions.find(x=>x.id===sessId);if(!s)return;
+  const current=getCleaningCrew(s);
+  const nextSpots=spots==null?current.alinaSpots:spots;
+  const nextStatus=status==null?current.alinaStatus:status;
+  if(!Number.isInteger(nextSpots)||nextSpots<0||nextSpots>ALINA_MAX_SPOTS_PER_DAY||!['offered','confirmed','cancelled'].includes(nextStatus))return;
+  const usedOthers=D.sessions.filter(x=>x.id!==s.id&&x.date===s.date&&x.status!=='cancelled').reduce((n,x)=>{const c=getCleaningCrew(x);return n+(c.alinaStatus!=='cancelled'?c.alinaSpots:0);},0);
+  if(nextStatus!=='cancelled'&&nextSpots+usedOthers>ALINA_MAX_SPOTS_PER_DAY){toast('Only '+Math.max(0,ALINA_MAX_SPOTS_PER_DAY-usedOthers)+' Alina spots available that day');return;}
+  crewEnsure(s);if(nextSpots!==current.alinaSpots||nextStatus!=='confirmed')delete s.crew.alinaCompletedAt;s.crew.alinaSpots=nextSpots;s.crew.alinaStatus=nextStatus;
+  syncCleaningCleanerIds(s);save();render();openCrewModal(sessId);
 }
 
 function renderCleanerSchedule(){
@@ -396,16 +380,12 @@ function renderCleanerSchedule(){
     +'</button>'
     +'</div>';
 
-  if(!D.cleaners.length){
-    return h+'<div class="sched-empty-row">No cleaners added yet.<br><span style="font-size:12px">Add cleaners in Manage → Cleaners.</span></div>';
-  }
-
   // Sessions in this week window
-  const weekSessions=D.sessions.filter(s=>s.date>=wStart&&s.date<=wEnd&&s.status!=='cancelled');
+  const weekSessions=D.sessions.filter(s=>s.date>=wStart&&s.date<=wEnd&&s.status!=='cancelled'&&(!schedPropFilter||s.propId===schedPropFilter));
 
   // ── Summary strip ── total sessions + unassigned alert
   const totalSess=weekSessions.length;
-  const unassigned=weekSessions.filter(s=>!s.cleanerIds||!s.cleanerIds.length).length;
+  const unassigned=weekSessions.filter(s=>s.status!=='done'&&!getCleaningAssignedCleanerIds(s).length&&!(getCleaningCrew(s).alinaSpots&&getCleaningCrew(s).alinaStatus!=='cancelled')).length;
   h+='<div style="display:flex;gap:8px;margin-bottom:14px">'
     +'<div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;text-align:center">'
     +'<div style="font-size:20px;font-weight:800;color:var(--accent)">'+totalSess+'</div>'
@@ -422,6 +402,9 @@ function renderCleanerSchedule(){
     +'<button class="sv-btn sv-btn-secondary sv-btn-sm" onclick="openCleaningMessageModal(\'alina\')">Alina spots</button>'
     +'<button class="sv-btn sv-btn-danger sv-btn-sm" onclick="openCleaningMessageModal(\'urgent\')">⚠ Urgent</button>'
     +'</div>';
+
+  h+=renderCleaningPlanning(wStart,wEnd,weekSessions);
+  if(schedView==='villas')return h;
 
   // ── Grid (desktop/tablet — hidden on mobile via CSS) ──
   h+='<div class="sched-wrap sched-desktop-only"><table class="sched-table"><thead><tr>'
@@ -454,7 +437,7 @@ function renderCleanerSchedule(){
     days.forEach((d,i)=>{
       const isT=d===td;
       const isWk=i>=5;
-      const daySess=weekSessions.filter(s=>s.date===d&&(s.cleanerIds||[]).includes(c.id));
+      const daySess=weekSessions.filter(s=>s.date===d&&getCleaningAssignedCleanerIds(s).includes(c.id));
       h+='<td class="sched-cell'+(isT?' is-today':'')+(isWk?' is-weekend':'')+'">';
       if(daySess.length){
         daySess.forEach(s=>{
@@ -481,7 +464,7 @@ function renderCleanerSchedule(){
   });
 
   // ── Unassigned sessions row ──
-  const unassignedSess=weekSessions.filter(s=>!s.cleanerIds||!s.cleanerIds.length);
+  const unassignedSess=weekSessions.filter(s=>!getCleaningAssignedCleanerIds(s).length);
   if(unassignedSess.length){
     h+='<tr>';
     h+='<td class="sched-name-col"><div style="font-size:10px;font-weight:700;color:var(--amber)">⚠️ No cleaner</div></td>';
@@ -543,6 +526,7 @@ function renderCleanerSchedule(){
         h+='<div class="sched-mobile-card" style="border-left-color:'+clr.border+'" onclick="openSess(\''+s.id+'\')">'
           +'<div class="sched-mobile-prop">'+esc(fullName)+'</div>'
           +(s.time?'<div class="sched-mobile-time">'+esc(s.time)+'</div>':'')
+          +cleaningContextHtml(s)+cleaningStaffHtml(s)
           +'<div class="sched-mobile-meta">'
           +'<span>Required: '+required+'</span>'
           +'<span>Crew: '+confirmed+'/'+required+' confirmed</span>'
