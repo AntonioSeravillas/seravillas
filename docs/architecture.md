@@ -35,6 +35,10 @@ Cross-file functions and state remain global for compatibility with inline HTML 
 
 Some related actions are still in shared files because this stage preserves the original declaration and event-registration order. Move them into their owning feature gradually when those features are changed and tested. Do not create empty placeholder modules for future features.
 
+## Cancellation revenue
+
+Bookings may carry a numeric `cancellationRevenue` amount in euros, explicitly entered by the manager after cancellation. Missing values mean zero retained income. `bookingRevenueSummary` in `features/reports.js` aggregates prices and retained payments in integer cents, using the scheduled check-in year/month. Active prices contribute to stay averages; retained cancellations contribute only to revenue. The report keeps its occupancy and booked-night calculations limited to active stays. Backups, cloud snapshots and Excel updates preserve the retained amount.
+
 ## Data boundaries
 
 `data/local-data.js` owns the current load/save and daily backup behaviour. It restores `_savedAt`, `_migrations`, and `importHistory` from stored data so offline reloads retain the sync version and completed import markers. Old backups without valid metadata use safe defaults. `data/cloud-sync.js` owns whole-object GET/POST synchronization. `auth/session.js` owns the existing shared access-key login. The Worker source was not supplied and must be reviewed before replacing its data/authentication model.

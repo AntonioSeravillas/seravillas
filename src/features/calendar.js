@@ -565,6 +565,7 @@ function renderTLDetailPanel(){
   if(b.guestCount)h+='<div class="tl-dp-row"><span class="tl-dp-label">Guests</span><span class="tl-dp-val">'+esc(String(b.guestCount))+'</span></div>';
   if(b._excel&&b._excel.priceUnknown)h+='<div class="tl-dp-row"><span class="tl-dp-label">Total</span><span class="tl-dp-val">Price unknown</span></div>';
   else if(b.totalPrice||b._excel)h+='<div class="tl-dp-row"><span class="tl-dp-label">Total</span><span class="tl-dp-val">€'+esc(String(b.totalPrice))+'</span></div>';
+  if(st==='cancelled')h+='<div class="tl-dp-row"><span class="tl-dp-label">Money retained</span><span class="tl-dp-val">'+fmtRevenueAmount(bookingRevenueCents(b)/100)+'</span></div>';
   if(linkedSess){
     var cnames='';
     if(linkedSess.cleanerIds&&linkedSess.cleanerIds.length){
@@ -1078,7 +1079,7 @@ function openBookingDetail(id){
   const linkedSess=b.linkedCleaningId?D.sessions.find(s=>s.id===b.linkedCleaningId):null;
   const cleanBtn=linkedSess
     ?'<button class="btn btn-ghost btn-sm" onclick="closeModal();openSess(\''+linkedSess.id+'\')">🧹 View cleaning</button>'
-    :'<button class="btn btn-ghost btn-sm" onclick="scheduleCleanFromBooking(\''+id+'\')">🧹 Schedule cleaning</button>';
+    :b.status==='cancelled'?'':'<button class="btn btn-ghost btn-sm" onclick="scheduleCleanFromBooking(\''+id+'\')">🧹 Schedule cleaning</button>';
   showModal('<div class="modal-handle"></div>'
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
     +'<div style="width:4px;height:40px;border-radius:99px;background:'+clr.border+';flex-shrink:0"></div>'
@@ -1099,6 +1100,7 @@ function openBookingDetail(id){
     +(b.guestName?'<div style="flex:1;background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Guest</div><div style="font-size:13px;font-weight:600">'+esc(b.guestName)+'</div></div>':'')
     +(b.guestCount?'<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px">Guests</div><div style="font-size:13px;font-weight:600">'+b.guestCount+'</div></div>':'')
     +'</div>':'')
+    +(b.status==='cancelled'?'<p style="font-size:12px;color:var(--amber);margin-bottom:12px">Cancelled · Money retained: '+fmtRevenueAmount(bookingRevenueCents(b)/100)+'</p>':'')
     +(b._excel&&b._excel.cleaningNeedsReview?'<p style="font-size:12px;color:var(--amber);margin-bottom:12px">Linked cleaning needs review after the Excel import. Check its date and assignment.</p>':'')
     +(b.notes?'<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px;border-left:3px solid var(--border2)">'+esc(b.notes)+'</div>':'')
     +'<div class="divider"></div>'
@@ -1131,6 +1133,7 @@ function openEditBooking(id){
     +'<div class="field"><label>Guests</label><input type="number" id="bk-gcount" value="'+(b.guestCount||'')+'"></div>'
     +'</div>'
     +'<div class="field"><label>Total price (€)</label><input type="number" id="bk-rate" value="'+(b.totalPrice===null?'':b.totalPrice)+'"></div>'
+    +(b.status==='cancelled'?'<div class="field"><label for="bk-cancellation-revenue">Money retained after cancellation (€)</label><input type="number" id="bk-cancellation-revenue" min="0" step="0.01" value="'+(bookingRevenueCents(b)/100)+'"><div style="font-size:11px;color:var(--text3);margin-top:6px">Enter the amount actually kept. Use 0 if fully refunded. Included in revenue for the scheduled check-in month.</div></div>':'')
     +'<div class="field"><label>Notes</label><textarea id="bk-notes" style="height:60px">'+esc(b.notes)+'</textarea></div>'
     +'<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="saveEditBooking(\''+id+'\')">Save changes</button><button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Cancel</button></div>');
 }
@@ -1139,6 +1142,15 @@ function saveEditBooking(id){
   const checkIn=(document.getElementById('bk-checkin')||{}).value||'';
   const checkOut=(document.getElementById('bk-checkout')||{}).value||'';
   if(!checkIn||!checkOut||checkOut<=checkIn){toast('Check-out must be after check-in');return;}
+  let cancellationRevenue;
+  if(b.status==='cancelled'){
+    const retainedInput=(document.getElementById('bk-cancellation-revenue')||{}).value;
+    cancellationRevenue=Number(retainedInput);
+    if(retainedInput===undefined||String(retainedInput).trim()===''||!Number.isFinite(cancellationRevenue)||cancellationRevenue<0){toast('Enter money retained as 0 or a positive amount');return;}
+    const retainedCents=Math.round(cancellationRevenue*100);
+    if(!Number.isSafeInteger(retainedCents)){toast('Money retained is too large');return;}
+    cancellationRevenue=retainedCents/100;
+  }
   b.propId=(document.getElementById('bk-prop')||{}).value||b.propId;
   b.platform=window._bkPlatform||b.platform;
   b.agencyName=b.platform==='agency'?((document.getElementById('bk-agency')||{}).value||'').trim():'';
@@ -1149,11 +1161,13 @@ function saveEditBooking(id){
   b.guestCount=guestInput===''&&b.guestCount===null?null:(parseInt(guestInput)||0);
   b.totalPrice=priceInput===''&&b._excel&&b._excel.priceUnknown?null:(parseFloat(priceInput)||0);
   if(b._excel)b._excel.priceUnknown=b.totalPrice===null;
+  if(b.status==='cancelled')b.cancellationRevenue=cancellationRevenue;
   b.notes=((document.getElementById('bk-notes')||{}).value||'').trim();
   save();closeModal();render();toast('Booking updated!');
 }
 function scheduleCleanFromBooking(id){
   const b=D.bookings.find(x=>x.id===id);if(!b)return;
+  if(b.status==='cancelled'){toast('Cancelled bookings do not need a checkout cleaning');return;}
   const cid=uid();
   D.sessions.push({id:cid,propId:b.propId,date:b.checkOut,time:'',cleanerIds:[],status:'scheduled',note:'Checkout cleaning'});
   b.linkedCleaningId=cid;

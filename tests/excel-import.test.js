@@ -244,3 +244,20 @@ test('workbook cancellation markers require review and preserve cancelled histor
   assert.equal(excluded.canCancel,true);
   assert.deepEqual(plain(excluded.cancellations.map(b=>b.id)),['b1']);
 });
+
+test('Excel price updates preserve explicitly retained cancellation revenue and history', () => {
+  const original=data([booking({status:'cancelled',cancellationRevenue:1200,notes:'Ref: 001-234; Keep note'})]);
+  const incoming=parsed(row({totalPrice:1350,cancelledInSource:true,reference:'CANCELED'}));
+  const plan=api.planImport(incoming,original,{decisions:{'VILLA MAR:4':'match:b1'},statusDecisions:{'VILLA MAR:4':'cancelled'}});
+  assert.equal(plan.counts.update,1);
+  const result=apply(original,plan);
+  assert.equal(result.bookings[0].cancellationRevenue,1200);
+  assert.equal(result.bookings[0].totalPrice,1350);
+  assert.equal(result.bookings[0].status,'cancelled');
+  assert.equal(result.bookings[0].id,'b1');
+  assert.equal(result.bookings[0].notes,original.bookings[0].notes);
+  assert.equal(result.bookings[0].linkedCleaningId,'c1');
+  const excluded=api.planImport(incoming,result,{decisions:{'VILLA MAR:4':'skip'}});
+  assert.equal(excluded.counts.skip,1);
+  assert.equal(result.bookings[0].cancellationRevenue,1200);
+});

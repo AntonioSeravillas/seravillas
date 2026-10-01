@@ -213,3 +213,87 @@ test('cancellation confirmation keeps history and does not save until the manage
   assert.equal(app.run('D.importHistory[0].counts.cancel'),1);
   assert.equal(app.requests.length,0);
 });
+
+test('retained full and partial cancellations contribute to the correct revenue buckets only', () => {
+  const app=runtime();
+  app.run(`D.bookings=[
+    {id:'stay',propId:'p',platform:'airbnb',checkIn:'2026-09-01',checkOut:'2026-09-08',totalPrice:1000.10,status:'confirmed'},
+    {id:'paid',propId:'p',platform:'airbnb',checkIn:'2026-09-21',checkOut:'2026-09-26',totalPrice:2500.23,cancellationRevenue:2500.23,status:'cancelled'},
+    {id:'partial',propId:'q',platform:'agency',agencyName:'Example Agency',checkIn:'2026-10-01',checkOut:'2026-10-08',totalPrice:900,cancellationRevenue:300.45,status:'cancelled'},
+    {id:'unpaid',propId:'p',platform:'airbnb',checkIn:'2026-09-10',checkOut:'2026-09-15',totalPrice:800,status:'cancelled'},
+    {id:'refunded',propId:'p',platform:'airbnb',checkIn:'2026-09-10',checkOut:'2026-09-15',totalPrice:800,cancellationRevenue:0,status:'cancelled'},
+    {id:'future',propId:'p',platform:'airbnb',checkIn:'2027-09-21',checkOut:'2027-09-26',totalPrice:777,cancellationRevenue:777,status:'cancelled'}];`);
+  const summary=app.run('bookingRevenueSummary(D.bookings,2026)');
+  assert.equal(summary.totalRev,3800.78);
+  assert.equal(summary.activeRev,1000.10);
+  assert.equal(summary.cancellationRev,2800.68);
+  assert.equal(summary.active.length,1);
+  assert.deepEqual(plain(summary.monthly[8]),{revenueCents:350033,count:1});
+  assert.deepEqual(plain(summary.monthly[9]),{revenueCents:30045,count:0});
+  assert.deepEqual(plain(summary.properties.get('p')),{count:1,revenueCents:350033,activeRevenueCents:100010});
+  assert.deepEqual(plain(summary.properties.get('q')),{count:0,revenueCents:30045,activeRevenueCents:0});
+  assert.equal(summary.platforms.find(p=>p.name==='airbnb').revenueCents,350033);
+  assert.equal(summary.platforms.find(p=>p.name==='Example Agency').count,0);
+  assert.equal(app.run('bookingRevenueSummary(D.bookings,2027).totalRev'),777);
+  app.run("D.bookings[1].status='confirmed'");
+  assert.equal(app.run('bookingRevenueSummary(D.bookings,2026).totalRev'),3800.78);
+  assert.equal(app.run('bookingRevenueSummary(D.bookings,2026).active.length'),2);
+  for(const invalid of [-1,NaN,Infinity,1e308,'2500'])assert.equal(app.context.bookingRevenueCents({status:'cancelled',cancellationRevenue:invalid}),0);
+});
+
+test('paid cancellations stay outside report stay metrics, occupancy and checkout cleaning', () => {
+  const app=runtime();
+  app.run(`reportYear=2026;D.props=[{id:'p',name:'Example Villa'},{id:'q',name:'Cancelled Only Villa'}];
+    D.bookings=[{id:'stay',propId:'p',platform:'direct',checkIn:'2026-09-01',checkOut:'2026-09-08',totalPrice:1000,status:'confirmed'},
+    {id:'paid',propId:'q',guestName:'Cancelled Example',guestCount:2,platform:'airbnb',checkIn:'2026-09-21',checkOut:'2026-09-26',totalPrice:2500.23,cancellationRevenue:2500.23,status:'cancelled',notes:''}];
+    showModal=function(html){window.lastModal=html;};`);
+  const report=app.run('renderBookingReport()');
+  assert.match(report,/Includes €2,500\.23 retained from cancelled bookings/);
+  assert.match(report,/>1<\/div><div class="wr-stat-l">Bookings/);
+  assert.match(report,/>7n<\/div>/);
+  assert.match(report,/>€1,000<\/div><div class="wr-stat-l">Avg booking/);
+  assert.match(report,/>2%<\/div><div class="wr-stat-l">Avg/);
+  assert.match(report,/Cancelled Only Villa/);
+  assert.match(report,/>0 nights<\/span><span>0 bookings<\/span>/);
+  assert.match(report,/onclick="openBookingDetail\('paid'\)"/);
+  assert.equal(app.run("propOccupancyStatus('q','2026-09-22').type"),'empty');
+  const sessions=app.run('JSON.stringify(D.sessions)');
+  app.run("openBookingDetail('paid');scheduleCleanFromBooking('paid')");
+  assert.match(app.context.lastModal,/Cancelled · Money retained: €2,500\.23/);
+  assert.doesNotMatch(app.context.lastModal,/Schedule cleaning/);
+  assert.equal(app.run('JSON.stringify(D.sessions)'),sessions);
+});
+
+test('cancellation editor validates before mutation and saves full, partial and refunded amounts', () => {
+  const app=runtime();
+  app.run(`D.bookings=[{id:'paid',propId:D.props[0].id,guestName:'Cancelled Example',guestCount:2,platform:'airbnb',checkIn:'2026-09-21',checkOut:'2026-09-26',totalPrice:2500.23,status:'cancelled',notes:'Keep note'}];
+    showModal=function(html){window.lastModal=html;};openEditBooking('paid');`);
+  assert.match(app.context.lastModal,/id="bk-cancellation-revenue" min="0" step="0\.01" value="0"/);
+  const fields={'bk-checkin':{value:'2026-09-21'},'bk-checkout':{value:'2026-09-26'},'bk-rate':{value:'2500.23'},'bk-guest':{value:'Cancelled Example'},'bk-gcount':{value:'2'},'bk-notes':{value:'Keep note'},'bk-cancellation-revenue':{value:''}};
+  app.context.document.getElementById=id=>fields[id]||{value:''};
+  const before=app.run('JSON.stringify(D)'),writes=app.writes.length;
+  for(const invalid of ['', '-1', 'NaN', 'Infinity', '1e308']){
+    fields['bk-cancellation-revenue'].value=invalid;app.run("saveEditBooking('paid')");
+    assert.equal(app.run('JSON.stringify(D)'),before);
+    assert.equal(app.writes.length,writes);
+  }
+  for(const amount of ['2500.23','300.45','0']){
+    fields['bk-cancellation-revenue'].value=amount;app.run("saveEditBooking('paid')");
+    assert.equal(app.run('D.bookings[0].cancellationRevenue'),Number(amount));
+    assert.equal(app.run('D.bookings[0].status'),'cancelled');
+    assert.equal(app.run('D.bookings[0].totalPrice'),2500.23);
+    const reload=runtime({records:app.records});
+    assert.equal(reload.run('D.bookings[0].cancellationRevenue'),Number(amount));
+    assert.equal(reload.run('bookingRevenueSummary(D.bookings,2026).totalRev'),Number(amount));
+  }
+});
+
+test('cloud pulls preserve retained cancellation payments', async () => {
+  const app=runtime({host:'antonioseravillas.github.io',protocol:'https:',records:new Map([['sv_secret','SYNTHETIC_TEST_KEY']]),boot:false});
+  const remote={props:[],sessions:[],tasks:[],issues:[],bookings:[{id:'paid',propId:'p',platform:'airbnb',checkIn:'2026-09-21',checkOut:'2026-09-26',totalPrice:2500.23,cancellationRevenue:2500.23,status:'cancelled'}],_savedAt:99999};
+  app.context.fetch=async()=>({ok:true,text:async()=>JSON.stringify(remote)});
+  await app.run('pullFromCloud()');
+  assert.equal(app.run('D.bookings[0].cancellationRevenue'),2500.23);
+  assert.equal(app.run('bookingRevenueSummary(D.bookings,2026).totalRev'),2500.23);
+  assert.equal(JSON.parse(app.records.get('seravillas_v1')).bookings[0].status,'cancelled');
+});
