@@ -123,7 +123,8 @@ async function routes(request,env) {
       if(request.method==='GET') return Response.json(current.data,{headers:{ETag:etag(current.revision)}});
       if(request.method==='POST') {
         const match=request.headers.get('If-Match'); if(!match) fail(428,'Refresh the app before saving');
-        if(match!==etag(current.revision)) fail(409,'New cloud changes are available');
+        // Cloudflare compression can weaken the response ETag without changing the app revision.
+        if(match.replace(/^W\//,'')!==etag(current.revision)) fail(409,'New cloud changes are available');
         const data=validateData(await body(request)); data._savedAt=Date.now();
         const result=await sql.prepare('UPDATE app_state SET json=?,revision=revision+1,last_op=? WHERE id=1 AND revision=?').bind(JSON.stringify(data),token(),current.revision).run();
         if(!result.meta.changes) fail(409,'New cloud changes are available');
