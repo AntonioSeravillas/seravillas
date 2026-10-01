@@ -46,7 +46,7 @@ Bookings may carry a numeric `cancellationRevenue` amount in euros, explicitly e
 
 ## Data boundaries
 
-`data/local-data.js` owns the current load/save and daily backup behaviour. It restores `_savedAt`, `_migrations`, and `importHistory` from stored data so offline reloads retain the sync version and completed import markers. Old backups without valid metadata use safe defaults. `data/cloud-sync.js` owns GET/POST synchronization with conditional versions and three-way merge after cloud activation. `auth/session.js` owns the existing manager access-key login. The actual Worker source has been read and the new reviewed service is in `cloudflare/`. See the activation and rollback guide before publishing it.
+`data/local-data.js` owns the current load/save and daily backup behaviour. It restores `_savedAt`, `_migrations`, and `importHistory` from stored data so offline reloads retain the sync version and completed import markers. Old backups without valid metadata use safe defaults. `data/cloud-sync.js` owns GET/POST synchronization with conditional versions and three-way merge after cloud activation. `auth/session.js` owns the existing manager access-key login. The actual Worker source has been read and the new reviewed service is in `cloudflare/`. Cloudflare D1 is activated and verified in production; see the rollout guide for status and rollback.
 
 The local preview never needs a production key. Cloud functions and both historical migrations return without action in development. Preview edits and backups use separate storage keys.
 
@@ -61,4 +61,4 @@ The local preview never needs a production key. Cloud functions and both histori
 5. Add an app-shell cache, IndexedDB records, durable pending edits, and visible record conflicts. Avoid silently choosing one entire device snapshot.
 6. Add Uplisting imports as a separate future feature, preserving Excel-managed history and operational notes.
 
-The cleaning stage preserves the established visual theme and adds a separate cleaner page plus reviewed backend source. It is implemented locally; production activation remains a release step. The manager page shell and multi-tenant normalized data model are still future stages. See [cleaning workflows](cleaning-schedule.md) and [cloud activation](cloudflare-rollout.md).
+The cleaning stage preserves the established visual theme and adds a separate cleaner page plus reviewed backend source. It is published and Cloudflare D1 is active in production. The manager page shell and multi-tenant normalized data model are still future stages. See [cleaning workflows](cleaning-schedule.md), [cloud rollout](cloudflare-rollout.md) and the [design system](design-system.md).

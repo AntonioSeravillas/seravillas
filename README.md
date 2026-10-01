@@ -44,6 +44,8 @@ To reset the fictional data, remove only the `seravillas_dev:` entries in your b
 | `assets/vendor/sheetjs/` | Local workbook parser and license notices |
 | `docs/excel-import.md` | Manager import workflow and preservation rules |
 | `src/auth/session.js` | Existing access-key login and sign-out |
+| `docs/design-system.md` | Colours, typography, spacing, components, navigation and theme conventions |
+| `assets/css/fonts.css`, `assets/fonts/` | Self-hosted fonts used by the offline cleaner page |
 | `docs/architecture.md` | How the files fit together and the next development stages |
 
 These remain classic JavaScript scripts. Existing inline button handlers still use global functions. Keep the script order in `index.html`; load startup last. The feature split preserves the original code and does not introduce a framework or build requirement.
@@ -70,7 +72,7 @@ Retained money contributes to total, monthly, platform/agency and property reven
 
 Open **Manage → Schedule** to plan any week, filter villas, review staff confirmations and cover missing checkout cleanings. The **Daily plan** and **By cleaner** views use the same assignment records. See [the cleaning guide](docs/cleaning-schedule.md).
 
-Open <http://127.0.0.1:5500/cleaner/> for the separate fictional cleaner preview. It shows the full team schedule and villa calendar; each sample cleaner updates only her own assignments. Production cleaner access and the new cloud database require [activation and publication](docs/cloudflare-rollout.md). These local files do not activate accounts or deploy Cloudflare by themselves.
+Open <http://127.0.0.1:5500/cleaner/> for the separate fictional cleaner preview. It shows the full team schedule and villa calendar; each sample cleaner updates only her own assignments. The Cloudflare D1 database is activated and verified in production ([status and rollback](docs/cloudflare-rollout.md)). Cleaner codes are created by the manager in **Manage → Cleaners → Cleaner logins**; local previews and tests never create real accounts.
 
 The manager app still supports the existing shared access-key login. The new service checks snapshot versions, combines independent changes and asks for review when the same field changes on two devices. The cleaner page supports cached offline opening and queued assignment updates. The manager's full offline page shell, multiple workspaces, email/password recovery and Uplisting integration remain future work. Excel remains the source for 2026 and 2027 bookings.
 
