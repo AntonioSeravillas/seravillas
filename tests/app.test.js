@@ -381,3 +381,158 @@ test('timeline month navigation reaches next year and preserves cancelled histor
   assert.equal(app.writes.length,writes);
   assert.equal(app.requests.length,0);
 });
+
+test('legacy cleaning assignments are confirmed and reading their coverage does not migrate data', () => {
+  const app=runtime();
+  app.run("D.cleaners=[{id:'a',name:'Maribel'},{id:'b',name:'Another Cleaner'}];D.sessions=[{id:'s',propId:D.props[0].id,date:today(),cleanerIds:['a','a','b'],status:'scheduled'}]");
+  const before=app.run('JSON.stringify(D)'),writes=app.writes.length;
+  assert.equal(app.run('getConfirmedCrewCount(D.sessions[0])'),2);
+  assert.deepEqual(plain(app.run('getCleaningAssignedCleanerIds(D.sessions[0])')),['a','b']);
+  assert.equal(app.run("getCleanerDailyConflict('a',today(),'other')"),true);
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.writes.length,writes);
+});
+
+test('crew changes keep the cleaner grid and confirmation counts consistent', () => {
+  const app=runtime();
+  app.run("showModal=function(){};D.cleaners=[{id:'a',name:'Maribel'},{id:'b',name:'Another Cleaner'}];D.sessions=[{id:'s',propId:D.props[0].id,date:today(),cleanerIds:['a'],status:'scheduled'}];crewAddMain('s','another cleaner')");
+  assert.deepEqual(plain(app.run('D.sessions[0].cleanerIds')),['a','b']);
+  assert.equal(app.run('getConfirmedCrewCount(D.sessions[0])'),1);
+  app.run("crewSetMainStatus('s','another cleaner','confirmed')");
+  assert.equal(app.run('getConfirmedCrewCount(D.sessions[0])'),2);
+  app.run("crewSetMainStatus('s','maribel','cancelled')");
+  assert.deepEqual(plain(app.run('D.sessions[0].cleanerIds')),['b']);
+  assert.equal(app.run('getConfirmedCrewCount(D.sessions[0])'),1);
+  app.run("crewRemoveMain('s','another cleaner')");
+  assert.deepEqual(plain(app.run('D.sessions[0].cleanerIds')),[]);
+  assert.equal(app.run('getConfirmedCrewCount(D.sessions[0])'),0);
+  assert.equal(app.requests.length,0);
+});
+
+test('cancelled staff and Alina spots cannot be reactivated past daily capacity', () => {
+  const app=runtime();
+  app.run(`showModal=function(){};D.cleaners=[{id:'a',name:'Maribel'}];D.sessions=[
+    {id:'s1',propId:'p',date:today(),cleanerIds:[],status:'scheduled',crew:{main:[{cleanerId:'a',name:'Maribel',status:'cancelled'}],alinaSpots:3,alinaStatus:'cancelled'}},
+    {id:'s2',propId:'q',date:today(),cleanerIds:['a'],status:'scheduled',crew:{main:[{cleanerId:'a',name:'Maribel',status:'confirmed'}],alinaSpots:2,alinaStatus:'confirmed'}}]`);
+  const before=app.run('JSON.stringify(D)'),writes=app.writes.length;
+  app.run("crewSetMainStatus('s1','maribel','confirmed');crewSetAlina('s1',null,'confirmed');crewSetAlina('s1',-1,null)");
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.writes.length,writes);
+  app.run("crewSetAlina('s1',2,'offered')");
+  assert.equal(app.run('getAlinaUsedSpotsForDate(today())'),4);
+});
+
+test('checkout planning scopes dates and villas, excludes cancelled stays, and flags wrong links', () => {
+  const app=runtime();
+  app.run(`D.sessions=[{id:'correct',propId:'p',date:'2027-06-08',status:'scheduled'},{id:'wrong',propId:'p',date:'2027-06-09',status:'scheduled'},{id:'unlinked',propId:'q',date:'2027-06-08',status:'scheduled'}];
+    D.bookings=[{id:'linked',propId:'p',checkOut:'2027-06-08',status:'confirmed',linkedCleaningId:'correct'},
+    {id:'review',propId:'p',checkOut:'2027-06-08',status:'confirmed',linkedCleaningId:'wrong'},
+    {id:'link',propId:'q',checkOut:'2027-06-08',status:'confirmed'},
+    {id:'missing',propId:'r',checkOut:'2027-06-08',status:'confirmed'},
+    {id:'cancelled',propId:'r',checkOut:'2027-06-08',status:'cancelled'},
+    {id:'outside',propId:'r',checkOut:'2027-07-08',status:'confirmed'}]`);
+  const items=plain(app.run("SV_CLEANING.checkouts(D,'2027-06-01','2027-06-10','')"));
+  assert.deepEqual(items.map(i=>[i.bookingId,i.kind]),[['review','review'],['link','link'],['missing','missing']]);
+  assert.equal(app.run("SV_CLEANING.checkouts(D,'2027-06-01','2027-06-10','q').length"),1);
+});
+
+test('planning creates one linked checkout cleaning and reuses existing sessions without duplicates', () => {
+  const app=runtime();
+  app.run(`showModal=function(){};D.bookings=[{id:'missing',propId:D.props[0].id,checkIn:'2027-06-01',checkOut:'2027-06-08',checkOutTime:'11:00',status:'confirmed',notes:'Keep',totalPrice:2000},
+    {id:'existing',propId:D.props[1].id,checkIn:'2027-06-01',checkOut:'2027-06-08',status:'confirmed'},
+    {id:'cancelled',propId:D.props[0].id,checkOut:'2027-06-09',status:'cancelled'}];D.sessions=[{id:'keep',propId:D.props[1].id,date:'2027-06-08',status:'scheduled',cleanerIds:[]}];
+    scheduleMissingCheckout('missing');scheduleMissingCheckout('missing');linkExistingCheckout('existing');scheduleMissingCheckout('cancelled')`);
+  assert.equal(app.run('D.sessions.length'),2);
+  assert.equal(app.run('D.sessions[1].time'),'11:00');
+  assert.deepEqual(plain(app.run('D.sessions[1].cleanerIds')),[]);
+  assert.equal(app.run('D.bookings[0].linkedCleaningId'),app.run('D.sessions[1].id'));
+  assert.equal(app.run('D.bookings[0].notes'),'Keep');
+  assert.equal(app.run('D.bookings[0].totalPrice'),2000);
+  assert.equal(app.run('D.bookings[1].linkedCleaningId'),'keep');
+  assert.equal(app.run('D.bookings[2].linkedCleaningId'),undefined);
+  assert.equal(app.requests.length,0);
+  const reloaded=runtime({records:app.records});
+  assert.equal(reloaded.run('D.sessions.length'),2);
+  assert.equal(reloaded.run('D.bookings[1].linkedCleaningId'),'keep');
+});
+
+test('cleaning context uses arrival/departure dates only and future week navigation does not edit records', () => {
+  const app=runtime();
+  app.run(`D.props=[{id:'p',name:'Example Villa'}];D.sessions=[{id:'s',propId:'p',date:'2027-06-08',time:'10:30',cleanerIds:[],status:'scheduled'}];
+    D.bookings=[{id:'out',propId:'p',checkIn:'2027-06-01',checkOut:'2027-06-08',guestName:'PRIVATE_NAME_SENTINEL',totalPrice:98765,status:'confirmed',notes:'PRIVATE_NOTE_SENTINEL',linkedCleaningId:'s'},
+    {id:'in',propId:'p',checkIn:'2027-06-08',checkInTime:'15:00',checkOut:'2027-06-15',status:'confirmed'}]`);
+  const before=app.run('JSON.stringify(D)'),writes=app.writes.length;
+  app.run("setScheduleDate('2027-06-08')");
+  assert.equal(app.run('addDays(startOfWeek(),schedWeekOffset*7)'),'2027-06-07');
+  const board=app.run('renderCleanerSchedule()');
+  assert.match(board,/Next arrival today · 15:00/);
+  assert.match(board,/Check-out 10:00/);
+  assert.doesNotMatch(board,/PRIVATE_NAME_SENTINEL|98765|PRIVATE_NOTE_SENTINEL/);
+  assert.deepEqual(plain(app.run('SV_CLEANING.context(D.sessions[0],D.bookings)')),{departure:{date:'2027-06-08',time:'10:00'},arrival:{date:'2027-06-08',time:'15:00'},sameDayArrival:true});
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.writes.length,writes);
+});
+
+test('session editing preserves offered confirmations, synchronizes IDs, and allows planned unassigned work', () => {
+  const app=runtime();
+  app.run("showModal=function(){};D.cleaners=[{id:'a',name:'Maribel'},{id:'b',name:'Another Cleaner'}];D.sessions=[{id:'s',propId:'p',date:'2027-06-08',time:'10:00',note:'Keep',cleanerIds:['a'],status:'scheduled',crew:{main:[{cleanerId:'a',name:'Maribel',status:'offered'}],alinaSpots:0,alinaStatus:'offered'}}];window._ec=['a','b']");
+  const fields={'e-date':{value:'2027-06-08'},'e-time':{value:'10:00'},'e-note':{value:'Keep'}};
+  app.context.document.getElementById=id=>fields[id]||{};
+  app.run("saveSessEdit('s')");
+  assert.equal(app.run('D.sessions[0].crew.main[0].status'),'offered');
+  assert.equal(app.run('D.sessions[0].crew.main[1].status'),'confirmed');
+  assert.deepEqual(plain(app.run('D.sessions[0].cleanerIds')),['a','b']);
+  app.run("window._ec=[];saveSessEdit('s')");
+  assert.equal(app.run('getCleaningCrewStatus(D.sessions[0])'),'unassigned');
+  assert.deepEqual(plain(app.run('D.sessions[0].cleanerIds')),[]);
+});
+
+test('Alina team allocations appear in the cleaner grid without becoming named main assignments', () => {
+  const app=runtime();
+  app.run("D.cleaners=[{id:'team',name:'Alina'}];D.sessions=[{id:'s',propId:D.props[0].id,date:today(),status:'scheduled',cleanerIds:[],crew:{main:[],alinaSpots:3,alinaStatus:'confirmed'}}];syncCleaningCleanerIds(D.sessions[0]);schedView='cleaners'");
+  assert.deepEqual(plain(app.run('D.sessions[0].cleanerIds')),['team']);
+  assert.equal(app.run('getConfirmedCrewCount(D.sessions[0])'),3);
+  assert.match(app.run('renderCleanerSchedule()'),/openSess\('s'\)/);
+  assert.equal(app.run('getCleaningCrew(D.sessions[0]).main.length'),0);
+});
+
+test('staff names containing apostrophes use data attributes in assignment buttons', () => {
+  const app=runtime();
+  app.run("showModal=function(html){window.lastModal=html};D.cleaners=[{id:'a',name:\"O'Neil\"}];D.sessions=[{id:'s',propId:D.props[0].id,date:today(),status:'scheduled',cleanerIds:[]}];openCrewModal('s')");
+  assert.match(app.context.lastModal,/data-cleaner-name="o'neil"/);
+  assert.match(app.context.lastModal,/onclick="crewAddMain\(this.dataset.session,this.dataset.cleanerName\)"/);
+});
+
+function versionedReply(data,tag,status=200){return {ok:status>=200&&status<300,status,headers:{get(name){return name.toLowerCase()==='etag'?tag:null;}},text:async()=>JSON.stringify(data),json:async()=>data};}
+test('versioned manager sync combines offline edits with cleaner changes after a rejected stale save',async()=>{
+  const app=runtime({host:'antonioseravillas.github.io',protocol:'https:',records:new Map([['sv_secret','SYNTHETIC_TEST_KEY']]),boot:false});
+  app.run("showModal=function(){};D.props=[];D.cleaners=[];D.bookings=[{id:'b',totalPrice:100}];D.sessions=[{id:'s',note:'old',crew:{main:[{cleanerId:'a',status:'offered'}]}}];D._savedAt=1;");
+  let remote=plain(app.run('D')),revision=1,accepted=0;
+  app.context.fetch=async(url,options)=>{if(options.method==='GET')return versionedReply(plain(remote),'"sv-'+revision+'"');if(options.headers['If-Match']!=='"sv-'+revision+'"')return versionedReply({error:'stale'},null,409);remote=JSON.parse(options.body);remote._savedAt=1000;revision++;accepted++;return versionedReply({savedAt:1000},'"sv-'+revision+'"');};
+  await app.run('pullFromCloud()');app.run("D.bookings[0].totalPrice=200;D.sessions[0].note='manager edit';save()");
+  remote.sessions[0].crew.main[0].status='confirmed';remote._savedAt=5;revision++;
+  await app.run('pushToCloud()');assert.equal(accepted,0);assert.equal(app.run('D.sessions[0].crew.main[0].status'),'confirmed');assert.equal(app.run('D.sessions[0].note'),'manager edit');
+  await app.run('pushToCloud()');assert.equal(accepted,1);assert.equal(remote.bookings[0].totalPrice,200);assert.equal(remote.sessions[0].crew.main[0].status,'confirmed');
+});
+test('same-field sync conflicts preserve local edits and resolve only the conflicting fields',async()=>{
+  const app=runtime({host:'antonioseravillas.github.io',protocol:'https:',records:new Map([['sv_secret','SYNTHETIC_TEST_KEY']]),boot:false});
+  app.run("showModal=function(){};closeModal=function(){};D.sessions=[{id:'s',date:'2026-10-01',time:'10:00'}];D._savedAt=1");let remote=plain(app.run('D')),tag='"sv-1"';
+  app.context.fetch=async()=>versionedReply(plain(remote),tag);await app.run('pullFromCloud()');
+  app.run("D.sessions[0].date='2026-10-02';save()");remote.sessions[0].date='2026-10-03';remote.sessions[0].time='11:00';tag='"sv-2"';
+  assert.equal(await app.run('pullFromCloud()'),false);assert.equal(app.run('D.sessions[0].date'),'2026-10-02');assert.ok(app.run('cloudConflict'));
+  app.run("resolveCloudConflict('local')");assert.equal(app.run('D.sessions[0].date'),'2026-10-02');assert.equal(app.run('D.sessions[0].time'),'11:00');assert.equal(app.run('cloudState().etag'),tag);assert.equal(app.run('cloudConflict'),null);
+});
+test('offline manager edits and their merge baseline survive reload',async()=>{
+  const records=new Map([['sv_secret','SYNTHETIC_TEST_KEY']]);const app=runtime({host:'antonioseravillas.github.io',protocol:'https:',records,boot:false});app.run("D.bookings=[{id:'b',totalPrice:100}];D._savedAt=1");const remote=plain(app.run('D'));
+  app.context.fetch=async()=>versionedReply(remote,'"sv-1"');await app.run('pullFromCloud()');app.run('D.bookings[0].totalPrice=250;save()');app.context.fetch=async()=>{throw new Error('offline');};await app.run('pushToCloud()');
+  const reloaded=runtime({host:'antonioseravillas.github.io',protocol:'https:',records,boot:false});reloaded.run('load()');assert.equal(reloaded.run('D.bookings[0].totalPrice'),250);assert.equal(reloaded.run('cloudState().base.bookings[0].totalPrice'),100);assert.equal(reloaded.run('cloudState().etag'),'"sv-1"');
+});
+test('edits made while a save is in flight remain local and are not marked as already synced',async()=>{
+  const app=runtime({host:'antonioseravillas.github.io',protocol:'https:',records:new Map([['sv_secret','SYNTHETIC_TEST_KEY']]),boot:false});app.run("D.scratch='base';D._savedAt=1");const remote=plain(app.run('D'));app.context.fetch=async()=>versionedReply(remote,'"sv-1"');await app.run('pullFromCloud()');app.run("D.scratch='first edit';save()");
+  let release,started;const reached=new Promise(resolve=>started=resolve);app.context.fetch=async()=>{started();await new Promise(resolve=>release=resolve);return versionedReply({savedAt:100},'"sv-2"');};
+  const pushing=app.run('pushToCloud()');await reached;app.run("D.scratch='second edit';save()");release();await pushing;assert.equal(app.run('D.scratch'),'second edit');assert.equal(app.run('cloudState().base.scratch'),'first edit');
+});
+test('moving a cleaning asks the assigned team to confirm again and clears old completion stamps',()=>{
+  const app=runtime({boot:false});app.run("showModal=function(){};D.cleaners=[{id:'a',name:'Maribel'},{id:'team',name:'Alina'}];D.sessions=[{id:'s',propId:'p',date:'2027-06-08',time:'10:00',status:'scheduled',cleanerIds:['a'],crew:{main:[{cleanerId:'a',name:'Maribel',status:'confirmed',completedAt:'old'}],alinaSpots:2,alinaStatus:'confirmed',alinaCompletedAt:'old'}}];window._ec=['a'];");
+  app.context.document.getElementById=id=>({value:({'e-date':'2027-06-09','e-time':'11:00','e-note':'Keep'})[id]||'',style:{},classList:{}});app.run("saveSessEdit('s')");assert.equal(app.run('D.sessions[0].crew.main[0].status'),'offered');assert.equal(app.run('D.sessions[0].crew.main[0].completedAt'),undefined);assert.equal(app.run('D.sessions[0].crew.alinaStatus'),'offered');assert.equal(app.run('D.sessions[0].crew.alinaCompletedAt'),undefined);
+});

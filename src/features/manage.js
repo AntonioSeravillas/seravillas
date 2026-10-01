@@ -96,6 +96,7 @@ function opsCard(label,icon,val,unit,note,tab){
 function renderManageCleaners(){
   let h='<div class="sv-page-header" style="margin-bottom:16px"><div class="sv-page-heading"><div class="sv-title">Cleaning Team</div></div>'
     +'<button class="sv-btn sv-btn-primary sv-btn-sm" onclick="openAddCleanerModal()">+ Add</button></div>';
+  h+='<div style="margin-bottom:14px"><button class="sv-btn sv-btn-secondary sv-btn-sm" onclick="openCleanerAccess()">Cleaner logins</button></div>';
   h+='<div style="margin-bottom:14px"><div class="input-row"><input type="text" id="cleaner-in" placeholder="Name..."><button class="sv-btn sv-btn-primary sv-btn-sm" onclick="openAddCleanerModal()">Add</button></div></div>';
   if(!D.cleaners.length)return h+'<div class="sv-empty"><div class="sv-empty-title">No cleaners yet</div><div class="sv-empty-sub">Add your first cleaner above.</div></div>';
   h+='<div class="sv-entity-card" style="overflow:hidden">'+D.cleaners.map(c=>{

@@ -24,6 +24,11 @@ Cross-file functions and state remain global for compatibility with inline HTML 
 | `features/calendar.js` | Calendar, event views, timeline, booking actions, WhatsApp draft helpers |
 | `features/tasks.js` | Task views, project views, task editing and photos |
 | `features/cleanings.js` | Crew requirements, capacity, assignment, cleaner schedules |
+| `features/cleaning-planner.js` | Pure cleaning projections, manager daily plan and missing checkout work |
+| `data/sync-merge.js` | Three-way record/field merge for independent device changes |
+| `auth/cleaner-access.js` | Manager code issuing/revocation controls |
+| `src/cleaner/portal.js`, `cleaner/` | Separate cleaner page, restricted API client, queue and offline shell |
+| `cloudflare/worker.mjs`, `cloudflare/schema.sql` | Reviewed server permissions, versioned snapshots and idempotent assignment updates |
 | `features/issues.js` | Issue views/editing, supplies, scratchpad |
 | `features/manage.js` | Management overview, contacts views, new cleaning dialog |
 | `features/properties.js` | Property list/hub, photos, and related session/staff/contact dialogs |
@@ -41,11 +46,11 @@ Bookings may carry a numeric `cancellationRevenue` amount in euros, explicitly e
 
 ## Data boundaries
 
-`data/local-data.js` owns the current load/save and daily backup behaviour. It restores `_savedAt`, `_migrations`, and `importHistory` from stored data so offline reloads retain the sync version and completed import markers. Old backups without valid metadata use safe defaults. `data/cloud-sync.js` owns whole-object GET/POST synchronization. `auth/session.js` owns the existing shared access-key login. The Worker source was not supplied and must be reviewed before replacing its data/authentication model.
+`data/local-data.js` owns the current load/save and daily backup behaviour. It restores `_savedAt`, `_migrations`, and `importHistory` from stored data so offline reloads retain the sync version and completed import markers. Old backups without valid metadata use safe defaults. `data/cloud-sync.js` owns GET/POST synchronization with conditional versions and three-way merge after cloud activation. `auth/session.js` owns the existing manager access-key login. The actual Worker source has been read and the new reviewed service is in `cloudflare/`. See the activation and rollback guide before publishing it.
 
 The local preview never needs a production key. Cloud functions and both historical migrations return without action in development. Preview edits and backups use separate storage keys.
 
-`data/legacy-booking-migrations.js` still contains historical embedded booking rows. These were already in the original public frontend. Replace that mechanism with private imports after verifying the real records are stored safely. Do not publish this restructuring as a privacy fix: removing public guest rows and considering repository history require separate work.
+`data/legacy-booking-migrations.js` retains only Excel marker constants and empty compatibility hooks. Completed guest-row imports were removed from the current public files after the cloud imports were verified. Public repository history may still contain those original records; history cleanup remains separate work.
 
 ## Agreed roadmap
 
@@ -56,4 +61,4 @@ The local preview never needs a production key. Cloud functions and both histori
 5. Add an app-shell cache, IndexedDB records, durable pending edits, and visible record conflicts. Avoid silently choosing one entire device snapshot.
 6. Add Uplisting imports as a separate future feature, preserving Excel-managed history and operational notes.
 
-The current stage keeps the design and operational workflows. It does not yet introduce cleaner accounts, a replacement backend, or a complete offline synchronization system.
+The cleaning stage preserves the established visual theme and adds a separate cleaner page plus reviewed backend source. It is implemented locally; production activation remains a release step. The manager page shell and multi-tenant normalized data model are still future stages. See [cleaning workflows](cleaning-schedule.md) and [cloud activation](cloudflare-rollout.md).

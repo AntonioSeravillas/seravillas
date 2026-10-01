@@ -12,6 +12,7 @@
 <title>SeraVillas</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./assets/css/app.css">
+<link rel="stylesheet" href="./assets/css/cleaning-planner.css?v=20261001-cleaning">
 </head>
 <body>
 <!-- ── Setup screen (shown on first open / no secret saved) ── -->
@@ -108,7 +109,7 @@
 <input type="file" id="issue-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleIssuePhoto(event)">
 <input type="file" id="task-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleTaskPhoto(event)">
 <script src="./src/dev-seed.js"></script>
-<script src="./src/state/store.js?v=20261001-2027"></script>
+<script src="./src/state/store.js?v=20261001-cleaning"></script>
 <script src="./src/data/local-data.js"></script>
 <script src="./src/utils/dates.js"></script>
 <script src="./src/ui/shell.js?v=20261001-2027"></script>
@@ -117,14 +118,17 @@
 <script src="./src/features/reports.js?v=20261001-1"></script>
 <script src="./src/features/calendar.js?v=20261001-2027"></script>
 <script src="./src/features/tasks.js"></script>
-<script src="./src/features/cleanings.js"></script>
+<script src="./src/features/cleaning-planner.js?v=20261001-cleaning"></script>
+<script src="./src/features/cleanings.js?v=20261001-cleaning"></script>
 <script src="./src/features/issues.js"></script>
-<script src="./src/features/manage.js"></script>
-<script src="./src/features/properties.js?v=20260930-1"></script>
+<script src="./src/features/manage.js?v=20261001-team"></script>
+<script src="./src/features/properties.js?v=20261001-cleaning"></script>
 <script src="./src/ui/actions.js"></script>
-<script src="./src/data/cloud-sync.js"></script>
+<script src="./src/data/sync-merge.js?v=20261001-team"></script>
+<script src="./src/data/cloud-sync.js?v=20261001-team"></script>
+<script src="./src/auth/cleaner-access.js?v=20261001-team"></script>
 <script src="./src/auth/session.js"></script>
-<script src="./src/data/legacy-booking-migrations.js"></script>
+<script src="./src/data/legacy-booking-migrations.js?v=20261001-retired"></script>
 <script src="./assets/vendor/sheetjs/xlsx-0.20.3.min.js"></script>
 <script src="./src/imports/excel-bookings.js?v=20261001-2027"></script>
 <script src="./src/ui/excel-import.js?v=20261001-2027"></script>
