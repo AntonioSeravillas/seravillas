@@ -1026,7 +1026,7 @@ html[data-theme="light"] .mcal-chip-event{background:#f0fdfa;color:#0f766e}
 }
 
 .sidebar{display:none}
-.app-wrapper{display:block;height:100%}
+.app-wrapper{display:block;height:calc(100% - var(--dev-banner-h,0px))}
 .main-area{display:flex;flex-direction:column;height:100%}
 /* ═══════════════════════════════════════════
    DESKTOP LAYOUT  (≥ 768px)
@@ -1038,11 +1038,11 @@ html[data-theme="light"] .mcal-chip-event{background:#f0fdfa;color:#0f766e}
   body{max-width:none;margin:0;display:block;background:var(--surface2)}
 
   /* App shell — sidebar + main */
-  .app-wrapper{display:flex;height:100vh;overflow:hidden}
+  .app-wrapper{display:flex;height:calc(100vh - var(--dev-banner-h,0px));overflow:hidden}
 
   /* ── Sidebar ── */
   .sidebar{
-    width:220px;min-width:220px;height:100vh;
+    width:220px;min-width:220px;height:calc(100vh - var(--dev-banner-h,0px));
     background:rgba(20,14,8,0.82);
     backdrop-filter:blur(24px) saturate(160%);
     -webkit-backdrop-filter:blur(24px) saturate(160%);
@@ -1944,6 +1944,13 @@ html[data-theme="light"] .tc-platform{background:rgba(0,0,0,0.04);border-color:r
 .sv-tabs::-webkit-scrollbar{display:none}
 .sv-tab{flex-shrink:0;padding:7px 14px;border:none;border-radius:9px;background:transparent;color:var(--text3);font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:background 0.12s,color 0.12s;white-space:nowrap}
 .sv-tab.active,.sv-tab[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.10)}
+/* Phones: roomier tap targets, and edge fades show that the tab bar scrolls (classes set by revealActiveTabs in ui/shell.js) */
+@media(max-width:767px){
+  .sv-tab{padding:9px 14px}
+  .sv-tabs.has-more-right{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+  .sv-tabs.has-more-left{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 28px),transparent)}
+  .sv-tabs.has-more-left.has-more-right{-webkit-mask-image:linear-gradient(to right,transparent,#000 28px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
+}
 .sv-chip-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .sv-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:11px;font-weight:700;cursor:pointer;transition:background 0.1s,color 0.1s,border-color 0.1s;white-space:nowrap;user-select:none}
 .sv-chip.active,.sv-chip[aria-selected="true"]{background:var(--accent-bg);color:var(--accent-text);border-color:var(--accent-border)}
@@ -2008,8 +2015,10 @@ html[data-theme="light"] .ph-strip-item{background:#fff;box-shadow:0 1px 4px rgb
 .ph-bk-price{font-size:13px;font-weight:800;color:var(--text);font-family:'DM Mono',monospace}
 .ph-bk-nights{font-size:10px;font-weight:600;color:var(--text3);margin-top:3px}
 
-/* Development preview label (only created in development mode) */
-.dev-banner{position:fixed;top:env(safe-area-inset-top,0px);left:50%;transform:translateX(-50%);z-index:99999;background:#B45309;color:#fff;font:700 11px/1 var(--font,system-ui,sans-serif);letter-spacing:.03em;padding:4px 12px;border-radius:0 0 8px 8px;pointer-events:none;white-space:nowrap}
+/* Development preview label (only created in development mode). An in-flow strip above the app,
+   so it never covers the header; --dev-banner-h reserves its height for the full-height desktop shell. */
+html.dev-preview{--dev-banner-h:25px}
+.dev-banner{flex-shrink:0;position:relative;z-index:30;box-sizing:border-box;min-height:var(--dev-banner-h);padding:4px 12px;background:var(--amber-bg);border-bottom:1px solid var(--amber-border);color:var(--amber-text);font-size:11px;font-weight:700;line-height:16px;letter-spacing:.03em;text-align:center;pointer-events:none}
 
 /* Excel import review only. Existing pages retain their styles. */
 .excel-import .ei-help{color:var(--text2);font-size:12px;line-height:1.55;margin:10px 0}

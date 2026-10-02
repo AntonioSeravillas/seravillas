@@ -1,5 +1,11 @@
 # Cloudflare rollout for cleaner access
 
+## Current status
+
+As of 2026-10-01 the **Cloudflare D1 database is activated and verified in production** (confirmed by the project owner). D1 is the authoritative store for the manager snapshot; the old KV snapshot is a historical backup and is not mirrored. The sections below are kept as the record of the activation procedure and as the rollback reference. Do not repeat the migration step. The server rejects a second activation.
+
+This status is recorded by hand. Re-check the live `/api/admin/capabilities` response (manager key) before relying on it for a release.
+
 ## Review before activation
 
 The existing Worker `seravillas-sync` uses the `DB` KV binding, key `seravillas`, and a `SECRET` environment variable. The reviewed source is now version-controlled in `cloudflare/worker.mjs`. Keep credentials in Cloudflare secrets, never in Git.

@@ -1,1 +1,103 @@
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:var(--bg,#000);color:var(--text,#fff);font-family:'Plus Jakarta Sans',system-ui,sans-serif}#portal{max-width:1000px;margin:auto;padding:24px 18px 50px}h1{font-size:25px;margin:0 0 6px}h2{font-size:18px;margin:24px 0 12px}p{line-height:1.5;color:var(--text2,#aaa)}button,input,select{font:inherit}button{cursor:pointer}.ct-head,.ct-controls,.ct-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.ct-head{justify-content:space-between}.ct-controls{margin:20px 0}.ct-controls label{font-size:12px;color:var(--text2);display:grid;gap:6px}.ct-controls input,.ct-controls select,.ct-login input{background:var(--surface2,#222);color:var(--text);border:1px solid var(--border,#333);padding:10px;border-radius:8px;min-height:42px}.ct-login{max-width:460px;margin:55px auto;background:var(--surface,#111);padding:25px;border:1px solid var(--border);border-radius:16px}.ct-login label{display:block;margin:18px 0 8px}.ct-login input[type=password]{width:100%}.ct-login label.ct-remember{display:flex;align-items:center;gap:8px;font-size:13px}.ct-login input[type=checkbox]{min-height:auto}.ct-message{color:var(--text2);font-size:13px;line-height:1.5}.ct-warning{padding:12px;border:1px solid var(--amber-border,#775522);border-radius:10px;color:var(--amber-text,#ffcf70);margin:15px 0}.ct-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ct-card{background:var(--surface,#111);border:1px solid var(--border,#333);border-radius:12px;padding:16px}.ct-card.ct-own{border-left:3px solid var(--accent,#30d1ba)}.ct-card-head{display:flex;justify-content:space-between;gap:8px}.ct-card h3{font-size:16px;margin:0}.ct-staff{display:grid;gap:6px;margin:12px 0;font-size:13px;color:var(--text2)}.ct-staff strong{color:var(--text)}.ct-actions{margin-top:12px}.ct-calendar{overflow:auto}.ct-calendar table{border-collapse:collapse;width:100%;min-width:650px;font-size:12px}.ct-calendar th,.ct-calendar td{padding:12px 8px;border:1px solid var(--border);text-align:left;vertical-align:top}.ct-calendar td.ct-stay{background:rgba(48,209,186,.1)}.ct-calendar span{display:block;margin-bottom:5px}.ct-login button{margin-top:12px}.ct-buttons{display:flex;gap:8px}.ct-preview{margin-bottom:18px;border-radius:8px;padding:12px;background:var(--surface2);font-size:13px;color:var(--amber-text)}button:disabled{opacity:.5;cursor:default}@media(max-width:600px){#portal{padding:18px 12px 40px}.ct-cards{grid-template-columns:1fr}.ct-head h1{font-size:22px}.ct-controls{gap:8px}.ct-controls label{flex:1;min-width:145px}.ct-login{margin:30px auto;padding:20px}.ct-actions .sv-btn{flex:1}}
+/* Cleaner page — built from the original app's tokens and components (see docs/design-system.md).
+   app.css supplies colours, fonts, .sv-btn, .sv-card, .sv-tabs, .sv-badge, .nav, inputs and the light theme. */
+
+/* app.css boxes <body> to a 480px phone column and, from 768px, locks the page to the viewport
+   (overflow:hidden) for the manager's own scrolling panes. This page scrolls normally. */
+html.ct-html,html.ct-html body.ct-body{height:auto;min-height:100%;overflow:visible}
+html.ct-html body.ct-body{display:block;max-width:none;margin:0;background:var(--bg)}
+html.ct-html[data-theme="light"] body.ct-body{background:var(--bg)}
+
+/* Header (same glass bar as the manager app; on desktop it also carries the section tabs) */
+.ct-header{position:sticky;top:0;z-index:20;background:rgba(28,28,30,0.88);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border-bottom:1px solid var(--glass-border);box-shadow:0 1px 0 rgba(255,255,255,0.06);padding-top:env(safe-area-inset-top,0px)}
+html[data-theme="light"] .ct-header{background:rgba(251,251,251,0.94);border-bottom-color:#E5E5E5;box-shadow:0 1px 0 rgba(0,0,0,0.04)}
+.ct-header-in{max-width:1040px;margin:0 auto;height:var(--header-h);padding:0 16px;display:flex;align-items:center;gap:16px}
+.ct-header .logo{display:block;flex-shrink:0}
+.ct-tabs{display:none;margin-right:auto}
+.ct-tools{display:flex;align-items:center;gap:8px;margin-left:auto}
+.ct-user{font-size:12px;font-weight:600;color:var(--text2);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ct-icon-btn{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);flex-shrink:0;transition:background 0.1s}
+.ct-icon-btn:active{background:var(--surface3)}
+.ct-icon-btn svg{width:14px;height:14px}
+.ct-date{display:none}
+
+/* Page */
+.ct-main{max-width:1040px;margin:0 auto;padding:16px 16px calc(var(--nav-h) + var(--nav-bottom) + 24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+.ct-loading{display:grid;place-items:center;gap:12px;min-height:60vh;color:var(--text3);font-size:13px}
+.ct-loading .logo{font-size:26px}
+
+.ct-preview{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:var(--radius-sm);background:var(--amber-bg);border:1px solid var(--amber-border);color:var(--amber-text);font-size:12px;font-weight:700}
+
+/* Toolbar */
+.ct-controls{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;padding:14px 16px}
+.ct-controls .field{margin:0;flex:1;min-width:150px}
+.ct-weeknav{display:flex;align-items:flex-end;gap:8px;flex:2;min-width:220px}
+.ct-weeknav .field{flex:1}
+.ct-weeknav .sv-btn{height:46px;padding:0 14px;font-size:18px;line-height:1}
+.ct-controls input,.ct-controls select{min-height:46px}
+
+.ct-status{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--text3)}
+.ct-warning{padding:12px 14px;border:1px solid var(--amber-border);border-radius:var(--radius-sm);background:var(--amber-bg);color:var(--amber-text);font-size:13px;line-height:1.5;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ct-message{color:var(--text2);font-size:13px;line-height:1.5}
+.ct-note{color:var(--text3);font-size:13px;line-height:1.5;text-align:center;padding:24px 8px}
+
+/* Day groups and cleaning cards */
+.ct-day{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;color:var(--text3);margin:10px 2px 0}
+.ct-day .sv-badge{letter-spacing:0}
+.ct-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ct-card{display:flex;flex-direction:column;gap:10px;margin:0;border-left:4px solid var(--border2);padding-left:13px}
+.ct-card.ct-own{border-left-color:var(--accent)}
+.ct-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ct-card h3{font-size:16px;font-weight:700;letter-spacing:-0.2px;margin:0}
+.ct-time{font-family:'DM Mono',monospace;font-size:12px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-pill);padding:3px 10px;white-space:nowrap}
+.ct-card p.ct-message{margin:0}
+.ct-staff{display:flex;flex-direction:column;gap:6px;margin:0;font-size:13px;color:var(--text2)}
+.ct-staff>span{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:10px;background:var(--surface2)}
+.ct-staff strong{color:var(--text);font-weight:700}
+.ct-coverage{font-size:12px;font-weight:700;color:var(--text2)}
+.ct-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0}
+.ct-actions .sv-btn-secondary[data-action="confirm"],.ct-actions .sv-btn-secondary[data-action="complete"]{background:var(--accent);color:#fff;border-color:transparent}
+.ct-actions .sv-btn-secondary[data-action="confirm"]:hover,.ct-actions .sv-btn-secondary[data-action="complete"]:hover{background:var(--accent-hover)}
+.ct-actions .sv-btn-secondary[data-action="decline"]{background:transparent;color:var(--text2)}
+
+/* Villa calendar */
+.ct-calendar{overflow-x:auto;padding:0;-webkit-overflow-scrolling:touch}
+.ct-calendar table{border-collapse:separate;border-spacing:0;width:100%;min-width:680px;font-size:12px}
+.ct-calendar th,.ct-calendar td{padding:10px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:left;vertical-align:top;background:var(--surface)}
+.ct-calendar thead th{font-size:11px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;color:var(--text3);background:var(--surface2)}
+.ct-calendar tbody th{position:sticky;left:0;z-index:1;font-size:13px;font-weight:700;color:var(--text);min-width:110px;background:var(--surface)}
+.ct-calendar thead th:first-child{position:sticky;left:0;z-index:2}
+.ct-calendar tr>*:last-child{border-right:none}.ct-calendar tbody tr:last-child>*{border-bottom:none}
+.ct-calendar td.ct-stay{background:var(--accent-bg)}
+.ct-calendar td span{display:block;margin-bottom:5px;font-weight:600;color:var(--text2);line-height:1.35}
+.ct-calendar td span:last-child{margin-bottom:0}
+.ct-calendar td span.ct-clean{color:var(--accent-text);font-weight:800}
+
+/* Sign-in */
+.ct-login{width:100%;max-width:440px;margin:8vh auto 0;display:flex;flex-direction:column;gap:14px;padding:26px 22px}
+.ct-login .logo{font-size:26px;align-self:flex-start}
+.ct-login .field{margin:0}
+.ct-login label{display:block;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.07em;margin:0 0 6px}
+.ct-login label.ct-remember{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text2);margin:0}
+.ct-login input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent);flex-shrink:0}
+.ct-login .sv-btn{width:100%;padding:13px 18px;font-size:14px}
+.ct-login-top{display:flex;justify-content:flex-end;max-width:440px;margin:0 auto}
+
+button:disabled{opacity:.5;cursor:default}
+
+/* Bottom navigation (phones). app.css hides .nav from 768px, where the header tabs take over. */
+.ct-nav{z-index:20;max-width:360px}
+.ct-nav .nav-item{font-size:10px}
+
+@media(min-width:768px){
+  .ct-tabs{display:flex}
+  .ct-date{display:block}
+  .ct-header-in{padding:0 28px}
+  .ct-main{padding:24px 28px 40px}
+}
+@media(max-width:767px){
+  .ct-cards{grid-template-columns:1fr}
+  .ct-user{display:none}
+  .ct-controls{padding:12px}
+  .ct-weeknav{flex:1 1 100%}
+  .ct-calendar tbody th{min-width:84px}
+}

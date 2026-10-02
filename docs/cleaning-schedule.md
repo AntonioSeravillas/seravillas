@@ -14,7 +14,7 @@ Use **Assign team** to offer work and confirm assignments. The app checks same-d
 
 The separate `cleaner/` page shows the full team schedule and a villa calendar with arrival/departure times. It loads only the restricted API; it never loads the manager app, historical booking imports, or the manager access key.
 
-After cloud activation, open **Manage → Cleaners → Cleaner logins**. Create one personal code for each cleaner. Codes are random, shown once, and stored as hashes on the server. Share each code privately yourself. Replacing or disabling a code stops further cloud access with the old code.
+The cloud database is active in production (see [cloud rollout](cloudflare-rollout.md)). Open **Manage → Cleaners → Cleaner logins**. Create one personal code for each cleaner. Codes are random, shown once, and stored as hashes on the server. Share each code privately yourself. Replacing or disabling a code stops further cloud access with the old code.
 
 Each account is tied to the existing cleaner ID. The server allows only that person's confirmation, decline and completion actions. Alina's account can update her aggregate team allocation; it cannot change the number of spots. Other people's work, staff assignments, villa details and bookings are manager-only changes.
 
@@ -34,4 +34,4 @@ Start the repository's local server as described in the README. Open `/` for the
 
 ## Release status
 
-These features are implemented in the local development branch. Cloud activation and GitHub publication are separate steps, documented in [cloud rollout](cloudflare-rollout.md). No real cleaner accounts are created by tests or previews.
+The cleaning planner, cleaner page and backend are published, and Cloudflare D1 is activated and verified in production (see [cloud rollout](cloudflare-rollout.md)). Visual changes follow [the design system](design-system.md). No real cleaner accounts are created by tests or previews.
