@@ -76,6 +76,9 @@ html[data-theme="light"] .ct-header{background:rgba(251,251,251,0.94);border-bot
 .ct-login{width:100%;max-width:440px;margin:8vh auto 0;display:flex;flex-direction:column;gap:14px;padding:26px 22px}
 .ct-login .logo{font-size:26px;align-self:flex-start}
 .ct-login .field{margin:0}
+/* app.css styles text/date/select inputs but not type=password, so the access code field is given the same recipe */
+.ct-login input[type=password]{width:100%;padding:13px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:15px;font-family:'Plus Jakarta Sans',sans-serif;color:var(--text);background:var(--surface2);-webkit-appearance:none;appearance:none;transition:border-color 0.15s,box-shadow 0.15s}
+.ct-login input[type=password]::placeholder{color:var(--text3);opacity:1}
 .ct-login label{display:block;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.07em;margin:0 0 6px}
 .ct-login label.ct-remember{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--text2);margin:0}
 .ct-login input[type=checkbox]{width:18px;height:18px;padding:0;accent-color:var(--accent);flex-shrink:0}
