@@ -123,9 +123,29 @@ function _doRender(){
     render._lastTab=tab;
   }
   updateBadge();
+  revealActiveTabs();
   attachSwipeNav();
   runAnimations();
   if(tab==='calendar'&&calView==='timeline')setTimeout(tlScrollFocus,30);
+}
+
+/* Scroll each tab bar so its selected tab is fully visible, and flag which edges have more tabs. */
+function revealActiveTabs(){
+  document.querySelectorAll('.sv-tabs').forEach(function(bar){
+    const mark=function(){
+      bar.classList.toggle('has-more-left',bar.scrollLeft>4);
+      bar.classList.toggle('has-more-right',bar.scrollLeft+bar.clientWidth<bar.scrollWidth-4);
+    };
+    const active=bar.querySelector('.sv-tab.active,.sv-tab[aria-selected="true"]');
+    if(active&&bar.scrollWidth>bar.clientWidth){
+      const pad=24;
+      const left=active.offsetLeft-bar.offsetLeft;
+      if(left<bar.scrollLeft+pad)bar.scrollLeft=Math.max(0,left-pad);
+      else if(left+active.offsetWidth>bar.scrollLeft+bar.clientWidth-pad)bar.scrollLeft=left+active.offsetWidth-bar.clientWidth+pad;
+    }
+    bar.addEventListener('scroll',mark,{passive:true});
+    mark();
+  });
 }
 
 /* ── ANIMATION ENGINE — polished ── */

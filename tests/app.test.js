@@ -13,7 +13,7 @@ const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 // No browser or real network is used. UI rendering is checked separately in the browser.
 function runtime({host = '127.0.0.1', protocol = 'http:', records = new Map(), boot = true} = {}) {
   const reads = [], writes = [], requests = [], timers = [];
-  const element = {style: {}, classList: {add() {}, remove() {}, toggle() {}}, setAttribute() {}, getAttribute() {return 'dark';}, appendChild() {}, value: ''};
+  const element = {style: {}, classList: {add() {}, remove() {}, toggle() {}}, setAttribute() {}, getAttribute() {return 'dark';}, appendChild() {}, insertBefore() {}, value: ''};
   const sandbox = {
     console, location: {hostname: host, protocol, reload() {throw new Error('Unexpected reload');}},
     document: {addEventListener() {}, createElement() {return {...element, style: {}};}, body: element, documentElement: element, getElementById() {return element;}, querySelector() {return element;}, querySelectorAll() {return [];}},

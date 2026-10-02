@@ -51,11 +51,16 @@ Status colours carry meaning: green = confirmed/done, amber = offered/needs atte
 
 - **Phones (below 768px):** a floating glass pill at the bottom (`.nav` with `.nav-item`, active item in `--accent-bg`). The manager app has five items. The cleaner page has two: Schedule and Calendar.
 - **Desktop (768px and up):** `.nav` is hidden by `app.css`. The manager app uses its left sidebar. The cleaner page puts the same two sections as `.sv-tabs` in the sticky header, next to the wordmark.
+- Long tab bars (for example Manage, with seven tabs) scroll sideways on phones. After each render `revealActiveTabs()` in `ui/shell.js` scrolls the selected tab fully into view, and edge fades (`has-more-left` / `has-more-right`) show that more tabs are off-screen. Phone tabs are 9px/14px padded for easier tapping.
 - The header is a sticky glass bar (`--glass` look, 60px). Icon buttons are 32px circles. The theme toggle shows a sun in dark mode and a moon in light mode.
 
 ## Page shell rules
 
 `app.css` is written for the manager app. Its `body` is a 480px phone column and, from 768px, the page is locked to the viewport (`html, body {height:100%; overflow:hidden}`) because the manager scrolls inside its own panes. A page that does not use the manager shell must override this. The cleaner page does it with `class="ct-html"` on `<html>` and `class="ct-body"` on `<body>` (see the first rules in `cleaner-portal.css`). Without that override a tablet-width page is boxed to 480px and a desktop page cannot scroll.
+
+## Development preview label
+
+In development the label is an in-flow amber strip above the app (`.dev-banner`, tokens `--amber-*`), not a floating badge, so it never covers the header. `html.dev-preview` sets `--dev-banner-h`, which the full-height shells (`.app-wrapper`, `.sidebar`) subtract from their height. In production the variable is unset (0) and the strip is never created.
 
 ## Rules for new UI
 
@@ -70,5 +75,3 @@ Status colours carry meaning: green = confirmed/done, amber = offered/needs atte
 ## Known gaps
 
 - The manager page still loads fonts from Google Fonts, so its typography falls back when offline. Switching it to `assets/css/fonts.css` is a small follow-up.
-- In the development preview, the amber "Development preview — cloud sync disabled" label overlaps the manager header on narrow screens.
-- On phones the manager's Manage tab bar scrolls horizontally and clips the Schedule tab.

@@ -9,7 +9,8 @@ if(DEV_MODE){
   var _devBanner=document.createElement('div');
   _devBanner.className='dev-banner';
   _devBanner.textContent=SV_CONFIG.devLabel;
-  document.body.appendChild(_devBanner);
+  document.documentElement.classList.add('dev-preview');
+  document.body.insertBefore(_devBanner,document.body.firstChild);
   document.title='SeraVillas — '+SV_CONFIG.devLabel;
   render();
   checkReminder();
