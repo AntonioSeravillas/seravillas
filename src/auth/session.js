@@ -3,13 +3,13 @@ function showSetup(){
   if(DEV_MODE)return;
   document.getElementById('setup-screen').style.display='flex';
   document.querySelector('.app-wrapper').style.display='none';
-  document.querySelector('.nav').style.display='none';
+  const legacyNav=document.querySelector('.nav');if(legacyNav)legacyNav.style.display='none';
   setTimeout(()=>document.getElementById('setup-secret').focus(),100);
 }
 function hideSetup(){
   document.getElementById('setup-screen').style.display='none';
   document.querySelector('.app-wrapper').style.display='';
-  document.querySelector('.nav').style.display='';
+  const legacyNav=document.querySelector('.nav');if(legacyNav)legacyNav.style.display='';
 }
 async function setupSubmit(){
   if(DEV_MODE)return;

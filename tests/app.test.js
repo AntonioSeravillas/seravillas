@@ -91,6 +91,49 @@ test('date rules preserve local dates across leap days and month/year boundaries
   assert.equal(app.run("nightsBetween('2026-03-28','2026-03-30')"), 2);
 });
 
+test('workspace opens with the villa timeline and changes views without losing the selected month', () => {
+  const app=runtime({boot:false});
+  assert.equal(app.run('tab'),'calendar');assert.equal(app.run('calView'),'timeline');
+  const before=app.run('JSON.stringify(D)');
+  app.run("calTimelineDate='2027-08-01';switchCalendarView('month')");
+  assert.equal(app.run('calY'),2027);assert.equal(app.run('calM'),7);
+  app.run("changeBookingMonth(1);switchCalendarView('timeline')");
+  assert.equal(app.run('calTimelineDate'),'2027-09-01');
+  app.run("workspaceNavigate('cleaning')");assert.equal(app.run('tab'),'cleaning');
+  assert.equal(app.run('JSON.stringify(D)'),before);assert.equal(app.requests.length,0);
+});
+
+test('monthly stay lanes handle overlaps, checkout exclusivity and year boundaries without editing bookings', () => {
+  const app=runtime({boot:false});
+  app.run(`D.props=[{id:'p',name:'Villa Test'}];D.bookings=[
+    {id:'a',propId:'p',checkIn:'2026-12-28',checkOut:'2027-01-01',status:'confirmed'},
+    {id:'b',propId:'p',checkIn:'2027-01-01',checkOut:'2027-01-05',status:'confirmed'},
+    {id:'overlap',propId:'p',checkIn:'2026-12-30',checkOut:'2027-01-02',status:'pending'},
+    {id:'paid-cancel',propId:'p',checkIn:'2026-12-29',checkOut:'2027-01-02',status:'cancelled',cancellationRetainedCents:10000},
+    {id:'old',propId:'p',checkIn:'2026-12-20',checkOut:'2026-12-28',status:'confirmed'}]`);
+  const before=app.run('JSON.stringify(D)');
+  const stays=plain(app.run("calendarWeekStays('2026-12-28')"));
+  assert.deepEqual(stays.map(s=>s.booking.id),['a','overlap','b']);
+  assert.deepEqual(stays.map(s=>[s.left,s.right,s.lane]),[[0,4,0],[2,5,1],[4,7,0]]);
+  assert.equal(app.run('JSON.stringify(D)'),before);
+});
+
+test('day pop-ups include arrivals, stays, departures and cleaning; filters exclude cancelled bookings', () => {
+  const app=runtime({boot:false});
+  app.run(`D.props=[{id:'p',name:'Villa Test'},{id:'q',name:'Other Villa'}];D.bookings=[
+    {id:'out',propId:'p',checkIn:'2027-01-01',checkOut:'2027-01-03',status:'confirmed'},
+    {id:'in',propId:'p',checkIn:'2027-01-03',checkOut:'2027-01-08',status:'confirmed'},
+    {id:'cancel',propId:'p',checkIn:'2027-01-01',checkOut:'2027-01-08',status:'cancelled'},
+    {id:'other',propId:'q',checkIn:'2027-01-01',checkOut:'2027-01-08',status:'confirmed'}];
+    D.sessions=[{id:'s',propId:'p',date:'2027-01-03',status:'scheduled'}];D.tasks=[];D.events=[];calFilter='prop-p'`);
+  const items=plain(app.run("calendarDayItems('2027-01-03')"));
+  assert.deepEqual(items.bookings.map(b=>b.id),['out','in']);assert.equal(items.cleanings.length,1);
+  app.run("setCalendarFilter('cleanings')");
+  assert.equal(app.run("calendarDayItems('2027-01-03').bookings.length"),0);
+  assert.equal(app.run("calendarDayItems('2027-01-03').cleanings.length"),1);
+  assert.equal(app.run("calendarWeekStays('2027-01-03').length"),0);
+});
+
 test('voice commands distinguish Villa Mar from Villa Marjals', () => {
   const app = runtime({boot: false});
   app.run("D.props=[{id:'mar',name:'Villa Mar'},{id:'marjals',name:'Villa Marjals'}]");

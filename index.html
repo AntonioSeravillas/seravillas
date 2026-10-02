@@ -2,19 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#000000">
 <script src="./src/config.js?v=20260930-1"></script>
 <script src="./src/storage.js"></script>
-<script>(function(){var t=SV_STORAGE.getItem('sv_theme')||'dark';document.documentElement.setAttribute('data-theme',t);if(t==='light'){document.querySelector('meta[name="theme-color"]')&&document.querySelector('meta[name="theme-color"]').setAttribute('content','#FBFBFB');}})()</script>
+<script>(function(){var t=SV_STORAGE.getItem('sv_theme')||'light';document.documentElement.setAttribute('data-theme',t);if(t==='light'){document.querySelector('meta[name="theme-color"]')&&document.querySelector('meta[name="theme-color"]').setAttribute('content','#F5F6F7');}})()</script>
 <title>SeraVillas</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./assets/css/fonts.css?v=20261001-design">
 <link rel="stylesheet" href="./assets/css/app.css?v=20261002-polish">
 <link rel="stylesheet" href="./assets/css/cleaning-planner.css?v=20261001-design">
+<link rel="stylesheet" href="./assets/css/workspace.css?v=20261002-top-tabs">
 </head>
-<body>
+<body class="workspace">
 <!-- ── Setup screen (shown on first open / no secret saved) ── -->
 <div class="setup-screen" id="setup-screen" style="display:none">
   <div class="setup-logo">SeraVillas</div>
@@ -31,77 +32,24 @@
   </div>
 </div>
 <div class="app-wrapper">
-<!-- ── Desktop sidebar (hidden on mobile) ── -->
-<aside class="sidebar">
-  <div class="sidebar-logo">SeraVillas</div>
-  <nav class="sidebar-nav">
-    <button class="sidebar-item active" id="snav-home" onclick="go('home')">
-      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Home
-    </button>
-    <button class="sidebar-item" id="snav-calendar" onclick="go('calendar')">
-      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      Calendar
-    </button>
-    <button class="sidebar-item" id="snav-tasks" onclick="go('tasks')">
-      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Tasks
-    </button>
-    <button class="sidebar-item" id="snav-manage" onclick="go('manage')">
-      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><circle cx="12" cy="12" r="7"/></svg>
-      Manage
-    </button>
-    <button class="sidebar-item" id="snav-properties" onclick="go('properties')">
-      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      Properties
-    </button>
-  </nav>
-  <div class="sidebar-footer">
-    <div class="sidebar-date" id="sidebar-date"></div>
-    <div class="sync-bar" id="sidebar-sync">
-      <div class="sync-dot idle" id="sync-dot"></div>
-      <span id="sync-label">Not synced</span>
-      <button class="sync-btn" onclick="syncNow()">Sync</button>
-    </div>
-  </div>
-</aside>
-<!-- ── Main area ── -->
 <div class="main-area">
-<div class="header">
+<header class="workspace-header">
   <div class="logo">SeraVillas</div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <div class="sync-dot idle" id="sync-dot-mobile" title="Sync status"></div>
-    <button onclick="refreshApp()" title="Refresh data" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);flex-shrink:0;transition:background 0.1s" id="refresh-btn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-    </button>
-    <button id="theme-btn" onclick="toggleTheme()" title="Switch to light mode">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-    </button>
+  <nav class="workspace-nav" aria-label="Main navigation">
+    <button class="workspace-tab active" id="workspace-calendar" onclick="go('calendar')" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>Bookings</button>
+    <button class="workspace-tab" id="workspace-cleaning" onclick="go('cleaning')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m8 15 9-12M5 13l6 4-3 5H2l3-9ZM17 3l3 2"/></svg>Cleaning</button>
+    <button class="workspace-tab" id="workspace-more" onclick="openWorkspaceMenu()" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>More<span id="tasks-badge" class="workspace-badge" style="display:none"></span></button>
+  </nav>
+  <div class="workspace-tools">
+    <div class="workspace-sync" role="status"><span class="sync-dot idle" id="sync-dot"></span><span id="sync-label">Not synced</span></div>
     <div class="header-date" id="header-date"></div>
+    <button class="workspace-icon" id="refresh-btn" onclick="refreshApp()" title="Refresh data" aria-label="Refresh data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L21 10"/></svg></button>
+    <button id="theme-btn" onclick="toggleTheme()" title="Switch to dark mode" aria-label="Switch to dark mode"></button>
   </div>
+</header>
+<main class="content" id="content" aria-label="Property workspace"></main>
 </div>
-<div class="content" id="content"></div>
-</div><!-- /main-area -->
-</div><!-- /app-wrapper -->
-<!-- ── Mobile bottom nav (hidden on desktop) ── -->
-<nav class="nav">
-  <button class="nav-item active nc-teal" id="nav-home" onclick="go('home')">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home
-  </button>
-  <button class="nav-item" id="nav-calendar" onclick="go('calendar')">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 3v18M15 3v18M3 15h18"/></svg>Calendar
-  </button>
-  <button class="nav-item" id="nav-tasks" onclick="go('tasks')">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tasks
-    <span class="nav-badge" id="tasks-badge" style="display:none"></span>
-  </button>
-  <button class="nav-item" id="nav-manage" onclick="go('manage')">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M8.46 8.46a5 5 0 0 0 0 7.07"/></svg>Manage
-  </button>
-  <button class="nav-item nc-pink" id="nav-properties" onclick="go('properties')">
-    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Properties
-  </button>
-</nav>
+</div>
 <div class="toast-wrap"><div class="toast" id="toast"></div></div>
 <div id="modal-root"></div>
 <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
@@ -109,25 +57,26 @@
 <input type="file" id="issue-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleIssuePhoto(event)">
 <input type="file" id="task-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleTaskPhoto(event)">
 <script src="./src/dev-seed.js"></script>
-<script src="./src/state/store.js?v=20261001-cleaning"></script>
+<script src="./src/state/store.js?v=20261002-top-tabs"></script>
 <script src="./src/data/local-data.js"></script>
 <script src="./src/utils/dates.js"></script>
-<script src="./src/ui/shell.js?v=20261002-polish"></script>
+<script src="./src/ui/shell.js?v=20261002-top-tabs"></script>
+<script src="./src/ui/workspace.js?v=20261002-top-tabs"></script>
 <script src="./src/features/home.js"></script>
 <script src="./src/ui/voice.js"></script>
 <script src="./src/features/reports.js?v=20261001-1"></script>
-<script src="./src/features/calendar.js?v=20261001-2027"></script>
+<script src="./src/features/calendar.js?v=20261002-top-tabs"></script>
 <script src="./src/features/tasks.js"></script>
 <script src="./src/features/cleaning-planner.js?v=20261001-cleaning"></script>
 <script src="./src/features/cleanings.js?v=20261001-cleaning"></script>
 <script src="./src/features/issues.js"></script>
 <script src="./src/features/manage.js?v=20261001-team"></script>
 <script src="./src/features/properties.js?v=20261001-cleaning"></script>
-<script src="./src/ui/actions.js"></script>
+<script src="./src/ui/actions.js?v=20261002-top-tabs"></script>
 <script src="./src/data/sync-merge.js?v=20261001-team"></script>
 <script src="./src/data/cloud-sync.js?v=20261001-team"></script>
 <script src="./src/auth/cleaner-access.js?v=20261001-team"></script>
-<script src="./src/auth/session.js"></script>
+<script src="./src/auth/session.js?v=20261002-top-tabs"></script>
 <script src="./src/data/legacy-booking-migrations.js?v=20261001-retired"></script>
 <script src="./assets/vendor/sheetjs/xlsx-0.20.3.min.js"></script>
 <script src="./src/imports/excel-bookings.js?v=20261001-2027"></script>

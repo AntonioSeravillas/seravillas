@@ -1,48 +1,15 @@
 /* ── CALENDAR ── */
 function renderCalendar(){
-  if(calView==='events'||calView==='week')calView='timeline';
-  var tlAct=calView==='timeline'?' active':'';
-  var mAct=calView==='month'?' active':'';
-  var waIco='<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.116 1.527 5.849L0 24l6.304-1.654C8.006 23.431 9.961 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.847 0-3.584-.493-5.084-1.355l-.364-.214-3.742.981.999-3.647-.239-.374A9.93 9.93 0 0 1 2 12C2 6.478 6.478 2 12 2s10 4.478 10 10-4.478 10-10 10z"/></svg>';
-
-  var h='<div class="sv-page">';
-
-  /* Page header */
-  h+='<div class="sv-page-header">';
-  h+='<div class="sv-page-heading"><div class="sv-title">Calendar</div><div class="sv-subtitle">Timeline view of bookings, cleanings and operations.</div></div>';
-  h+='<div class="sv-actions">';
-  h+='<button class="sv-btn sv-btn-secondary" onclick="openAddSessModal()">+ Cleaning</button>';
-  h+='<button class="sv-btn sv-btn-primary" onclick="openAddBookingModal()">+ Booking</button>';
-  h+='<button onclick="showScheduleModal()" title="WhatsApp schedule" style="width:36px;height:36px;border-radius:50%;border:none;background:#25D366;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 2px 8px rgba(37,211,102,0.3)">'+waIco+'</button>';
-  h+='</div></div>';
-
-  /* View tabs */
-  h+='<div class="sv-tabs" style="margin-bottom:12px">';
-  h+='<button class="sv-tab'+tlAct+'" onclick="calView=\'timeline\';if(!calWeekStart)calWeekStart=startOfWeek();render()">Timeline</button>';
-  h+='<button class="sv-tab'+mAct+'" onclick="calView=\'month\';render()">Month</button>';
-  h+='</div>';
-
-  /* Property/type filters — shown for timeline */
-  if(calView==='timeline'){
-    h+='<div class="sv-chip-row" style="margin-bottom:12px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">';
-    h+='<button class="sv-chip'+(calFilter==='all'?' active':'')+'" onclick="calFilter=\'all\';render()">All</button>';
-    h+='<button class="sv-chip'+(calFilter==='cleanings'?' active':'')+'" onclick="calFilter=\'cleanings\';render()">🧹 Cleanings</button>';
-    D.props.forEach(function(p){
-      var fid='prop-'+p.id;
-      h+='<button class="sv-chip'+(calFilter===fid?' active':'')+'" onclick="calFilter=\''+fid+'\';render()">'+esc(p.name)+'</button>';
-    });
-    h+='</div>';
-  }
-
-  /* Body */
-  var body=calView==='month'?renderCalendarMonth():renderCalendarTimeline();
-  h+=body;
-  h+='</div>';
-
-  /* Floating action buttons (visible on mobile, hidden on desktop) */
-  var waFab='<button class="cal-wa-fab" onclick="showScheduleModal()" aria-label="WhatsApp"><svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.116 1.527 5.849L0 24l6.304-1.654C8.006 23.431 9.961 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.847 0-3.584-.493-5.084-1.355l-.364-.214-3.742.981.999-3.647-.239-.374A9.93 9.93 0 0 1 2 12C2 6.478 6.478 2 12 2s10 4.478 10 10-4.478 10-10 10z"/></svg></button>';
-  var fab='<button class="cal-fab" onclick="calView===\'month\'?openAddCalEvent(today()):showCalQuickAdd()" aria-label="Add"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
-  return h+waFab+fab;
+  if(calView!=='month')calView='timeline';
+  let h='<div class="sv-page booking-page"><div class="sv-page-header"><div class="sv-page-heading"><div class="sv-title">Bookings</div><div class="sv-subtitle">Your villas, stays and daily operations.</div></div>'
+    +'<div class="sv-actions"><button class="sv-btn sv-btn-secondary" onclick="openAddSessModal()">+ Cleaning</button><button class="sv-btn sv-btn-primary" onclick="openAddBookingModal()">+ Booking</button><button class="workspace-icon" aria-label="Calendar actions" title="Calendar actions" onclick="openCalendarActions()">'+workspaceIcon('more')+'</button></div></div>'
+    +'<div class="booking-toolbar"><div class="sv-tabs" aria-label="Calendar view"><button class="sv-tab'+(calView==='timeline'?' active':'')+'" aria-pressed="'+(calView==='timeline')+'" onclick="switchCalendarView(\'timeline\')">Timeline</button><button class="sv-tab'+(calView==='month'?' active':'')+'" aria-pressed="'+(calView==='month')+'" onclick="switchCalendarView(\'month\')">Month</button></div>'
+    +'<div class="booking-filter"><button class="sv-btn sv-btn-secondary" onclick="openCalendarFilters()" aria-haspopup="dialog">'+workspaceIcon('filter')+esc(calendarFilterLabel())+'</button></div></div>';
+  h+=calView==='month'?renderCalendarMonth():renderCalendarTimeline();
+  return h+'</div>';
+}
+function openCalendarActions(){
+  showModal('<div class="modal-title">Calendar actions</div><div class="filter-options"><button class="filter-option" onclick="closeModal();openAddSessModal()">+ Add cleaning</button><button class="filter-option" onclick="closeModal();openAddCalEvent(today())">+ Add calendar event</button><button class="filter-option" onclick="closeModal();showScheduleModal()">Share cleaning schedule</button></div>');
 }
 /* ── EVENTS VIEW ── */
 const EVENT_CATS={
@@ -452,8 +419,8 @@ function renderCalendarTimeline(){
       const guestFirst=b.guestName?b.guestName.split(' ')[0].slice(0,14):'';
       let line1='',line2='';
       if(widthPx>=TL_DAY_W*4){
-        line1=platform+(nights?' · '+nights+'n':'');
-        line2=guestFirst;
+        line1=b.guestName||platform;
+        line2=platform+(nights?' · '+nights+' nights':'');
       } else if(widthPx>=TL_DAY_W*2){
         line1=platform.slice(0,8)+(nights?' '+nights+'n':'');
       } else if(widthPx>=TL_DAY_W){
@@ -472,8 +439,8 @@ function renderCalendarTimeline(){
       else if(bkSt==='pending'){bkStCls=platCls+' tl-bk-pending';}
       else{bkStCls=platCls;}
       const bkCls='tl-bk '+rCls+' '+bkStCls+(calSelectedBk===b.id?' tl-bk-selected':'');
-      const bkClick=isTLDesktop?'selectTLBooking(\''+b.id+'\')':'openBookingDetail(\''+b.id+'\')';
-      h+='<div class="'+bkCls+'" data-bk="'+b.id+'" style="left:'+leftPx+'px;width:'+widthPx+'px" onclick="'+bkClick+'">';
+      const bkClick='selectTLBooking(\''+b.id+'\')';
+      h+='<div class="'+bkCls+'" data-bk="'+b.id+'" role="button" tabindex="0" aria-label="'+esc(propName(b.propId)+' · '+(b.guestName||'Guest')+' · '+fmtDate(b.checkIn)+' to '+fmtDate(b.checkOut))+'" style="left:'+leftPx+'px;width:'+widthPx+'px;--stay-bg:'+clr.bg+';--stay-border:'+clr.border+';--stay-text:'+clr.text+'" onclick="'+bkClick+'" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();'+bkClick+'}">';
       if(startsInWin) h+='<div class="tl-bk-dot"></div>';
       if(line1||line2){
         h+='<div class="tl-bk-content"><span class="tl-bk-text">'+esc(line1)+'</span>';
@@ -488,20 +455,12 @@ function renderCalendarTimeline(){
 
   h+='</div></div>';
 
-  // Legend — platform colors
   h+='<div class="tl-legend">';
-  h+='<div class="tl-legend-item"><div class="tl-bk-agency" style="width:20px;height:10px;border-radius:3px;border:1.5px solid"></div>Agency</div>';
-  h+='<div class="tl-legend-item"><div class="tl-bk-airbnb" style="width:20px;height:10px;border-radius:3px;border:1.5px solid"></div>Airbnb</div>';
-  h+='<div class="tl-legend-item"><div class="tl-bk-booking" style="width:20px;height:10px;border-radius:3px;border:1.5px solid"></div>Booking.com</div>';
-  h+='<div class="tl-legend-item"><div style="width:20px;height:5px;border-radius:2px;background:var(--accent);opacity:0.85"></div>Cleaning</div>';
-  h+='<div class="tl-legend-item"><div style="width:20px;height:10px;border-radius:3px;border:1.5px dashed rgba(120,120,128,0.5);opacity:0.6;background:rgba(120,120,128,0.1)"></div>Cancelled</div>';
-  h+='</div>';
-
-  if(isTLDesktop){
-    return '<div class="tl-desk-grid"><div>'+h+'</div><div class="tl-detail-panel" id="tl-detail-panel">'+renderTLDetailPanel()+'</div></div>';
-  }
+  D.props.filter(calendarPropertyMatchesForLegend).forEach(function(p){h+='<span class="tl-legend-item"><i class="villa-dot" style="background:'+propBarColor(p.id).border+'"></i>'+esc(p.name)+'</span>';});
+  h+='<span class="tl-legend-item">Platform and guest appear on each stay</span><span class="tl-legend-item">Bottom marker: cleaning</span></div>';
   return h;
 }
+
 function setTimelineMonth(value){
   if(!/^(19|20)\d{2}-(0[1-9]|1[0-2])$/.test(value))return;
   calTimelineDate=value+'-01';
@@ -518,16 +477,7 @@ function tlScrollFocus(){
   outer.scrollLeft=hdr.offsetLeft-TL_PROP_W-20;
 }
 
-function selectTLBooking(id){
-  if(window.innerWidth<768){openBookingDetail(id);return;}
-  calSelectedBk=id;
-  var panel=document.getElementById('tl-detail-panel');
-  if(panel)panel.innerHTML=renderTLDetailPanel();
-  document.querySelectorAll('.tl-bk').forEach(function(el){
-    if(el.dataset.bk===id)el.classList.add('tl-bk-selected');
-    else el.classList.remove('tl-bk-selected');
-  });
-}
+function selectTLBooking(id){calSelectedBk=id;openBookingDetail(id);}
 
 function renderTLDetailPanel(){
   if(!calSelectedBk){
@@ -600,112 +550,7 @@ function renderTLDetailPanel(){
   return h;
 }
 
-function renderCalendarMonth(){
-  D.events=D.events||[];
-  const td=today();
-  const MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-
-  /* Build month grid */
-  const firstOfMonth=new Date(calY,calM,1);
-  const lastOfMonth=new Date(calY,calM+1,0);
-  /* Start from Monday before first day */
-  var startDow=firstOfMonth.getDay(); // 0=Sun
-  var offset=(startDow===0)?6:startDow-1; // days before first
-  var gridStart=new Date(calY,calM,1-offset);
-  /* Always show 6 rows = 42 cells */
-  var cells=[];
-  for(var i=0;i<42;i++){
-    var d=new Date(gridStart);
-    d.setDate(gridStart.getDate()+i);
-    var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    cells.push({date:ds,inMonth:d.getMonth()===calM,num:d.getDate()});
-  }
-
-  /* Collect events for a date */
-  function eventsFor(date){
-    var evs=[];
-    /* Cleanings */
-    D.sessions.filter(function(s){return s.date===date&&s.status!=='cancelled';}).forEach(function(s){
-      var p=D.props.find(function(x){return x.id===s.propId;});
-      var cleaners=(s.cleanerIds||[]).map(function(id){return D.cleaners.find(function(c){return c.id===id;});}).filter(Boolean);
-      var pname=p?p.name.replace(/^Villa\s+/i,'').replace(/^Can\s+/i,''):'?';
-      evs.push({type:'clean',text:pname+(cleaners.length?' · '+cleaners[0].name:''),sub:s.time||'',sid:s.id});
-    });
-    /* Tasks with dueDate */
-    D.tasks.filter(function(t){return !t.done&&t.dueDate===date;}).forEach(function(t){
-      evs.push({type:'task',text:t.text,sub:t.propId?propName(t.propId):'',tid:t.id});
-    });
-    /* Custom events */
-    (D.events||[]).filter(function(e){
-      return e.date===date||(e.date<=date&&e.endDate&&e.endDate>=date);
-    }).forEach(function(e){
-      var isWorker=['worker','maintenance','delivery'].indexOf(e.category||'other')>=0;
-      evs.push({type:isWorker?'person':'event',text:e.title,sub:e.propId?propName(e.propId):'',eid:e.id});
-    });
-    return evs;
-  }
-
-  /* SVG icons per type */
-  var ico={
-    clean:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 21h18"/><path d="M7 21V9l5-6 5 6v12"/><path d="M10 21v-4h4v4"/></svg>',
-    task:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
-    person:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-    event:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'
-  };
-
-  /* Max chips shown per cell before "+N more" */
-  var MAX_CHIPS=3;
-
-  /* Build header */
-  var h='<div class="mcal-wrap">';
-  h+='<div class="mcal-header">';
-  h+='<div class="mcal-nav">';
-  h+='<button class="mcal-nav-btn" onclick="calM--;if(calM<0){calM=11;calY--;}render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>';
-  h+='<span class="mcal-month">'+MN[calM]+' '+calY+'</span>';
-  h+='<button class="mcal-nav-btn" onclick="calM++;if(calM>11){calM=0;calY++;}render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>';
-  h+='</div>';
-  h+='<div class="mcal-header-right">';
-  var nowY=new Date().getFullYear(),nowM=new Date().getMonth();
-  if(calY!==nowY||calM!==nowM)h+='<button class="mcal-today-btn" onclick="calY='+nowY+';calM='+nowM+';render()">Today</button>';
-  h+='<button class="mcal-add-btn" onclick="openAddCalEvent(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Add event</span></button>';
-  h+='</div></div>';
-
-  /* DOW row */
-  h+='<div class="mcal-dow-row">';
-  DOW.forEach(function(d){h+='<div class="mcal-dow">'+d+'</div>';});
-  h+='</div>';
-
-  /* Grid */
-  h+='<div class="mcal-grid">';
-  cells.forEach(function(cell){
-    var isT=cell.date===td;
-    var cls='mcal-cell'+(cell.inMonth?'':' other-month')+(isT?' is-today':'');
-    h+='<div class="'+cls+'" onclick="openDayModal(\''+cell.date+'\')">';
-    h+='<div class="mcal-dn">'+cell.num+'</div>';
-    var evs=eventsFor(cell.date);
-    var shown=evs.slice(0,MAX_CHIPS);
-    shown.forEach(function(ev){
-      h+='<div class="mcal-chip mcal-chip-'+ev.type+'">'+ico[ev.type]+' '+esc(ev.text)+'</div>';
-    });
-    if(evs.length>MAX_CHIPS){
-      h+='<div class="mcal-more">+' +(evs.length-MAX_CHIPS)+' more</div>';
-    }
-    h+='</div>';
-  });
-  h+='</div>';
-
-  /* Legend */
-  h+='<div class="mcal-legend">';
-  h+='<div class="mcal-leg"><div class="mcal-leg-dot" style="background:rgba(56,189,248,0.5)"></div>Cleaning</div>';
-  h+='<div class="mcal-leg"><div class="mcal-leg-dot" style="background:rgba(168,85,247,0.5)"></div>Person coming</div>';
-  h+='<div class="mcal-leg"><div class="mcal-leg-dot" style="background:rgba(232,120,12,0.5)"></div>Task due</div>';
-  h+='<div class="mcal-leg"><div class="mcal-leg-dot" style="background:rgba(20,184,166,0.5)"></div>Custom event</div>';
-  h+='</div>';
-
-  h+='</div>';
-  return h;
-}
+function renderCalendarMonth(){return renderWorkspaceMonth();}
 
 function renderCalendarList(){
   const td=today();
@@ -805,15 +650,14 @@ function openDayModal(date){
   var td=today();
   var isToday=date===td;
 
-  var cleans=D.sessions.filter(function(s){return s.date===date&&s.status!=='cancelled';});
-  var tasks=D.tasks.filter(function(t){return !t.done&&t.dueDate===date;});
-  var events=(D.events||[]).filter(function(e){return e.date===date||(e.date<=date&&e.endDate&&e.endDate>=date);});
+  var items=calendarDayItems(date);
+  var bookings=items.bookings,cleans=items.cleanings,tasks=items.tasks,events=items.events;
 
   var h='<div class="modal-handle"></div>';
   h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:10px">';
   h+='<div>';
   h+='<div class="modal-title" style="margin-bottom:2px">'+(isToday?'Today — ':'')+dateLabel+'</div>';
-  var total=cleans.length+tasks.length+events.length;
+  var total=bookings.length+cleans.length+tasks.length+events.length;
   h+='<div style="font-size:12px;color:var(--text3);font-weight:500">'+total+' item'+(total!==1?'s':'')+'</div>';
   h+='</div>';
   h+='<button class="btn btn-primary btn-sm" onclick="closeModal();openAddCalEvent(\''+date+'\')">+ Add</button>';
@@ -828,15 +672,20 @@ function openDayModal(date){
     return s;
   }
 
+  var bookingHtml=bookings.map(function(b){
+    var colour=propBarColor(b.propId);
+    var state=b.checkIn===date?'Arriving':b.checkOut===date?'Departing':'Staying';
+    return '<button class="day-booking" style="--stay-border:'+colour.border+'" onclick="openBookingDetail(\''+b.id+'\')"><span><strong>'+esc(propName(b.propId))+' · '+esc(b.guestName||'Guest')+'</strong><small>'+fmtDate(b.checkIn)+' – '+fmtDate(b.checkOut)+(b.checkIn===date&&b.checkInTime?' · '+esc(b.checkInTime):b.checkOut===date&&b.checkOutTime?' · '+esc(b.checkOutTime):'')+'</small></span><span class="day-status">'+state+'</span></button>';
+  });
   /* Cleanings section */
   var cleanHtml=cleans.map(function(s){
     var p=D.props.find(function(x){return x.id===s.propId;});
     var cleaners=(s.cleanerIds||[]).map(function(id){return D.cleaners.find(function(c){return c.id===id;});}).filter(Boolean);
-    return'<div class="mcal-modal-item">'
+    return'<button class="mcal-modal-item day-cleaning" onclick="openSess(\''+s.id+'\')">'
       +'<div class="mcal-modal-ico" style="background:rgba(56,189,248,0.14);color:#0369a1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M3 21h18"/><path d="M7 21V9l5-6 5 6v12"/><path d="M10 21v-4h4v4"/></svg></div>'
       +'<div><div class="mcal-modal-title">'+(p?esc(p.name):'Property')+'</div>'
       +'<div class="mcal-modal-sub">'+(cleaners.length?cleaners.map(function(c){return esc(c.name);}).join(', '):'No cleaner assigned')+(s.time?' · '+s.time:'')+(s.status==='done'?' · Done ✓':'')+'</div></div>'
-      +'</div>';
+      +'</button>';
   });
 
   /* Tasks section */
@@ -863,6 +712,7 @@ function openDayModal(date){
       +'</div>';
   });
 
+  h+=section('Bookings',bookingHtml);
   h+=section('Cleanings',cleanHtml);
   h+=section('Tasks due',taskHtml);
   h+=section('Events',eventHtml);
@@ -1118,7 +968,7 @@ function openBookingDetail(id){
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
     +cleanBtn
     +'<button class="btn btn-ghost btn-sm" onclick="openEditBooking(\''+id+'\')">Edit</button>'
-    +(b.status==='confirmed'?'<button class="btn btn-amber-sm btn-sm" onclick="cancelBooking(\''+id+'\')">Cancel booking</button>':'<button class="btn btn-ghost btn-sm" onclick="restoreBooking(\''+id+'\')">Restore</button>')
+    +(b.status!=='cancelled'?'<button class="btn btn-amber-sm btn-sm" onclick="cancelBooking(\''+id+'\')">Cancel booking</button>':'<button class="btn btn-ghost btn-sm" onclick="restoreBooking(\''+id+'\')">Restore</button>')
     +'</div>'
     +'<div style="display:flex;gap:8px"><button class="btn btn-danger" style="flex:1" onclick="deleteBooking(\''+id+'\')">Delete</button><button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button></div>');
 }

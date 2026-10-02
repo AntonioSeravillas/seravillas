@@ -3,28 +3,10 @@ function colorFor(n){let h=0;for(let i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))
 function propColorIdx(id){const i=D.props.findIndex(p=>p.id===id);return i<0?0:i%6}
 function propName(id){const p=D.props.find(x=>x.id===id);return p?p.name:'?'}
 
-// Property colour for booking bars — vivid solid fills, white text
-const PROP_BAR_COLORS=[
-  {bg:'#1D9E75',border:'#0F6E56',text:'#fff'},  // 0 teal
-  {bg:'#C85A30',border:'#8F3A18',text:'#fff'},  // 1 coral
-  {bg:'#1a5a9a',border:'#0c3d6e',text:'#fff'},  // 2 navy
-  {bg:'#7C3AED',border:'#5B21B6',text:'#fff'},  // 3 purple
-  {bg:'#2D7D4A',border:'#1a5433',text:'#fff'},  // 4 forest
-  {bg:'#B5620A',border:'#7a3f05',text:'#fff'},  // 5 amber
-];
-const PROP_BAR_COLORS_DARK=[
-  {bg:'#26B585',border:'#1D9E75',text:'#fff'},  // 0 teal
-  {bg:'#E06A3A',border:'#C85A30',text:'#fff'},  // 1 coral
-  {bg:'#3A76C8',border:'#1a5a9a',text:'#fff'},  // 2 blue
-  {bg:'#9B5CE8',border:'#7C3AED',text:'#fff'},  // 3 purple
-  {bg:'#38A05A',border:'#2D7D4A',text:'#fff'},  // 4 green
-  {bg:'#D4830F',border:'#B5620A',text:'#fff'},  // 5 amber
-];
+// Muted villa colours follow the user's selected light/dark theme through CSS tokens.
 function propBarColor(propId){
   const idx=propColorIdx(propId);
-  const dark=typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches;
-  const palette=dark?PROP_BAR_COLORS_DARK:PROP_BAR_COLORS;
-  return palette[idx]||palette[0];
+  return {bg:'var(--villa-'+idx+'-bg)',border:'var(--villa-'+idx+'-border)',text:'var(--villa-'+idx+'-text)'};
 }
 function platformBadge(platform,agencyName){
   if(platform==='direct') return'<span class="plat-ag">Direct</span>';
@@ -110,6 +92,7 @@ function _doRender(){
   const scrollY=el?el.scrollTop:0;
   if(tab==='home')        el.innerHTML=safeRender(renderHome,'Home');
   else if(tab==='calendar')   el.innerHTML=safeRender(renderCalendar,'Calendar');
+  else if(tab==='cleaning')   el.innerHTML=safeRender(renderCleanerSchedule,'Cleaning');
   else if(tab==='tasks')      el.innerHTML=safeRender(renderTasks,'Tasks');
   else if(tab==='manage')     el.innerHTML=safeRender(renderManage,'Manage');
   else if(tab==='review')     el.innerHTML=safeRender(renderReview,'Review');
@@ -123,6 +106,7 @@ function _doRender(){
     render._lastTab=tab;
   }
   updateBadge();
+  updateWorkspaceNav();
   revealActiveTabs();
   attachSwipeNav();
   runAnimations();
@@ -337,7 +321,7 @@ function toggleTheme(){
   SV_STORAGE.setItem('sv_theme',next);
   // update theme-color meta for mobile browser chrome
   const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta)meta.setAttribute('content',next==='light'?'#FBFBFB':'#000000');
+  if(meta)meta.setAttribute('content',next==='light'?'#F5F6F7':'#191C1F');
   updateThemeBtn();
   toast(next==='light'?'Light mode ☀️':'Dark mode 🌙',2000);
 }
@@ -346,6 +330,7 @@ function updateThemeBtn(){
   if(!btn)return;
   const isDark=(document.documentElement.getAttribute('data-theme')||'dark')==='dark';
   btn.title=isDark?'Switch to light mode':'Switch to dark mode';
+  btn.setAttribute('aria-label',btn.title);
   // Sun icon in dark mode (click to go light), Moon icon in light mode (click to go dark)
   btn.innerHTML=isDark
     ?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'

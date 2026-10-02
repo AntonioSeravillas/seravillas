@@ -3,7 +3,7 @@ function navTo(t){if(t==='calendar')calView='timeline';go(t);}
 
 let D={props:[],cleaners:[],sessions:[],tasks:[],issues:[],scratch:'',supplies:[],projects:[],focusSetDate:'',bookings:[],events:[],contacts:[]};
 let selCleaners=[];
-let tab='home',tasksTab='today',manageTab='overview',propsView='list',homeWeekOffset=0;
+let tab='calendar',tasksTab='today',manageTab='overview',propsView='list',homeWeekOffset=0;
 let fProp='',fCleaner='';
 let calY=new Date().getFullYear(),calM=new Date().getMonth();
 let calView='timeline';

@@ -1,77 +1,60 @@
 # SeraVillas design system
 
-The look of the app is defined in `assets/css/app.css`. New screens reuse these tokens and components instead of defining their own. The cleaner page (`assets/css/cleaner-portal.css`) and the cleaning planner (`assets/css/cleaning-planner.css`) follow this guide.
+## Top tabs direction — local review, 2 October 2026
 
-## Colour tokens
+Antonio selected Top tabs: white and soft grey, dark primary buttons, muted villa colours, outline navigation icons and dark mode. The opening screen remains the existing villa-and-date timeline. Month is an alternative view. Calendar details and navigation open as pop-ups; there is no permanent manager sidebar. This branch has not been published.
 
-Use CSS variables only. Never hard-code a hex value in a component.
+`assets/css/workspace.css` is the shared presentation layer, loaded after `app.css` and each page's feature styles. It overrides the old theme and shell while retaining component classes and handlers. `app.css` still provides legacy feature layouts. New shared styling belongs in `workspace.css`; do not add another theme layer.
 
-| Role | Variables | Notes |
-| --- | --- | --- |
-| Page and surfaces | `--bg`, `--surface`, `--surface2`, `--surface3` | Page, card, inset area (inputs, rows), hover/pressed |
-| Lines | `--border`, `--border2` | Card edges; stronger edges |
-| Text | `--text`, `--text2`, `--text3` | Primary, secondary, muted/labels |
-| Accent (terracotta) | `--accent`, `--accent-hover`, `--accent-bg`, `--accent-border`, `--accent-text` | The one brand colour: primary buttons, active tabs, own-item borders |
-| Status | `--success`, `--warning`, `--danger`, `--info` and `--amber-*`, `--red-*`, `--purple-*`, `--pink-*` (`-bg`, `-border`, `-text`) | Tinted background + border + text for badges and notices |
+## Tokens
 
-Dark is the default. `html[data-theme="light"]` redefines the same variables in `app.css`, so components must not need per-theme colours. The theme is stored under `sv_theme` (`seravillas_dev:sv_theme` in the preview) and applied by a small script in `<head>` before first paint. Components need a light-theme override only when they use a hard-coded colour, which is a reason to switch to a token.
+| Role | Tokens |
+| --- | --- |
+| Page / surfaces | `--bg`, `--surface`, `--surface2`, `--surface3` |
+| Text / lines | `--text`, `--text2`, `--text3`, `--border`, `--border2` |
+| Primary action | `--accent`, `--accent-hover`, **`--on-accent`** |
+| Selection | `--accent-bg`, `--accent-border`, `--accent-text` |
+| Status | `--teal-*` for confirmed/done, `--amber-*` for offered/attention, `--red-*` for declined/cancelled/errors |
+| Villa identity | `--villa-0-*` through `--villa-5-*` (`bg`, `border`, `text`) |
 
-## Typography
+Use tokens in components. Villa identity is separate from booking platform and status. `propBarColor()` returns CSS variables that follow the selected theme, preserving the existing property index mapping. Pair backgrounds with matching text tokens. Primary buttons become light in dark mode, so use `--on-accent` rather than white.
 
-- **Plus Jakarta Sans** for everything: 400/500 body, 600–700 controls, 800 titles and labels.
-- **DM Mono** for dates, times, counts and chips (`font-family:'DM Mono',monospace`).
-- Page title `.sv-title` (22px/800, −0.5px tracking), subtitle `.sv-subtitle` (13px, `--text3`), card heading 16px/700, body 13px, small text 11–12px.
-- Form labels and section labels: 11px, 700–800, uppercase, 0.07em tracking, `--text2`/`--text3`.
-- The manager page loads the fonts from Google Fonts. The cleaner page loads the same fonts from `assets/fonts/` through `assets/css/fonts.css`, so it works offline (OFL licence note in `assets/fonts/README.md`).
+Light is the default for new visitors. Saved `sv_theme` preferences remain respected; preview preferences use isolated storage. Both pages load self-hosted Plus Jakarta Sans and DM Mono through `assets/css/fonts.css`.
 
-## Spacing and shape
+## Components and spacing
 
-- Radii: cards `var(--radius)` (18px), controls and inset cards `var(--radius-sm)` (12px), buttons 12px (small 10px), pills `var(--radius-pill)`.
-- Page gutters 16px on phones, 28px from 768px. Card padding 14–16px. Gaps 8, 10, 12, 14px.
-- Cards have a 1px `--border` and a faint `0 1px 4px rgba(0,0,0,0.06)` shadow. Highlighted items use a 4px left border (`--accent` for the signed-in cleaner's own work).
-
-## Components (reuse, don't re-create)
-
-| Need | Class | Where defined |
-| --- | --- | --- |
-| Page heading | `.sv-page-header`, `.sv-page-heading`, `.sv-title`, `.sv-subtitle` | `app.css` |
-| Card | `.sv-card` (plus `.ct-card`/`.cp-card` for the cleaner and planner variants) | `app.css` |
-| Buttons | `.sv-btn` + `-primary`, `-secondary`, `-ghost`, `-danger`, `-sm` | `app.css` |
-| Tabs / segmented control | `.sv-tabs` containing `.sv-tab` (`.active`) | `app.css` |
-| Filter chips | `.sv-chip-row`, `.sv-chip` | `app.css` |
-| Status badges | `.sv-badge` + `-resolved` (done/confirmed), `-waiting` (offered), `-open` (declined/cancelled), `-medium` (today), `-low`, `-overdue`, `-progress` | `app.css` |
-| Form fields | `.field` with a `<label>`; global `input`, `select`, `textarea` styles with accent focus ring | `app.css` |
-| Sync/status dot | `.sync-dot` + `idle`, `syncing`, `ok`, `error` | `app.css` |
-| Empty state | `.sv-empty` | `app.css` |
-| Header and wordmark | `.header` / `.logo` (gradient wordmark), `.header-date` | `app.css` |
-
-Status colours carry meaning: green = confirmed/done, amber = offered/needs attention, red = declined/cancelled/overdue, accent = yours or active.
+- Titles: 27px/700 on laptops, 24px on phones. Body 13–15px, controls 13–14px, secondary labels 11–12px.
+- Cards: 18px radius, 1px border, no decorative shadow. Fields: 12px radius. Buttons: 22px radius, 42px minimum height (36px compact actions).
+- Manager gutters: 32px laptop, 24px tablet, 14px phone. Header icons: 40px laptop, 36px phone.
+- Reuse `.sv-btn`, `.sv-tabs`, `.sv-card`, `.sv-badge` and `.field`. Existing `.btn` controls inherit shared action styling.
+- Navigation uses local outline SVGs. Legacy feature icons remain for later screen-specific refinement.
+- Respect `prefers-reduced-motion`.
 
 ## Navigation
 
-- **Phones (below 768px):** a floating glass pill at the bottom (`.nav` with `.nav-item`, active item in `--accent-bg`). The manager app has five items. The cleaner page has two: Schedule and Calendar.
-- **Desktop (768px and up):** `.nav` is hidden by `app.css`. The manager app uses its left sidebar. The cleaner page puts the same two sections as `.sv-tabs` in the sticky header, next to the wordmark.
-- Long tab bars (for example Manage, with seven tabs) scroll sideways on phones. After each render `revealActiveTabs()` in `ui/shell.js` scrolls the selected tab fully into view, and edge fades (`has-more-left` / `has-more-right`) show that more tabs are off-screen. Phone tabs are 9px/14px padded for easier tapping.
-- The header is a sticky glass bar (`--glass` look, 60px). Icon buttons are 32px circles. The theme toggle shows a sun in dark mode and a moon in light mode.
+- Manager: **Bookings / Cleaning / More** at the top on every device. Phones have a wordmark/tools row and a navigation row.
+- Bookings opens Timeline by default. Switching Timeline/Month retains the selected month.
+- Cleaning directly renders the existing weekly planner, including Daily plan and By cleaner.
+- More opens a dialog with Today, Tasks, Properties, Reports, Team and Manage. Existing Manage subsections remain accessible.
+- Cleaner: Schedule and Calendar stay in the top header on phones and laptops. The former bottom navigation is hidden. Role-specific controls and API access are unchanged.
 
-## Page shell rules
+## Calendar and pop-ups
 
-`app.css` is written for the manager app. Its `body` is a 480px phone column and, from 768px, the page is locked to the viewport (`html, body {height:100%; overflow:hidden}`) because the manager scrolls inside its own panes. A page that does not use the manager shell must override this. The cleaner page does it with `class="ct-html"` on `<html>` and `class="ct-body"` on `<body>` (see the first rules in `cleaner-portal.css`). Without that override a tablet-width page is boxed to 480px and a desktop page cannot scroll.
+Timeline retains horizontal scrolling, month selection, bookings and cleaning markers. Bars use villa colours and open the existing booking detail dialog at every width.
 
-## Development preview label
+Month uses Monday-based weeks across the available width, continuous stay segments, and daily signals for cleaning, arrivals/departures, tasks and events. Stays end at checkout (exclusive); day details include departures on checkout day. Overlapping stays receive separate lanes. Paid cancellations remain outside occupied-day bars, retaining revenue and history elsewhere. Villa and Cleanings only filters apply to both views and day details.
 
-In development the label is an in-flow amber strip above the app (`.dev-banner`, tokens `--amber-*`), not a floating badge, so it never covers the header. `html.dev-preview` sets `--dev-banner-h`, which the full-height shells (`.app-wrapper`, `.sidebar`) subtract from their height. In production the variable is unset (0) and the strip is never created.
+`showModal()` supplies dialog semantics, an explicit close button, Escape, a Tab focus loop and focus restoration. Dialogs are centred and scroll within the viewport. Do not reserve a calendar detail column. The development strip stays above the header in normal layout; the manager shell fills the remaining viewport with one scrolling content area.
 
-## Rules for new UI
+## Release and verification
 
-1. Reuse a component from the table above before writing CSS.
-2. Colours come from variables. Check both themes.
-3. Touch targets are at least 42px tall on controls and 32px for small icon buttons.
-4. Check at 390px (phone), about 640px (tablet) and 1280px (desktop), in dark and light.
-5. Keep existing `data-action` hooks and element IDs. Scripts and tests depend on them.
-6. For files cached by the cleaner service worker, change the `?v=` suffix and `CACHE` name in `cleaner/sw.js` whenever the file changes.
-7. Do not add a framework or build step.
+1. Check manager and cleaner at phone, tablet and laptop widths in both themes.
+2. Verify both calendar views, filters, booking/day pop-ups, More destinations and cleaning planning.
+3. Run existing tests: import preservation, cancellation revenue, sync conflicts and cleaner authorization. Calendar tests cover checkout exclusivity, overlap lanes, filters and view context.
+4. Update URL suffixes and `CACHE` in `cleaner/sw.js` when cached assets change. Its offline shell includes the shared stylesheet.
+5. Keep classic scripts and existing loading order. No framework or build step is introduced.
+6. Publish after Antonio reviews the local redesign. Check cleaner offline reload after release; its service worker does not register in development.
 
-## Known gaps
+## Remaining workflow work
 
-- The manager page still loads fonts from Google Fonts, so its typography falls back when offline. Switching it to `assets/css/fonts.css` is a small follow-up.
+This stage supplies shared styling, top navigation and the booking calendar. Dedicated refinements of Today, Tasks, Properties, reports and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.

@@ -29,7 +29,7 @@
     const next=isLight()?'dark':'light';
     document.documentElement.setAttribute('data-theme',next);
     try{localStorage.setItem(THEME_KEY,next);}catch{}
-    const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',next==='light'?'#FBFBFB':'#000000');
+    const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',next==='light'?'#F5F6F7':'#191C1F');
     render();
   }
   function themeButton(){return '<button class="ct-icon-btn" data-action="theme" title="'+(isLight()?'Switch to dark mode':'Switch to light mode')+'" aria-label="Switch theme">'+(isLight()?ICON.moon:ICON.sun)+'</button>';}

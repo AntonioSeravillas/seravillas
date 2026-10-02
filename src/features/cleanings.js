@@ -365,7 +365,7 @@ function renderCleanerSchedule(){
     +' – '+we.getDate()+' '+MN[we.getMonth()]+' '+we.getFullYear();
 
   // Navigation + header
-  let h='<div class="sv-page-header" style="margin-bottom:16px"><div class="sv-page-heading"><div class="sv-title">Schedule</div><div class="sv-subtitle">Cleaning team weekly view</div></div>'
+  let h='<div class="sv-page-header" style="margin-bottom:16px"><div class="sv-page-heading"><div class="sv-title">Cleaning</div><div class="sv-subtitle">Plan the week, assign your team and track coverage.</div></div>'
     +'<button class="sv-btn sv-btn-primary sv-btn-sm" onclick="openAddSessModal()">+ Session</button></div>';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:8px">'
     +'<button class="cal-nav" onclick="schedWeekOffset--;render()">'

@@ -20,8 +20,29 @@ function checkReminder(){if(!('Notification' in window)||Notification.permission
 function importData(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(ev){try{const parsed=JSON.parse(ev.target.result);if(!parsed.props||!parsed.cleaners||!parsed.sessions)throw new Error('Invalid backup file');if(!confirm('Replace all current data with this backup?'))return;Object.assign(D,parsed);D.tasks=D.tasks||[];D.issues=D.issues||[];D.scratch=D.scratch||'';D.supplies=D.supplies||[];D.events=D.events||[];D.bookings=D.bookings||[];D.projects=D.projects||[];save();render();toast('Backup restored ✓');}catch(err){alert('Could not read backup file — may be corrupted.');}e.target.value='';};reader.readAsText(file);}
 
 /* ── MODAL ── */
-function showModal(html){document.getElementById('modal-root').innerHTML='<div class="modal-wrap" onclick="closeModal(event)"><div class="modal" onclick="event.stopPropagation()">'+html+'</div></div>';}
-function closeModal(e){if(!e||e.target.classList.contains('modal-wrap')){document.getElementById('modal-root').innerHTML='';}}
+let modalReturnFocus=null;
+function showModal(html){
+  const root=document.getElementById('modal-root');
+  if(!root.querySelector?.('.modal'))modalReturnFocus=document.activeElement;
+  root.innerHTML='<div class="modal-wrap" onclick="closeModal(event)"><div class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick="event.stopPropagation()"><button class="modal-close" aria-label="Close dialog" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>'+html+'</div></div>';
+  const dialog=root.querySelector?.('.modal');
+  if(dialog){dialog.setAttribute('aria-label',dialog.querySelector?.('.modal-title')?.textContent||'Details');dialog.focus?.();}
+}
+function closeModal(e){
+  if(e&&!e.target.classList.contains('modal-wrap'))return;
+  document.getElementById('modal-root').innerHTML='';
+  if(modalReturnFocus?.isConnected)modalReturnFocus.focus?.();modalReturnFocus=null;
+}
+document.addEventListener('keydown',function(event){
+  const dialog=document.querySelector('#modal-root .modal');if(!dialog)return;
+  if(event.key==='Escape'){event.preventDefault();closeModal();return;}
+  if(event.key!=='Tab')return;
+  const controls=Array.from(dialog.querySelectorAll('button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]')).filter(el=>el.getClientRects().length);
+  if(!controls.length){event.preventDefault();dialog.focus();return;}
+  const first=controls[0],last=controls[controls.length-1];
+  if(event.shiftKey&&(document.activeElement===first||document.activeElement===dialog)){event.preventDefault();last.focus();}
+  else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===dialog)){event.preventDefault();first.focus();}
+});
 
 document.addEventListener('keydown',function(e){if(e.key!=='Enter')return;if(e.target.id==='prop-in')addProp();if(e.target.id==='supply-input')addSupply();});
 document.addEventListener('click',function(e){
