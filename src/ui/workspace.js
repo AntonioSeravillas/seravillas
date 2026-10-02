@@ -1,6 +1,6 @@
 /* Presentation and navigation only. Booking, cleaning and sync records retain their existing models. */
 function workspaceIcon(name){
-  const paths={calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 11h18"/>',cleaning:'<path d="m8 15 9-12M5 13l6 4-3 5H2l3-9ZM17 3l3 2"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',home:'<path d="m3 10 9-7 9 7v10H3ZM9 20v-7h6v7"/>',tasks:'<path d="m9 11 3 3 9-10M21 12v8H3V4h11"/>',property:'<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5M9 8h.01M15 8h.01M9 12h.01M15 12h.01"/>',report:'<path d="M4 3v18h17M9 16v-5M14 16V7M19 16v-8"/>',team:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 15a4 4 0 0 1 4 4v2"/>',settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',filter:'<path d="M4 7h16M7 12h10M10 17h4"/>'};
+  const paths={calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 11h18"/>',cleaning:'<path d="m8 15 9-12M5 13l6 4-3 5H2l3-9ZM17 3l3 2"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',home:'<path d="m3 10 9-7 9 7v10H3ZM9 20v-7h6v7"/>',tasks:'<path d="m9 11 3 3 9-10M21 12v8H3V4h11"/>',property:'<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5M9 8h.01M15 8h.01M9 12h.01M15 12h.01"/>',report:'<path d="M4 3v18h17M9 16v-5M14 16V7M19 16v-8"/>',team:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 15a4 4 0 0 1 4 4v2"/>',settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',issues:'<path d="m12 3 10 18H2L12 3ZM12 9v4M12 17h.01"/>',stock:'<path d="m3 7 9-4 9 4v10l-9 4-9-4V7ZM3 7l9 4 9-4M12 11v10M7 5l10 4"/>',contacts:'<rect x="5" y="3" width="16" height="18" rx="2"/><path d="M3 7h4M3 12h4M3 17h4M10 17h6"/><circle cx="13" cy="10" r="2"/>',notes:'<path d="M14 3H5v18h14V8l-5-5ZM14 3v5h5M9 12h6M9 16h6"/>',close:'<path d="M8 4H4v16h4M11 12h10m-6-5-5 5 5 5"/>',filter:'<path d="M4 7h16M7 12h10M10 17h4"/>'};
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[name]||paths.calendar)+'</svg>';
 }
 function workspaceNavigate(destination,section){
@@ -8,14 +8,74 @@ function workspaceNavigate(destination,section){
   if(destination==='manage')manageTab=section||'overview';
   go(destination);
 }
+/* Desktop navigation is a device preference, stored outside the shared app records. */
+const WORKSPACE_NAV_GROUPS=[
+  ['Workspace',[
+    ['home','home','','home','Today'],
+    ['calendar','calendar','','calendar','Bookings'],
+    ['cleaning','cleaning','','cleaning','Cleaning'],
+    ['tasks','tasks','','tasks','Tasks'],
+    ['properties','properties','','property','Properties'],
+    ['reports','booking-report','','report','Reports']
+  ]],
+  ['Management',[
+    ['team','manage','cleaners','team','Team'],
+    ['manage','manage','overview','settings','Overview'],
+    ['issues','manage','issues','issues','Issues'],
+    ['stock','manage','supplies','stock','Stock'],
+    ['contacts','manage','contacts','contacts','Contacts'],
+    ['notes','manage','notes','notes','Notes']
+  ]]
+];
+let workspaceSidebarCollapsed=false;
+try{workspaceSidebarCollapsed=SV_STORAGE.getItem('sv_sidebar_collapsed')==='1';}catch(e){}
+
+function applyWorkspaceSidebar(){
+  document.documentElement.classList.toggle('workspace-sidebar-collapsed',workspaceSidebarCollapsed);
+  const opener=document.getElementById('workspace-sidebar-open');
+  if(opener)opener.setAttribute('aria-expanded',String(!workspaceSidebarCollapsed));
+}
+function setWorkspaceSidebar(collapsed){
+  workspaceSidebarCollapsed=!!collapsed;
+  applyWorkspaceSidebar();
+  try{SV_STORAGE.setItem('sv_sidebar_collapsed',workspaceSidebarCollapsed?'1':'0');}catch(e){}
+  const focus=document.getElementById(workspaceSidebarCollapsed?'workspace-sidebar-open':'workspace-sidebar-close');
+  if(focus&&typeof focus.focus==='function')focus.focus();
+}
+function workspaceCurrentCategory(){
+  if(tab==='booking-report'||(tab==='properties'&&propsView==='report'&&!propHubId))return 'reports';
+  if(tab==='manage')return ({cleaners:'team',overview:'manage',issues:'issues',supplies:'stock',schedule:'cleaning',contacts:'contacts',notes:'notes'})[manageTab]||'manage';
+  return tab==='review'?'home':tab;
+}
+function initializeWorkspaceSidebar(){
+  const sidebar=document.getElementById('workspace-sidebar');if(!sidebar)return;
+  let h='<div class="workspace-sidebar-head"><span class="workspace-brand">SeraVillas</span><button class="workspace-icon" id="workspace-sidebar-close" onclick="setWorkspaceSidebar(true)" aria-label="Hide navigation" title="Hide navigation" aria-controls="workspace-sidebar">'+workspaceIcon('close')+'</button></div><nav class="workspace-sidebar-nav" aria-label="All categories">';
+  WORKSPACE_NAV_GROUPS.forEach(function(group){
+    h+='<div class="workspace-sidebar-group"><div class="workspace-sidebar-heading">'+group[0]+'</div>';
+    group[1].forEach(function(item){
+      h+='<button class="workspace-sidebar-link" id="workspace-side-'+item[0]+'" onclick="workspaceNavigate(\''+item[1]+'\',\''+item[2]+'\')">'+workspaceIcon(item[3])+'<span>'+item[4]+'</span></button>';
+    });
+    h+='</div>';
+  });
+  sidebar.innerHTML=h+'</nav><div class="workspace-sidebar-footer">Property management</div>';
+  applyWorkspaceSidebar();
+}
 function updateWorkspaceNav(){
-  const current=tab==='calendar'?'calendar':tab==='cleaning'||(tab==='manage'&&manageTab==='schedule')?'cleaning':'more';
+  const selected=workspaceCurrentCategory();
+  const current=selected==='calendar'?'calendar':selected==='cleaning'?'cleaning':'more';
   ['calendar','cleaning','more'].forEach(function(key){
     const el=document.getElementById('workspace-'+key);if(!el)return;
     el.classList.toggle('active',key===current);
     if(key===current)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
   });
+  WORKSPACE_NAV_GROUPS.forEach(function(group){group[1].forEach(function(item){
+    const el=document.getElementById('workspace-side-'+item[0]);if(!el)return;
+    el.classList.toggle('active',item[0]===selected);
+    if(item[0]===selected)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
+    if(item[0]===selected){const label=document.getElementById('workspace-page-label');if(label)label.textContent=item[4];}
+  });});
 }
+initializeWorkspaceSidebar();
 function openWorkspaceMenu(){
   const items=[['home','','home','Today','Arrivals, departures & priorities'],['tasks','','tasks','Tasks','Property work & projects'],['properties','','property','Properties','Villas, records & settings'],['booking-report','','report','Reports','Bookings & revenue'],['manage','cleaners','team','Team','Cleaners & individual access'],['manage','overview','settings','Manage','Issues, stock, contacts & notes']];
   let h='<div class="modal-title">Your workspace</div><div class="sv-subtitle">Everything you need to manage your villas.</div><div class="workspace-menu">';

@@ -4,7 +4,9 @@ A web app for managing holiday villas, bookings, cleaning schedules, tasks, issu
 
 ## Open the project in VS Code
 
-Open this repository folder. The Top tabs redesign is being reviewed locally on `top-tabs-redesign`. It has not been published.
+Open this repository folder. The workspace redesign is being reviewed locally on `top-tabs-redesign`. It has not been published.
+
+On desktop, the left sidebar lists all categories. Its **Hide navigation** button expands the workspace; the header menu button reopens it. This preference stays on your device. Phones retain the top tabs.
 
 ## Development preview
 
@@ -28,7 +30,7 @@ To reset the fictional data, remove only the `seravillas_dev:` entries in your b
 | --- | --- |
 | `index.html` | Page shell and script loading order |
 | `assets/css/app.css` | Existing feature layouts and base components |
-| `assets/css/workspace.css`, `src/ui/workspace.js` | Shared light/dark design, top navigation, calendar filters and month stay bars |
+| `assets/css/workspace.css`, `src/ui/workspace.js` | Shared light/dark design, collapsible desktop sidebar, phone top tabs, calendar filters and month stay bars |
 | `src/app.js` | Startup only |
 | `src/config.js`, `src/storage.js` | Environment detection and isolated browser storage |
 | `src/dev-seed.js` | Fictional preview records |

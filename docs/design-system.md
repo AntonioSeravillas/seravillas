@@ -1,8 +1,8 @@
 # SeraVillas design system
 
-## Top tabs direction — local review, 2 October 2026
+## Workspace direction — local review, 2 October 2026
 
-Antonio selected Top tabs: white and soft grey, dark primary buttons, muted villa colours, outline navigation icons and dark mode. The opening screen remains the existing villa-and-date timeline. Month is an alternative view. Calendar details and navigation open as pop-ups; there is no permanent manager sidebar. This branch has not been published.
+Antonio selected Top tabs: white and soft grey, dark primary buttons, muted villa colours, outline navigation icons and dark mode. The opening screen remains the existing villa-and-date timeline. Month is an alternative view. Calendar details open as pop-ups. On desktop Antonio subsequently selected a collapsible category sidebar; phones retain top tabs. This branch has not been published.
 
 `assets/css/workspace.css` is the shared presentation layer, loaded after `app.css` and each page's feature styles. It overrides the old theme and shell while retaining component classes and handlers. `app.css` still provides legacy feature layouts. New shared styling belongs in `workspace.css`; do not add another theme layer.
 
@@ -32,7 +32,8 @@ Light is the default for new visitors. Saved `sv_theme` preferences remain respe
 
 ## Navigation
 
-- Manager: **Bookings / Cleaning / More** at the top on every device. Phones have a wordmark/tools row and a navigation row.
+- Manager desktop (1024px and wider): a 232px left sidebar lists all categories, including individual management sections. **Hide navigation** closes it; the header menu button reopens it. The choice is saved on the device through `SV_STORAGE` as `sv_sidebar_collapsed`, outside synced app records. Closing it expands the content and reveals **Bookings / Cleaning / More** in the header.
+- Phones and smaller tablets retain **Bookings / Cleaning / More** at the top; the desktop sidebar preference does not affect them. Phones have a wordmark/tools row and a navigation row.
 - Bookings opens Timeline by default. Switching Timeline/Month retains the selected month.
 - Cleaning directly renders the existing weekly planner, including Daily plan and By cleaner.
 - More opens a dialog with Today, Tasks, Properties, Reports, Team and Manage. Existing Manage subsections remain accessible.
@@ -57,4 +58,4 @@ Month uses Monday-based weeks across the available width, continuous stay segmen
 
 ## Remaining workflow work
 
-This stage supplies shared styling, top navigation and the booking calendar. Dedicated refinements of Today, Tasks, Properties, reports and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.
+This stage supplies shared styling, top navigation and the booking calendar. The collapsible desktop sidebar is part of this local review. Dedicated refinements of Today, Tasks, Properties, reports and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.

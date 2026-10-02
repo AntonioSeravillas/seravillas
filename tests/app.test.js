@@ -103,6 +103,27 @@ test('workspace opens with the villa timeline and changes views without losing t
   assert.equal(app.run('JSON.stringify(D)'),before);assert.equal(app.requests.length,0);
 });
 
+test('desktop navigation preference survives reload without changing records or calendar context', () => {
+  const records=new Map([['sv_sidebar_collapsed','0']]);
+  const app=runtime({records});
+  assert.equal(app.run('workspaceSidebarCollapsed'),false);
+  const before=app.run('JSON.stringify(D)');
+  app.run("calView='month';calY=2027;calM=7;setWorkspaceSidebar(true)");
+  assert.equal(records.get('seravillas_dev:sv_sidebar_collapsed'),'1');
+  assert.equal(records.get('sv_sidebar_collapsed'),'0');
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.run('calView'),'month');assert.equal(app.run('calY'),2027);assert.equal(app.run('calM'),7);
+  assert.equal(app.requests.length,0);
+  const reloaded=runtime({records});
+  assert.equal(reloaded.run('workspaceSidebarCollapsed'),true);
+  reloaded.run('setWorkspaceSidebar(false)');
+  assert.equal(records.get('seravillas_dev:sv_sidebar_collapsed'),'0');
+  reloaded.run("workspaceNavigate('manage','supplies')");
+  assert.equal(reloaded.run('workspaceCurrentCategory()'),'stock');
+  reloaded.run("tab='properties';propsView='report';propHubId=null");
+  assert.equal(reloaded.run('workspaceCurrentCategory()'),'reports');
+});
+
 test('monthly stay lanes handle overlaps, checkout exclusivity and year boundaries without editing bookings', () => {
   const app=runtime({boot:false});
   app.run(`D.props=[{id:'p',name:'Villa Test'}];D.bookings=[
