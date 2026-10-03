@@ -69,9 +69,9 @@ function renderReview(){
   }
 
   let h='';
-  h+='<button class="back-btn" data-nav="home">'
+  h+='<button class="back-btn" onclick="workspaceNavigate(\'manage\',\'overview\')">'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>'
-    +'Back to Home</button>';
+    +'Back to Overview</button>';
   h+='<div style="margin-bottom:16px">'
     +'<div style="font-size:20px;font-weight:800;letter-spacing:-0.5px;margin-bottom:2px">Weekly Review</div>'
     +'<div style="font-size:12px;color:var(--text3);font-weight:500;font-family:\'DM Mono\',monospace">'+rangeLabel+'</div>'
@@ -89,11 +89,11 @@ function renderReview(){
 
   h+='<div class="wr-card"><div class="wr-card-title wr-ct-amber">Issues tracker</div>'
     +'<div style="display:flex;gap:10px">'
-    +'<div style="flex:1;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:var(--radius-sm);padding:12px;text-align:center;cursor:pointer" data-nav="manage">'
+    +'<div style="flex:1;background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:var(--radius-sm);padding:12px;text-align:center;cursor:pointer" onclick="issueStatusFilter=\'open\';workspaceNavigate(\'manage\',\'issues\')">'
     +'<div style="font-size:26px;font-weight:800;color:var(--amber);font-family:\'DM Mono\',monospace;line-height:1">'+issuesOpen+'</div>'
     +'<div style="font-size:10px;color:var(--amber-text);font-weight:700;margin-top:4px;text-transform:uppercase;letter-spacing:0.05em">Open</div>'
     +'</div>'
-    +'<div style="flex:1;background:var(--accent-bg);border:1px solid var(--accent-border);border-radius:var(--radius-sm);padding:12px;text-align:center;cursor:pointer" data-nav="manage">'
+    +'<div style="flex:1;background:var(--accent-bg);border:1px solid var(--accent-border);border-radius:var(--radius-sm);padding:12px;text-align:center;cursor:pointer" onclick="issueStatusFilter=\'resolved\';workspaceNavigate(\'manage\',\'issues\')">'
     +'<div style="font-size:26px;font-weight:800;color:var(--accent);font-family:\'DM Mono\',monospace;line-height:1">'+issuesResolved+'</div>'
     +'<div style="font-size:10px;color:var(--accent-text);font-weight:700;margin-top:4px;text-transform:uppercase;letter-spacing:0.05em">Resolved</div>'
     +'</div>'
@@ -199,59 +199,17 @@ function renderBookingReport(){
   const occupiedProps=propPerf.filter(p=>p.count>0||p.booked>0);
   const avgOcc=occupiedProps.length?Math.round(occupiedProps.reduce((s,p)=>s+p.occ,0)/occupiedProps.length):0;
 
-  // Gaps analysis — free nights per property within [today..yr-12-31]
-  const yrEndStr=yr+'-12-31';
-  const gapWinStart=td>yr+'-01-01'?td:yr+'-01-01';
-  const allGaps=[];
-  D.props.forEach(p=>{
-    // Only bookings that overlap our window
-    const pBks=D.bookings.filter(b=>
-      b.propId===p.id&&b.status!=='cancelled'&&
-      b.checkOut>gapWinStart&&b.checkIn<=yrEndStr
-    ).sort((a,b)=>a.checkIn.localeCompare(b.checkIn));
-    if(pBks.length===0){
-      // Property has no bookings in window — entire window is free
-      const g=daysBetween(gapWinStart,yrEndStr);
-      if(g>0)allGaps.push({propId:p.id,propName:p.name,from:gapWinStart,to:yrEndStr,days:g});
-      return;
-    }
-    // Leading gap: window start → first booking checkIn
-    if(pBks[0].checkIn>gapWinStart){
-      const g=daysBetween(gapWinStart,pBks[0].checkIn);
-      if(g>0)allGaps.push({propId:p.id,propName:p.name,from:gapWinStart,to:pBks[0].checkIn,days:g});
-    }
-    // Gaps between consecutive bookings
-    for(let i=1;i<pBks.length;i++){
-      const gf=pBks[i-1].checkOut,gt=pBks[i].checkIn;
-      const g=daysBetween(gf,gt);
-      if(g>0)allGaps.push({propId:p.id,propName:p.name,from:gf,to:gt,days:g});
-    }
-    // Trailing gap: last booking checkOut → year end
-    const lastOut=pBks[pBks.length-1].checkOut;
-    if(lastOut<yrEndStr){
-      const g=daysBetween(lastOut,yrEndStr);
-      if(g>0)allGaps.push({propId:p.id,propName:p.name,from:lastOut,to:yrEndStr,days:g});
-    }
-  });
-  const upcoming=allGaps.filter(g=>g.days>=2).sort((a,b)=>a.from.localeCompare(b.from));
-  const totalGapNights=allGaps.reduce((s,g)=>s+g.days,0);
-  const avgGap=allGaps.length?Math.round(totalGapNights/allGaps.length):0;
-
   // ── HTML ──
   let h='';
-  h+='<button class="back-btn" data-nav="home">'
-    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>'
-    +'Back</button>';
-
   // Title + year selector
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
-    +'<div style="font-size:20px;font-weight:800;letter-spacing:-0.5px">Booking Report</div>'
+  h+='<div class="sv-page-header revenue-header">'
+    +'<div class="sv-page-heading"><div class="sv-title">Revenue reports</div><div class="sv-subtitle">Income by month, villa and booking channel.</div></div>'
     +'<div style="display:flex;align-items:center;gap:8px">'
-    +'<button class="week-nav-btn" onclick="reportYear--;render()" style="width:30px;height:30px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>'
+    +'<button class="week-nav-btn" aria-label="Previous revenue year" onclick="reportYear--;render()" style="width:30px;height:30px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>'
     +'<span style="font-size:14px;font-weight:700;font-family:\'DM Mono\',monospace;min-width:36px;text-align:center">'+yr+'</span>'
-    +'<button class="week-nav-btn" onclick="reportYear++;render()" style="width:30px;height:30px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>'
+    +'<button class="week-nav-btn" aria-label="Next revenue year" onclick="reportYear++;render()" style="width:30px;height:30px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>'
     +'</div></div>';
-  h+='<div style="font-size:11px;color:var(--text3);font-weight:500;margin-bottom:14px">'+totalBks+' bookings · '+totalGapNights+' gap nights across all properties</div>';
+  h+='<div style="font-size:11px;color:var(--text3);font-weight:500;margin-bottom:14px">'+totalBks+' active bookings · '+yr+' revenue</div>';
 
   if(unknownPrices)h+='<p style="font-size:12px;color:var(--amber);margin-bottom:12px">'+unknownPrices+' booking prices are unknown. Revenue totals are incomplete; average value uses known prices.</p>';
 
@@ -357,51 +315,7 @@ function renderBookingReport(){
     h+='</details>';
   }
 
-  // Gaps analysis
-  h+='<div class="wr-card">';
-  h+='<div class="wr-card-title wr-ct-amber">Upcoming gaps — free nights</div>';
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
-  h+='<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;text-align:center">';
-  h+='<div style="font-size:22px;font-weight:800;font-family:\'DM Mono\',monospace;color:var(--amber)">'+allGaps.length+'</div>';
-  h+='<div style="font-size:10px;color:var(--text3);font-weight:700;margin-top:2px;text-transform:uppercase;letter-spacing:0.05em">Total gaps</div>';
-  h+='</div>';
-  h+='<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;text-align:center">';
-  h+='<div style="font-size:22px;font-weight:800;font-family:\'DM Mono\',monospace;color:var(--text)">'+avgGap+'</div>';
-  h+='<div style="font-size:10px;color:var(--text3);font-weight:700;margin-top:2px;text-transform:uppercase;letter-spacing:0.05em">Avg nights</div>';
-  h+='</div></div>';
-  if(!upcoming.length){
-    h+='<div class="wr-empty">No upcoming gaps found</div>';
-  } else {
-    upcoming.forEach(g=>{
-      const clr=propBarColor(g.propId);
-      const isShort=g.days<=3,isMed=g.days<=7;
-      const urgClr=isShort?'var(--red)':isMed?'var(--amber)':'var(--accent)';
-      const urgBg=isShort?'var(--red-bg)':isMed?'var(--amber-bg)':'var(--accent-bg)';
-      h+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">';
-      h+='<div style="min-width:40px;height:40px;border-radius:10px;background:'+urgBg+';display:flex;flex-direction:column;align-items:center;justify-content:center">';
-      h+='<div style="font-size:16px;font-weight:800;color:'+urgClr+';font-family:\'DM Mono\',monospace;line-height:1">'+g.days+'</div>';
-      h+='<div style="font-size:8px;font-weight:700;color:'+urgClr+';opacity:0.7;line-height:1">nts</div>';
-      h+='</div>';
-      h+='<div style="flex:1;min-width:0">';
-      h+='<div style="font-size:12px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:5px">';
-      h+='<div style="width:6px;height:6px;border-radius:2px;background:'+clr.border+';flex-shrink:0"></div>';
-      h+=esc(g.propName);
-      h+='</div>';
-      h+='<div style="font-size:10px;color:var(--text3);font-family:\'DM Mono\',monospace;margin-top:2px">'+fmtDate(g.from)+' → '+fmtDate(g.to)+'</div>';
-      h+='</div>';
-      h+='<div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;background:'+urgBg+';color:'+urgClr+'">'+(isShort?'Tight':isMed?'Short':'Open')+'</div>';
-      h+='</div>';
-    });
-  }
-  h+='</div>';
-
-  // Total gap nights summary
-  h+='<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between">';
-  h+='<div style="font-size:12px;font-weight:600;color:var(--text2)">Total gap nights (all time)</div>';
-  h+='<div style="font-size:16px;font-weight:800;font-family:\'DM Mono\',monospace;color:var(--amber)">'+totalGapNights+' nights</div>';
-  h+='</div>';
-
-  return h;
+  return '<div class="sv-page revenue-page">'+h+'</div>';
 }
 
 /* ── QUICK ADD MENU ── */

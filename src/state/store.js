@@ -12,6 +12,7 @@ let calWeekStart=null;
 let calTimelineDate='';
 let calFilter='all'; // 'all' | 'cleanings' | 'prop-{id}'
 let reportYear=new Date().getFullYear();
+let availabilityYear=new Date().getFullYear(),settingsView='preferences';
 let _showPastEvents=false;
 let evView='list';
 let evCalY=new Date().getFullYear();

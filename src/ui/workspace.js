@@ -25,7 +25,8 @@ const WORKSPACE_NAV_GROUPS=[
     ['stock','manage','supplies','stock','Stock'],
     ['contacts','manage','contacts','contacts','Contacts'],
     ['notes','manage','notes','notes','Notes']
-  ]]
+  ]],
+  ['App',[[ 'settings','settings','','settings','Settings' ]]]
 ];
 let workspaceSidebarCollapsed=false;
 try{workspaceSidebarCollapsed=SV_STORAGE.getItem('sv_sidebar_collapsed')==='1';}catch(e){}
@@ -43,21 +44,25 @@ function setWorkspaceSidebar(collapsed){
   if(focus&&typeof focus.focus==='function')focus.focus();
 }
 function workspaceCurrentCategory(){
-  if(tab==='booking-report'||(tab==='properties'&&propsView==='report'&&!propHubId))return 'reports';
+  if(tab==='booking-report')return 'reports';
+  if(['booking-availability','calendar-events','calendar-agenda'].includes(tab))return 'calendar';
   if(tab==='manage')return ({cleaners:'team',overview:'manage',issues:'issues',supplies:'stock',schedule:'cleaning',contacts:'contacts',notes:'notes'})[manageTab]||'manage';
-  return tab==='review'?'home':tab;
+  return tab==='review'?'manage':tab;
+}
+function renderWorkspaceSidebarLink(item){
+  return '<button class="workspace-sidebar-link" id="workspace-side-'+item[0]+'" onclick="workspaceNavigate(\''+item[1]+'\',\''+item[2]+'\')">'+workspaceIcon(item[3])+'<span>'+item[4]+'</span></button>';
 }
 function initializeWorkspaceSidebar(){
   const sidebar=document.getElementById('workspace-sidebar');if(!sidebar)return;
+  let appLinks='';
   let h='<div class="workspace-sidebar-head"><span class="workspace-brand">SeraVillas</span><button class="workspace-icon" id="workspace-sidebar-close" onclick="setWorkspaceSidebar(true)" aria-label="Hide navigation" title="Hide navigation" aria-controls="workspace-sidebar">'+workspaceIcon('close')+'</button></div><nav class="workspace-sidebar-nav" aria-label="All categories">';
   WORKSPACE_NAV_GROUPS.forEach(function(group){
+    if(group[0]==='App'){appLinks+=group[1].map(renderWorkspaceSidebarLink).join('');return;}
     h+='<div class="workspace-sidebar-group"><div class="workspace-sidebar-heading">'+group[0]+'</div>';
-    group[1].forEach(function(item){
-      h+='<button class="workspace-sidebar-link" id="workspace-side-'+item[0]+'" onclick="workspaceNavigate(\''+item[1]+'\',\''+item[2]+'\')">'+workspaceIcon(item[3])+'<span>'+item[4]+'</span></button>';
-    });
+    h+=group[1].map(renderWorkspaceSidebarLink).join('');
     h+='</div>';
   });
-  sidebar.innerHTML=h+'</nav><div class="workspace-sidebar-footer">Property management</div>';
+  sidebar.innerHTML=h+'</nav><nav class="workspace-sidebar-footer" aria-label="App controls">'+appLinks+'</nav>';
   applyWorkspaceSidebar();
 }
 function updateWorkspaceNav(){
@@ -76,11 +81,16 @@ function updateWorkspaceNav(){
   });});
 }
 initializeWorkspaceSidebar();
+const WORKSPACE_CATEGORY_DESCRIPTIONS={
+  home:'Arrivals, departures & priorities',calendar:'Timeline, month & booking tools',cleaning:'Schedule, coverage & assignments',tasks:'Tasks & property projects',properties:'Villa details, photos & property work',reports:'Revenue, channels & villa performance',team:'Cleaners & individual logins',manage:'Operations summary & weekly review',issues:'Repairs, priorities & progress',stock:'Supplies & stock levels',contacts:'Service providers & directory',notes:'Your operations scratchpad',settings:'Preferences, backups & cloud access'
+};
 function openWorkspaceMenu(){
-  const items=[['home','','home','Today','Arrivals, departures & priorities'],['tasks','','tasks','Tasks','Property work & projects'],['properties','','property','Properties','Villas, records & settings'],['booking-report','','report','Reports','Bookings & revenue'],['manage','cleaners','team','Team','Cleaners & individual access'],['manage','overview','settings','Manage','Issues, stock, contacts & notes']];
-  let h='<div class="modal-title">Your workspace</div><div class="sv-subtitle">Everything you need to manage your villas.</div><div class="workspace-menu">';
-  items.forEach(function(item){h+='<button onclick="workspaceNavigate(\''+item[0]+'\',\''+item[1]+'\')">'+workspaceIcon(item[2])+'<span>'+item[3]+'<small>'+item[4]+'</small></span></button>';});
-  h+='</div><div class="workspace-menu-footer"><span class="sv-subtitle">'+(DEV_MODE?'Sample data · cloud sync disabled':'Your changes sync across devices')+'</span><button class="sv-btn sv-btn-secondary" onclick="syncNow()"'+(DEV_MODE?' disabled':'')+'>Sync now</button></div>';
+  let h='<div class="modal-title">Your workspace</div><div class="sv-subtitle">Choose a category.</div>';
+  WORKSPACE_NAV_GROUPS.forEach(function(group){
+    h+='<section class="workspace-menu-group"><h2>'+group[0]+'</h2><div class="workspace-menu">';
+    group[1].forEach(function(item){h+='<button onclick="workspaceNavigate(\''+item[1]+'\',\''+item[2]+'\')">'+workspaceIcon(item[3])+'<span>'+item[4]+'<small>'+WORKSPACE_CATEGORY_DESCRIPTIONS[item[0]]+'</small></span></button>';});
+    h+='</div></section>';
+  });
   showModal(h);
 }
 function calendarFilterLabel(){

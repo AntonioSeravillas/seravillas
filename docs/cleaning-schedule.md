@@ -2,7 +2,7 @@
 
 ## Manager workflow
 
-Open **Manage → Schedule**. Select any week (including 2027), filter by villa, and switch between **Daily plan** and **By cleaner**.
+Open **Cleaning** (or **More → Cleaning** on phones). Select any week (including 2027), filter by villa, and switch between **Daily plan** and **By cleaner**.
 
 Each cleaning shows its time, checkout time, next arrival, confirmed/offered staff, and how many people are still needed. Existing `cleanerIds` assignments count as confirmed; explicit crew assignments preserve their offered/confirmed/cancelled status. Alina's allocated team spots also appear in the cleaner grid.
 
@@ -14,7 +14,7 @@ Use **Assign team** to offer work and confirm assignments. The app checks same-d
 
 The separate `cleaner/` page shows the full team schedule and a villa calendar with arrival/departure times. It loads only the restricted API; it never loads the manager app, historical booking imports, or the manager access key.
 
-The cloud database is active in production (see [cloud rollout](cloudflare-rollout.md)). Open **Manage → Cleaners → Cleaner logins**. Create one personal code for each cleaner. Codes are random, shown once, and stored as hashes on the server. Share each code privately yourself. Replacing or disabling a code stops further cloud access with the old code.
+The cloud database is active in production (see [cloud rollout](cloudflare-rollout.md)). In the reorganized workspace, open **Team → Cleaner logins**. Create one personal code for each cleaner. Codes are random, shown once, and stored as hashes on the server. Share each code privately yourself. Replacing or disabling a code stops further cloud access with the old code.
 
 Each account is tied to the existing cleaner ID. The server allows only that person's confirmation, decline and completion actions. Alina's account can update her aggregate team allocation; it cannot change the number of spots. Other people's work, staff assignments, villa details and bookings are manager-only changes.
 

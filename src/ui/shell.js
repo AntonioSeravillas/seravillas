@@ -96,7 +96,11 @@ function _doRender(){
   else if(tab==='tasks')      el.innerHTML=safeRender(renderTasks,'Tasks');
   else if(tab==='manage')     el.innerHTML=safeRender(renderManage,'Manage');
   else if(tab==='review')     el.innerHTML=safeRender(renderReview,'Review');
-  else if(tab==='booking-report'){propsView='report';tab='properties';el.innerHTML=safeRender(renderProperties,'Report');}
+  else if(tab==='booking-report') el.innerHTML=safeRender(renderBookingReport,'Revenue reports');
+  else if(tab==='booking-availability') el.innerHTML=safeRender(renderBookingAvailability,'Availability');
+  else if(tab==='calendar-events') el.innerHTML=safeRender(()=>renderBookingCalendarTool('events'),'Calendar events');
+  else if(tab==='calendar-agenda') el.innerHTML=safeRender(()=>renderBookingCalendarTool('agenda'),'Upcoming agenda');
+  else if(tab==='settings') el.innerHTML=safeRender(renderAppSettings,'Settings');
   else if(tab==='properties') el.innerHTML=propHubId?safeRender(()=>renderPropHub(propHubId),'Properties'):safeRender(renderProperties,'Properties');
   // Restore scroll (same tab) or reset (tab change)
   if(el){
@@ -260,8 +264,7 @@ function runAnimations(){
 
 const SWIPE_TABS={
   tasks:   ['today','ops','growth'],
-  calendar:['timeline','month','week','events'],
-  manage:  ['issues','supplies','notes','schedule'],
+  calendar:['timeline','month'],
 };
 function currentSubTab(){
   if(tab==='tasks')   return tasksTab;
@@ -324,6 +327,7 @@ function toggleTheme(){
   if(meta)meta.setAttribute('content',next==='light'?'#F5F6F7':'#191C1F');
   updateThemeBtn();
   toast(next==='light'?'Light mode ☀️':'Dark mode 🌙',2000);
+  if(tab==='settings')render();
 }
 function updateThemeBtn(){
   const btn=document.getElementById('theme-btn');

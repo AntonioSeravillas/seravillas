@@ -22,6 +22,8 @@ Cross-file functions and state remain global for compatibility with inline HTML 
 | `features/home.js` | Home dashboard and operations overview |
 | `features/reports.js` | Weekly review, booking reports, quick-add menu |
 | `features/calendar.js` | Calendar, event views, timeline, booking actions, WhatsApp draft helpers |
+| `features/booking-tools.js` | Existing availability calculation and gap display; agenda/event page wrappers |
+| `features/settings.js` | App preferences, backup/storage controls, sync status and manager access |
 | `features/tasks.js` | Task views, project views, task editing and photos |
 | `features/cleanings.js` | Crew requirements, capacity, assignment, cleaner schedules |
 | `features/cleaning-planner.js` | Pure cleaning projections, manager daily plan and missing checkout work |
@@ -39,6 +41,8 @@ Cross-file functions and state remain global for compatibility with inline HTML 
 | `ui/voice.js` | Local voice parser, exact property aliases, preview and command execution |
 
 Some related actions are still in shared files because this stage preserves the original declaration and event-registration order. Move them into their owning feature gradually when those features are changed and tested. Do not create empty placeholder modules for future features.
+
+The current UI gives each category its own page; see [the category guide](categories.md). Revenue renders directly through `booking-report`, with no Properties wrapper. Legacy `manageTab` routes retain compatibility with existing dashboard links while showing only their own content. Weekly review remains implemented in `reports.js` but opens under Overview. The sidebar and phone category dialog share one navigation registry. App administration controls have moved out of Properties into Settings, and the existing gap analysis is in Booking tools.
 
 ## Cancellation revenue
 

@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="./assets/css/fonts.css?v=20261001-design">
 <link rel="stylesheet" href="./assets/css/app.css?v=20261002-polish">
 <link rel="stylesheet" href="./assets/css/cleaning-planner.css?v=20261001-design">
-<link rel="stylesheet" href="./assets/css/workspace.css?v=20261002-sidebar">
+<link rel="stylesheet" href="./assets/css/workspace.css?v=20261002-categories">
 </head>
 <body class="workspace">
 <!-- ── Setup screen (shown on first open / no secret saved) ── -->
@@ -61,24 +61,26 @@
 <input type="file" id="issue-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleIssuePhoto(event)">
 <input type="file" id="task-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleTaskPhoto(event)">
 <script src="./src/dev-seed.js"></script>
-<script src="./src/state/store.js?v=20261002-top-tabs"></script>
+<script src="./src/state/store.js?v=20261002-categories"></script>
 <script src="./src/data/local-data.js"></script>
 <script src="./src/utils/dates.js"></script>
-<script src="./src/ui/shell.js?v=20261002-top-tabs"></script>
-<script src="./src/ui/workspace.js?v=20261002-sidebar"></script>
+<script src="./src/ui/shell.js?v=20261002-categories"></script>
+<script src="./src/ui/workspace.js?v=20261002-categories"></script>
 <script src="./src/features/home.js"></script>
 <script src="./src/ui/voice.js"></script>
-<script src="./src/features/reports.js?v=20261001-1"></script>
-<script src="./src/features/calendar.js?v=20261002-top-tabs"></script>
+<script src="./src/features/reports.js?v=20261002-categories"></script>
+<script src="./src/features/calendar.js?v=20261002-categories"></script>
+<script src="./src/features/booking-tools.js?v=20261002-categories"></script>
 <script src="./src/features/tasks.js"></script>
 <script src="./src/features/cleaning-planner.js?v=20261001-cleaning"></script>
 <script src="./src/features/cleanings.js?v=20261001-cleaning"></script>
 <script src="./src/features/issues.js"></script>
-<script src="./src/features/manage.js?v=20261001-team"></script>
-<script src="./src/features/properties.js?v=20261001-cleaning"></script>
+<script src="./src/features/manage.js?v=20261002-categories"></script>
+<script src="./src/features/properties.js?v=20261002-categories"></script>
+<script src="./src/features/settings.js?v=20261002-categories"></script>
 <script src="./src/ui/actions.js?v=20261002-top-tabs"></script>
 <script src="./src/data/sync-merge.js?v=20261001-team"></script>
-<script src="./src/data/cloud-sync.js?v=20261001-team"></script>
+<script src="./src/data/cloud-sync.js?v=20261002-categories"></script>
 <script src="./src/auth/cleaner-access.js?v=20261001-team"></script>
 <script src="./src/auth/session.js?v=20261002-top-tabs"></script>
 <script src="./src/data/legacy-booking-migrations.js?v=20261001-retired"></script>

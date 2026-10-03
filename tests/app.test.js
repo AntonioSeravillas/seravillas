@@ -121,7 +121,62 @@ test('desktop navigation preference survives reload without changing records or 
   reloaded.run("workspaceNavigate('manage','supplies')");
   assert.equal(reloaded.run('workspaceCurrentCategory()'),'stock');
   reloaded.run("tab='properties';propsView='report';propHubId=null");
+  assert.equal(reloaded.run('workspaceCurrentCategory()'),'properties');
+  reloaded.run("workspaceNavigate('booking-report')");
   assert.equal(reloaded.run('workspaceCurrentCategory()'),'reports');
+});
+
+test('revenue and property categories render independently without moving or editing records', () => {
+  const app=runtime();
+  const before=app.run('JSON.stringify(D)');
+  // Rendering-side browser helpers are verified in the browser; exercise the real route and page renderers here.
+  app.run('updateBadge=function(){};updateWorkspaceNav=function(){};revealActiveTabs=function(){};attachSwipeNav=function(){};runAnimations=function(){};');
+  app.run("workspaceNavigate('booking-report');_doRender()");
+  assert.equal(app.run('tab'),'booking-report');
+  const report=app.run("document.getElementById('content').innerHTML");
+  assert.match(report,/Revenue reports/);assert.match(report,/Monthly revenue/);
+  assert.doesNotMatch(report,/propsView=|exportData\(\)|openExcelImport\(\)|Upcoming gaps/);
+  app.run("workspaceNavigate('properties');propsView='report';_doRender()");
+  const properties=app.run("document.getElementById('content').innerHTML");
+  assert.match(properties,/ph-prop-card/);
+  assert.doesNotMatch(properties,/Revenue reports|propsView=|Data &amp; Backup|Storage used|Cloud Sync|openExcelImport\(\)|requestNotif\(\)/);
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.requests.length,0);
+});
+
+test('reorganized pages retain backup, sync, access, import and management actions in their own categories', () => {
+  const app=runtime();
+  const before=app.run('JSON.stringify(D)');
+  app.run("SV_STORAGE.setItem(DB+'_beforeExcelImport','SYNTHETIC_SNAPSHOT');settingsView='backups'");
+  const backups=app.run('renderAppSettings()');
+  for(const action of ['exportData()','restoreBackup()','import-file','restoreBeforeExcelImport()'])assert.ok(backups.includes(action),action);
+  assert.match(backups,/Storage used/);assert.doesNotMatch(backups,/openExcelImport\(\)/);
+  app.run("settingsView='preferences'");assert.match(app.run('renderAppSettings()'),/requestNotif\(\)/);
+  app.run("settingsView='sync'");assert.match(app.run('renderAppSettings()'),/syncNow\(\)/);
+  const hosted=runtime({host:'antonioseravillas.github.io',protocol:'https:',boot:false});
+  hosted.run("settingsView='sync'");assert.match(hosted.run('renderAppSettings()'),/resetAccess\(\)/);
+  app.run("manageTab='cleaners'");
+  const team=app.run('renderManage()');
+  assert.match(team,/openCleanerAccess\(\)/);assert.match(team,/openAddCleanerModal\(\)/);
+  assert.doesNotMatch(team,/manageTab=/);
+  app.run('openCalendarActions()');
+  const bookingTools=app.run("document.getElementById('modal-root').innerHTML");
+  for(const action of ['openExcelImport()','openBookingAvailability()','calendar-events','calendar-agenda','showScheduleModal()'])assert.ok(bookingTools.includes(action),action);
+  app.run('openWorkspaceMenu()');
+  assert.match(app.run("document.getElementById('modal-root').innerHTML"),/workspaceNavigate\('settings'/);
+  assert.equal(app.run('JSON.stringify(D)'),before);assert.equal(app.requests.length,0);
+});
+
+test('availability stays in Booking tools and does not treat cancelled stays as occupied or change the report year', () => {
+  const app=runtime({boot:false});
+  app.run("D.props=[{id:'p',name:'Villa Test'}];D.bookings=[{id:'active',propId:'p',checkIn:'2027-01-02',checkOut:'2027-01-05',status:'confirmed'},{id:'cancelled',propId:'p',checkIn:'2027-01-05',checkOut:'2027-01-12',status:'cancelled'}];reportYear=2026;calView='month';calY=2027");
+  const before=app.run('JSON.stringify(D)');
+  app.run('openBookingAvailability()');
+  assert.equal(app.run('availabilityYear'),2027);assert.equal(app.run('reportYear'),2026);
+  assert.equal(app.run('workspaceCurrentCategory()'),'calendar');
+  assert.ok(plain(app.run('bookingGapSummary(2027).allGaps')).some(g=>g.from==='2027-01-05'));
+  assert.match(app.run('renderBookingAvailability()'),/Upcoming gaps/);
+  assert.equal(app.run('JSON.stringify(D)'),before);assert.equal(app.requests.length,0);
 });
 
 test('monthly stay lanes handle overlaps, checkout exclusivity and year boundaries without editing bookings', () => {

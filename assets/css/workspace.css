@@ -233,3 +233,25 @@ html[data-theme] .workspace .tl-bk-blocked{background:var(--surface2);border-col
   .workspace-badge{min-width:16px;font-size:9px;padding:2px 3px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Each category keeps its own controls; app-wide utilities live in Settings. */
+.workspace-menu-group{margin-top:22px}
+.workspace-menu-group h2{font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--text3);margin:0 0 9px}
+.workspace-menu-group .workspace-menu{margin-top:0}
+@media(min-width:1024px){.workspace-sidebar-footer{padding:8px 12px}.workspace-sidebar-footer .workspace-sidebar-link{margin:0}}
+.settings-page .sv-tabs{margin-bottom:20px}
+.settings-content{max-width:920px;display:grid;gap:16px}
+.settings-card h2{font-size:16px;font-weight:600;margin:0 0 8px;letter-spacing:-.2px}
+.settings-card h3{font-size:13px;font-weight:600;margin:0 0 8px}
+.settings-help{font-size:12px;color:var(--text2);line-height:1.65;margin:8px 0 14px;overflow-wrap:anywhere}
+.settings-help:last-child{margin-bottom:0}
+.settings-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.settings-state{font-size:13px;color:var(--teal-text)}
+.settings-divider{border-top:1px solid var(--border);padding-top:16px;margin-top:16px}
+.settings-storage-track{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden;max-width:260px}
+.settings-storage-track div{height:100%;border-radius:99px;background:var(--accent)}
+.settings-sync{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12px}
+.settings-sync button{margin-left:auto}
+.category-year{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;font-family:'DM Mono',monospace}
+.revenue-header{gap:12px;flex-wrap:wrap}
+@media(max-width:767px){.settings-actions .sv-btn{font-size:12px}.settings-card{padding:18px}.settings-page>.sv-tabs .sv-tab{padding:10px 12px;white-space:nowrap}.settings-sync button{margin-left:0}.category-year .cal-nav{width:32px;height:32px}.revenue-header .sv-title{font-size:23px}}

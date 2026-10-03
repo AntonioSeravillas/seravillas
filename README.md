@@ -8,6 +8,8 @@ Open this repository folder. The workspace redesign is being reviewed locally on
 
 On desktop, the left sidebar lists all categories. Its **Hide navigation** button expands the workspace; the header menu button reopens it. This preference stays on your device. Phones retain the top tabs.
 
+Each category opens its own page. Reports contains revenue reporting; Properties contains villa information. App preferences, backups, storage, sync and access controls live in **Settings**, pinned at the bottom of the desktop sidebar and available through **More** on phones. See [the category guide](docs/categories.md).
+
 ## Development preview
 
 In the VS Code terminal, run:
@@ -42,6 +44,8 @@ To reset the fictional data, remove only the `seravillas_dev:` entries in your b
 | `cloudflare/` | Worker source and new D1 schema |
 | `src/utils/dates.js` | Calendar and date helpers |
 | `src/features/` | Home, calendar/bookings, tasks, cleanings, issues, management, properties, reports |
+| `src/features/settings.js` | App preferences, backups/storage, cloud status and manager access controls |
+| `src/features/booking-tools.js` | Availability/gaps and wrappers for the existing agenda and calendar events |
 | `src/ui/` | Navigation, theme, animations, modals, shared actions, voice commands |
 | `src/imports/excel-bookings.js` | Workbook parsing, booking matching, and import planning |
 | `assets/vendor/sheetjs/` | Local workbook parser and license notices |
@@ -57,23 +61,23 @@ Some script URLs have a `?v=` release suffix so returning browsers fetch the upd
 
 ## Import bookings from Excel
 
-Open **More → Properties → Import bookings from Excel** in the local preview. Choose the workbook, match its villa sheets, review changes, and resolve flagged rows before applying. The importer keeps IDs, notes, cancelled history, and cleaning links; a pre-import backup supports rollback. Your workbook stays unchanged. See [the step-by-step import guide](docs/excel-import.md).
+Open **Bookings → Booking tools (the three-dot button) → Import bookings from Excel** in the local preview. Choose the workbook, match its villa sheets, review changes, and resolve flagged rows before applying. The importer keeps IDs, notes, cancelled history, and cleaning links; a pre-import backup supports rollback. Your workbook stays unchanged. See [the step-by-step import guide](docs/excel-import.md).
 
 The importer handles 2026 and 2027 bookings. Confirm the year, review the dates and resolve any mismatch with the workbook nights before applying. Selecting a workbook only prepares a review; applying in development stays local. Production application uses the existing cloud save process. Keep private workbooks and app exports outside Git.
 
 ## View next year in the calendar
 
-In **Calendar → Timeline**, use **Go to month** to select a month in 2027. The timeline opens at that month and includes the following bookings and cleanings. **Today** returns to the current date. Changing this view does not edit booking data.
+In **Bookings → Timeline**, use **Go to month** to select a month in 2027. The timeline opens at that month and includes the following bookings and cleanings. **Today** returns to the current date. Changing this view does not edit booking data.
 
 ## Cancelled bookings and retained payments
 
-In **Properties → Revenue**, expand **Cancelled bookings — money retained**, open the booking, and choose **Edit**. Enter the amount actually kept under **Money retained after cancellation (€)**. Use 0 for a full refund, the full booking price for a fully paid late cancellation, or the amount kept after a partial refund.
+In **Reports**, expand **Cancelled bookings — money retained**, open the booking, and choose **Edit**. Enter the amount actually kept under **Money retained after cancellation (€)**. Use 0 for a full refund, the full booking price for a fully paid late cancellation, or the amount kept after a partial refund.
 
 Retained money contributes to total, monthly, platform/agency and property revenue in the originally scheduled check-in month. Cancelled stays do not contribute to booking counts, average booking value, occupancy, booked nights or checkout cleanings. A cancelled booking's original price alone does not count as revenue. Excel updates and backups preserve the recorded retained amount; restoring a booking counts its active price once.
 
 ## Cleaning schedule and cleaner access
 
-Open the **Cleaning** top tab (or **More → Manage → Schedule**) to plan any week, filter villas, review staff confirmations and cover missing checkout cleanings. The **Daily plan** and **By cleaner** views use the same assignment records. See [the cleaning guide](docs/cleaning-schedule.md).
+Open the **Cleaning** category (or **More → Cleaning** on phones) to plan any week, filter villas, review staff confirmations and cover missing checkout cleanings. The **Daily plan** and **By cleaner** views use the same assignment records. Cleaner roster and login controls live in **Team**. See [the cleaning guide](docs/cleaning-schedule.md).
 
 Open <http://127.0.0.1:5500/cleaner/> for the separate fictional cleaner preview. It shows the full team schedule and villa calendar; each sample cleaner updates only her own assignments. The Cloudflare D1 database is activated and verified in production ([status and rollback](docs/cloudflare-rollout.md)). Cleaner codes are created by the manager in **More → Team → Cleaner logins**; local previews and tests never create real accounts.
 

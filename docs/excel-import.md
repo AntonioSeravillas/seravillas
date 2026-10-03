@@ -3,7 +3,7 @@
 ## Use the importer
 
 1. Start the local preview from VS Code as described in the README.
-2. Open **Properties → Import bookings from Excel** and choose the RESERVES `.xlsx` workbook.
+2. Open **Bookings → Booking tools (three-dot button) → Import bookings from Excel** and choose the RESERVES `.xlsx` workbook.
 3. Confirm **Import year** (2026 or 2027). The most common supported arrival year in the workbook is suggested; review it before applying. Match every sheet to its villa. Existing exact villa names are matched automatically. In an empty/sample workspace, choose **Create [villa]** when appropriate.
 4. Review **New**, **Updates**, **Unchanged**, **Review**, and **Excluded** counts. Open **All bookings** to inspect every row.
 5. Resolve flagged dates, cancellation markers, uncertain matches, and missing prices. For a missing price, enter the value and click **Use this price**. Zero is a valid price. Unknown is a separate choice.
@@ -12,7 +12,7 @@
 
 The local preview has a visible development label and disabled cloud sync. The workbook is read in the browser; selecting it does not upload it. Applying records to production subsequently sends the normal app dataset to its existing Worker.
 
-The **Import backup** button under Data & Backup opens the existing JSON restore workflow. It replaces the whole dataset after confirmation; use workbook import for normal booking updates. A private copy of a live backup can be restored into a separate localhost preview for comparison without contacting production.
+The **Import backup** button under **Settings → Data & backups** opens the existing JSON restore workflow. It replaces the whole dataset after confirmation; use workbook import for normal booking updates. **Restore before last Excel import** is also in that Settings section when a snapshot exists. A private copy of a live backup can be restored into a separate localhost preview for comparison without contacting production.
 
 ## Supported workbook format
 

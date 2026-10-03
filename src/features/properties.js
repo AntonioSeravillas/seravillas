@@ -18,13 +18,6 @@ function phStripItem(val,label,color){
 }
 
 function renderProperties(){
-  // Sub-tabs: Properties | Report
-  const subTabs='<div class="sv-tabs" style="margin-bottom:20px">'
-    +'<button class="sv-tab'+(propsView==='list'?' active':'')+'" onclick="propsView=\'list\';render()">Properties</button>'
-    +'<button class="sv-tab'+(propsView==='report'?' active':'')+'" onclick="propsView=\'report\';render()">Revenue</button>'
-    +'</div>';
-  if(propsView==='report') return subTabs+renderBookingReport();
-
   // Property cards
   const td=today();
   const _sChipCls={occupied:'ph-status-occupied',checkin:'ph-status-checkin',checkout:'ph-status-checkout',empty:'ph-status-empty'};
@@ -62,44 +55,12 @@ function renderProperties(){
       +'</div>';
   }).join('');
 
-  const notifPerm='Notification' in window?Notification.permission:'unsupported';
-  const notifHtml=notifPerm==='granted'
-    ?'<div style="font-size:13px;color:var(--accent);font-weight:600">Reminders enabled ✓</div>'
-    :notifPerm==='denied'
-    ?'<div style="font-size:13px;color:var(--danger,var(--red));font-weight:500">Blocked — allow in Settings → Safari</div>'
-    :'<button class="sv-btn sv-btn-secondary sv-btn-sm" onclick="requestNotif()">Enable day-before reminders</button>';
-
-  return subTabs
-    +'<div class="sv-page-header" style="margin-bottom:16px">'
+  return '<div class="sv-page-header" style="margin-bottom:16px">'
     +'<div class="sv-page-heading"><div class="sv-title">Properties</div><div class="sv-subtitle">Tap a villa to view sessions, tasks and issues</div></div>'
     +'<div class="sv-actions"><button class="sv-btn sv-btn-primary sv-btn-sm" onclick="document.getElementById(\'prop-in\').focus()">+ Villa</button></div>'
     +'</div>'
     +(D.props.length===0?'<div class="sv-empty"><div class="sv-empty-title">No properties yet</div><div class="sv-empty-sub">Add your first villa below.</div></div>':pCards)
-    +'<div style="margin-bottom:20px"><div class="input-row"><input type="text" id="prop-in" placeholder="Add new property..."><button class="sv-btn sv-btn-primary sv-btn-sm" onclick="addProp()">Add</button></div></div>'
-    +'<div class="sv-card" style="margin-bottom:10px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Reminders</div>'
-    +notifHtml+'</div>'
-    +'<div class="sv-card" style="margin-bottom:10px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px">Data &amp; Backup</div>'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-    +'<div><div style="font-size:13px;font-weight:600;color:var(--text)">Storage used</div>'
-    +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+getDataSizeKB()+' KB of ~5,000 KB</div></div>'
-    +'<div style="background:var(--surface2);border-radius:99px;height:6px;width:80px;overflow:hidden"><div style="height:100%;background:var(--accent);border-radius:99px;width:'+Math.min(100,Math.round(getDataSizeKB()/50))+'%"></div></div>'
-    +'</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-    +'<button class="sv-btn sv-btn-primary sv-btn-sm" style="flex:1" onclick="exportData()">⬇ Export</button>'
-    +'<button class="sv-btn sv-btn-ghost sv-btn-sm" style="flex:1" onclick="restoreBackup()">↩ Restore</button>'
-    +'<button class="sv-btn sv-btn-ghost sv-btn-sm" style="flex:1" onclick="document.getElementById(\'import-file\').click()">Import backup</button>'
-    +'</div>'
-    +(SV_STORAGE.getItem(BACKUP_DATE_KEY)?'<div style="font-size:11px;color:var(--accent);font-weight:600">✓ Auto-backup from '+SV_STORAGE.getItem(BACKUP_DATE_KEY)+'</div>':'<div style="font-size:11px;color:var(--text3)">No auto-backup yet</div>')
-    +'</div>'
-    +'<button class="sv-btn sv-btn-secondary sv-btn-sm" style="width:100%;margin-bottom:10px" onclick="openExcelImport()">Import bookings from Excel</button>'
-    +(SV_STORAGE.getItem(DB+'_beforeExcelImport')?'<button class="sv-btn sv-btn-ghost sv-btn-sm" style="width:100%;margin-bottom:20px" onclick="restoreBeforeExcelImport()">Restore before last Excel import</button>':'')
-    +'<div class="sv-card">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px">Cloud Sync</div>'
-    +'<div class="sync-bar" style="margin-bottom:10px"><div class="sync-dot '+syncStatus+'" id="sync-dot-props"></div><span id="sync-label-props">'+(DEV_MODE?'Cloud sync disabled (development preview)':{idle:'Not synced',syncing:'Syncing…',ok:'Synced',error:'Sync failed'}[syncStatus])+'</span><button class="sync-btn" onclick="syncNow()"'+(DEV_MODE?' disabled title="Cloud sync is disabled in the development preview" style="opacity:.5;cursor:not-allowed"':'')+'>Sync now</button></div>'
-    +(DEV_MODE?'<div style="font-size:11px;color:var(--text3)">Development preview — no access key needed. Data stays in this browser only.</div>':'<button class="sv-btn sv-btn-ghost sv-btn-sm" onclick="resetAccess()">Sign out / change access key</button>')
-    +'</div>';
+    +'<div style="margin-bottom:20px"><div class="input-row"><input type="text" id="prop-in" placeholder="Add new property..."><button class="sv-btn sv-btn-primary sv-btn-sm" onclick="addProp()">Add</button></div></div>';
 }
 
 

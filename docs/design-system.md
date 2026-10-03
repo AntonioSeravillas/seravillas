@@ -36,7 +36,9 @@ Light is the default for new visitors. Saved `sv_theme` preferences remain respe
 - Phones and smaller tablets retain **Bookings / Cleaning / More** at the top; the desktop sidebar preference does not affect them. Phones have a wordmark/tools row and a navigation row.
 - Bookings opens Timeline by default. Switching Timeline/Month retains the selected month.
 - Cleaning directly renders the existing weekly planner, including Daily plan and By cleaner.
-- More opens a dialog with Today, Tasks, Properties, Reports, Team and Manage. Existing Manage subsections remain accessible.
+- More opens a grouped dialog with every category, using the same registry as the desktop sidebar. Team, Issues, Stock, Contacts, Notes and Overview open their own pages without the former mixed management tab strip.
+- Reports renders revenue reporting directly; Properties holds villa information and related records. Settings is pinned to the desktop sidebar footer and contains Preferences, Data & backups, and Sync & access. See [the category guide](categories.md) for the complete feature inventory.
+- Bookings' three-dot Booking tools menu retains imports, availability/gaps, agenda, events and calendar shortcuts. Weekly review stays under Overview.
 - Cleaner: Schedule and Calendar stay in the top header on phones and laptops. The former bottom navigation is hidden. Role-specific controls and API access are unchanged.
 
 ## Calendar and pop-ups

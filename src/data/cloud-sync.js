@@ -6,8 +6,8 @@ function rememberCloud(base,etag){SV_STORAGE.setItem(DB+'_cloudState',JSON.strin
 function localCloudSave(){SV_STORAGE.setItem(DB,JSON.stringify(D));}
 function setSyncStatus(s,label){
   if(DEV_MODE){s='idle';label='Cloud sync disabled';}syncStatus=s;
-  ['sync-dot','sync-dot-mobile'].forEach(id=>{const el=document.getElementById(id);if(el)el.className='sync-dot '+s;});
-  const lbl=document.getElementById('sync-label');if(lbl)lbl.textContent=label||{idle:'Not synced',syncing:'Syncing…',ok:'Synced',error:'Sync failed'}[s]||s;
+  ['sync-dot','sync-dot-mobile','sync-dot-settings'].forEach(id=>{const el=document.getElementById(id);if(el)el.className='sync-dot '+s;});
+  ['sync-label','sync-label-settings'].forEach(id=>{const lbl=document.getElementById(id);if(lbl)lbl.textContent=label||{idle:'Not synced',syncing:'Syncing…',ok:'Synced',error:'Sync failed'}[s]||s;});
 }
 function showCloudConflict(remote,etag,base){
   cloudConflict={remote,etag,base};setSyncStatus('error','Sync needs review');

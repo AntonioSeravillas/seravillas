@@ -54,10 +54,6 @@ function renderAdd(){
 
 /* ── MANAGE TAB ── */
 function renderManage(){
-  const tabs=[['overview','Overview'],['cleaners','Cleaners'],['issues','Issues'],['supplies','Stock'],['schedule','Schedule'],['contacts','Contacts'],['notes','Notes']];
-  const tabsHtml='<div class="sv-tabs" style="margin-bottom:20px">'
-    +tabs.map(function(t){return'<button class="sv-tab'+(manageTab===t[0]?' active':'')+'" onclick="manageTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')
-    +'</div>';
   let body='';
   if(manageTab==='overview')      body=renderManageOverview();
   else if(manageTab==='cleaners') body=renderManageCleaners();
@@ -66,7 +62,7 @@ function renderManage(){
   else if(manageTab==='schedule') body=renderCleanerSchedule();
   else if(manageTab==='contacts') body=renderManageContacts();
   else                            body=renderScratch();
-  return tabsHtml+body;
+  return body;
 }
 function renderManageOverview(){
   const td=today();
@@ -75,7 +71,7 @@ function renderManageOverview(){
   const openTasks=D.tasks.filter(t=>!t.done).length;
   const lowStock=D.supplies.filter(s=>s.have<s.need).length;
   const upcomingCleans=D.sessions.filter(s=>s.date>=td&&s.status==='scheduled').length;
-  return'<div class="sv-page-header" style="margin-bottom:18px"><div class="sv-page-heading"><div class="sv-title">Overview</div><div class="sv-subtitle">Property operations at a glance</div></div></div>'
+  return'<div class="sv-page-header" style="margin-bottom:18px"><div class="sv-page-heading"><div class="sv-title">Overview</div><div class="sv-subtitle">Property operations at a glance</div></div><button class="sv-btn sv-btn-secondary sv-btn-sm" onclick="workspaceNavigate(\'review\')">Weekly review</button></div>'
     +'<div class="ops-grid">'
     +opsCard('Open Issues','<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',openI,'',urgentI?urgentI+' urgent':null,'issues')
     +opsCard('Pending Tasks','<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',openTasks,'','',null)

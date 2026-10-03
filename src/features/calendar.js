@@ -2,14 +2,21 @@
 function renderCalendar(){
   if(calView!=='month')calView='timeline';
   let h='<div class="sv-page booking-page"><div class="sv-page-header"><div class="sv-page-heading"><div class="sv-title">Bookings</div><div class="sv-subtitle">Your villas, stays and daily operations.</div></div>'
-    +'<div class="sv-actions"><button class="sv-btn sv-btn-secondary" onclick="openAddSessModal()">+ Cleaning</button><button class="sv-btn sv-btn-primary" onclick="openAddBookingModal()">+ Booking</button><button class="workspace-icon" aria-label="Calendar actions" title="Calendar actions" onclick="openCalendarActions()">'+workspaceIcon('more')+'</button></div></div>'
+    +'<div class="sv-actions"><button class="sv-btn sv-btn-secondary" onclick="openAddSessModal()">+ Cleaning</button><button class="sv-btn sv-btn-primary" onclick="openAddBookingModal()">+ Booking</button><button class="workspace-icon" aria-label="Booking tools" title="Booking tools" onclick="openCalendarActions()">'+workspaceIcon('more')+'</button></div></div>'
     +'<div class="booking-toolbar"><div class="sv-tabs" aria-label="Calendar view"><button class="sv-tab'+(calView==='timeline'?' active':'')+'" aria-pressed="'+(calView==='timeline')+'" onclick="switchCalendarView(\'timeline\')">Timeline</button><button class="sv-tab'+(calView==='month'?' active':'')+'" aria-pressed="'+(calView==='month')+'" onclick="switchCalendarView(\'month\')">Month</button></div>'
     +'<div class="booking-filter"><button class="sv-btn sv-btn-secondary" onclick="openCalendarFilters()" aria-haspopup="dialog">'+workspaceIcon('filter')+esc(calendarFilterLabel())+'</button></div></div>';
   h+=calView==='month'?renderCalendarMonth():renderCalendarTimeline();
   return h+'</div>';
 }
 function openCalendarActions(){
-  showModal('<div class="modal-title">Calendar actions</div><div class="filter-options"><button class="filter-option" onclick="closeModal();openAddSessModal()">+ Add cleaning</button><button class="filter-option" onclick="closeModal();openAddCalEvent(today())">+ Add calendar event</button><button class="filter-option" onclick="closeModal();showScheduleModal()">Share cleaning schedule</button></div>');
+  showModal(`<div class="modal-title">Booking tools</div><div class="filter-options">
+    <button class="filter-option" onclick="closeModal();openExcelImport()">Import bookings from Excel</button>
+    <button class="filter-option" onclick="openBookingAvailability()">Availability &amp; gaps</button>
+    <button class="filter-option" onclick="workspaceNavigate('calendar-agenda')">Upcoming agenda</button>
+    <button class="filter-option" onclick="workspaceNavigate('calendar-events')">Calendar events</button>
+    <button class="filter-option" onclick="closeModal();openAddSessModal()">+ Add cleaning</button>
+    <button class="filter-option" onclick="closeModal();openAddCalEvent(today())">+ Add calendar event</button>
+    <button class="filter-option" onclick="closeModal();showScheduleModal()">Share cleaning schedule</button></div>`);
 }
 /* ── EVENTS VIEW ── */
 const EVENT_CATS={
