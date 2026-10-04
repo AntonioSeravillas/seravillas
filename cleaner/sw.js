@@ -1,6 +1,21 @@
 /* Only this cleaner folder is controlled. API responses are never cached here. */
-const CACHE='seravillas-cleaner-20261002-categories';
-const FILES=['./','./index.html','../assets/css/fonts.css?v=20261001-design','../assets/css/app.css','../assets/css/workspace.css?v=20261002-categories','../assets/css/cleaner-portal.css?v=20261002-access','../assets/fonts/plus-jakarta-sans-latin.woff2','../assets/fonts/plus-jakarta-sans-latin-ext.woff2','../assets/fonts/dm-mono-400-latin.woff2','../assets/fonts/dm-mono-400-latin-ext.woff2','../assets/fonts/dm-mono-500-latin.woff2','../assets/fonts/dm-mono-500-latin-ext.woff2','../src/cleaner/portal.js?v=20261002-top-tabs'];
+const CACHE='seravillas-cleaner-20261004-operations';
+const FILES=[
+  './','./index.html',
+  '../assets/css/fonts.css?v=20261004-operations',
+  '../assets/css/app.css',
+  '../assets/css/workspace.css?v=20261004-operations',
+  '../assets/css/cleaner-portal.css?v=20261002-access',
+  '../assets/fonts/manrope-latin-variable.woff2',
+  '../assets/fonts/manrope-latin-ext-variable.woff2',
+  '../assets/fonts/plus-jakarta-sans-latin.woff2',
+  '../assets/fonts/plus-jakarta-sans-latin-ext.woff2',
+  '../assets/fonts/dm-mono-400-latin.woff2',
+  '../assets/fonts/dm-mono-400-latin-ext.woff2',
+  '../assets/fonts/dm-mono-500-latin.woff2',
+  '../assets/fonts/dm-mono-500-latin-ext.woff2',
+  '../src/cleaner/portal.js?v=20261004-operations'
+];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('seravillas-cleaner-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{

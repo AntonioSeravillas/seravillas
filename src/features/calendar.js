@@ -1,12 +1,15 @@
 /* ── CALENDAR ── */
 function renderCalendar(){
   if(calView!=='month')calView='timeline';
+  const operations=bookingOperations();
   let h='<div class="sv-page booking-page"><div class="sv-page-header"><div class="sv-page-heading"><div class="sv-title">Bookings</div><div class="sv-subtitle">Your villas, stays and daily operations.</div></div>'
-    +'<div class="sv-actions"><button class="sv-btn sv-btn-secondary" onclick="openAddSessModal()">+ Cleaning</button><button class="sv-btn sv-btn-primary" onclick="openAddBookingModal()">+ Booking</button><button class="workspace-icon" aria-label="Booking tools" title="Booking tools" onclick="openCalendarActions()">'+workspaceIcon('more')+'</button></div></div>'
+    +'<div class="sv-actions"><button class="sv-btn sv-btn-primary" onclick="openAddBookingModal()">'+workspaceIcon('plus')+'New booking</button><button class="workspace-icon" aria-label="Booking tools" title="Booking tools" onclick="openCalendarActions()">'+workspaceIcon('more')+'</button></div></div>';
+  h+=renderOperationsNotice(operations);
+  h+='<section class="ops-panel ops-calendar" aria-label="Villa schedule"><div class="ops-panel-head"><h2>Villa schedule</h2><span class="ops-period">'+esc(operations.range.label)+'</span></div>'
     +'<div class="booking-toolbar"><div class="sv-tabs" aria-label="Calendar view"><button class="sv-tab'+(calView==='timeline'?' active':'')+'" aria-pressed="'+(calView==='timeline')+'" onclick="switchCalendarView(\'timeline\')">Timeline</button><button class="sv-tab'+(calView==='month'?' active':'')+'" aria-pressed="'+(calView==='month')+'" onclick="switchCalendarView(\'month\')">Month</button></div>'
     +'<div class="booking-filter"><button class="sv-btn sv-btn-secondary" onclick="openCalendarFilters()" aria-haspopup="dialog">'+workspaceIcon('filter')+esc(calendarFilterLabel())+'</button></div></div>';
   h+=calView==='month'?renderCalendarMonth():renderCalendarTimeline();
-  return h+'</div>';
+  return h+'</section>'+renderOperationsList(operations)+'</div>';
 }
 function openCalendarActions(){
   showModal(`<div class="modal-title">Booking tools</div><div class="filter-options">
@@ -351,7 +354,7 @@ function renderCalendarTimeline(){
   // ── Property rows ──
   props.forEach(prop=>{
     const clr=propBarColor(prop.id);
-    const bks=D.bookings.filter(b=>
+    const bks=calFilter==='cleanings'?[]:D.bookings.filter(b=>
       b.propId===prop.id&&
       b.status!=='cancelled'&&
       b.checkIn<=winEnd&&b.checkOut>winStart

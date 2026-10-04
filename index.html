@@ -5,16 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#191E21">
 <script src="./src/config.js?v=20260930-1"></script>
 <script src="./src/storage.js"></script>
-<script>(function(){var t=SV_STORAGE.getItem('sv_theme')||'light';document.documentElement.setAttribute('data-theme',t);if(t==='light'){document.querySelector('meta[name="theme-color"]')&&document.querySelector('meta[name="theme-color"]').setAttribute('content','#F5F6F7');}})()</script>
+<script>(function(){var t=SV_STORAGE.getItem('sv_theme')||'light';document.documentElement.setAttribute('data-theme',t);if(t==='light'){document.querySelector('meta[name="theme-color"]')&&document.querySelector('meta[name="theme-color"]').setAttribute('content','#EDF1F2');}})()</script>
 <script>(function(){try{if(SV_STORAGE.getItem('sv_sidebar_collapsed')==='1')document.documentElement.classList.add('workspace-sidebar-collapsed');}catch(e){}})()</script>
 <title>SeraVillas</title>
-<link rel="stylesheet" href="./assets/css/fonts.css?v=20261001-design">
+<link rel="stylesheet" href="./assets/css/fonts.css?v=20261004-operations">
 <link rel="stylesheet" href="./assets/css/app.css?v=20261002-polish">
 <link rel="stylesheet" href="./assets/css/cleaning-planner.css?v=20261001-design">
-<link rel="stylesheet" href="./assets/css/workspace.css?v=20261002-categories">
+<link rel="stylesheet" href="./assets/css/workspace.css?v=20261004-operations">
 </head>
 <body class="workspace">
 <!-- ── Setup screen (shown on first open / no secret saved) ── -->
@@ -45,6 +45,7 @@
     <button class="workspace-tab" id="workspace-more" onclick="openWorkspaceMenu()" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>More<span id="tasks-badge" class="workspace-badge" style="display:none"></span></button>
   </nav>
   <div class="workspace-tools">
+    <button class="sv-btn sv-btn-primary workspace-create" onclick="openWorkspaceCreate()" aria-label="Create" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Create</span></button>
     <div class="workspace-sync" role="status"><span class="sync-dot idle" id="sync-dot"></span><span id="sync-label">Not synced</span></div>
     <div class="header-date" id="header-date"></div>
     <button class="workspace-icon" id="refresh-btn" onclick="refreshApp()" title="Refresh data" aria-label="Refresh data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L21 10"/></svg></button>
@@ -64,12 +65,13 @@
 <script src="./src/state/store.js?v=20261002-categories"></script>
 <script src="./src/data/local-data.js"></script>
 <script src="./src/utils/dates.js"></script>
-<script src="./src/ui/shell.js?v=20261002-categories"></script>
-<script src="./src/ui/workspace.js?v=20261002-categories"></script>
+<script src="./src/ui/shell.js?v=20261004-operations"></script>
+<script src="./src/ui/workspace.js?v=20261004-operations"></script>
 <script src="./src/features/home.js"></script>
 <script src="./src/ui/voice.js"></script>
 <script src="./src/features/reports.js?v=20261002-categories"></script>
-<script src="./src/features/calendar.js?v=20261002-categories"></script>
+<script src="./src/features/calendar.js?v=20261004-operations"></script>
+<script src="./src/features/booking-operations.js?v=20261004-operations"></script>
 <script src="./src/features/booking-tools.js?v=20261002-categories"></script>
 <script src="./src/features/tasks.js"></script>
 <script src="./src/features/cleaning-planner.js?v=20261001-cleaning"></script>

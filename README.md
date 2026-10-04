@@ -10,6 +10,8 @@ On desktop, the left sidebar lists all categories. Its **Hide navigation** butto
 
 Each category opens its own page. Reports contains revenue reporting; Properties contains villa information. App preferences, backups, storage, sync and access controls live in **Settings**, pinned at the bottom of the desktop sidebar and available through **More** on phones. See [the category guide](docs/categories.md).
 
+The selected **Operations workspace** design is now applied locally: cool grey canvas, white panels, dark rounded buttons, self-hosted Manrope, muted villa colours and dark mode. Bookings opens the existing Timeline, with Month alongside it. A coverage notice and compact cleaning list follow the selected month and villa, with direct links to the original crew and checkout planning controls. **Create** collects the existing add/import actions. See [the design system](docs/design-system.md).
+
 ## Development preview
 
 In the VS Code terminal, run:
@@ -33,6 +35,7 @@ To reset the fictional data, remove only the `seravillas_dev:` entries in your b
 | `index.html` | Page shell and script loading order |
 | `assets/css/app.css` | Existing feature layouts and base components |
 | `assets/css/workspace.css`, `src/ui/workspace.js` | Shared light/dark design, collapsible desktop sidebar, phone top tabs, calendar filters and month stay bars |
+| `src/features/booking-operations.js` | Read-only booking-month coverage and cleaning list; routes edits to the existing planner |
 | `src/app.js` | Startup only |
 | `src/config.js`, `src/storage.js` | Environment detection and isolated browser storage |
 | `src/dev-seed.js` | Fictional preview records |

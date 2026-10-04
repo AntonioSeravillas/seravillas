@@ -103,6 +103,61 @@ test('workspace opens with the villa timeline and changes views without losing t
   assert.equal(app.run('JSON.stringify(D)'),before);assert.equal(app.requests.length,0);
 });
 
+test('operations coverage follows the selected month and villa, keeps offered crew pending and leaves records untouched', () => {
+  const app=runtime({boot:false});
+  app.run(`D={props:[{id:'mar',name:'Villa Mar'},{id:'other',name:'Test villa'}],cleaners:[{id:'a',name:'Ana'},{id:'b',name:'Bea'},{id:'c',name:'Cora'},{id:'d',name:'Dina'}],tasks:[],events:[],bookings:[
+    {id:'linked',propId:'mar',checkIn:'2027-06-30',checkOut:'2027-07-09',linkedCleaningId:'offered'},
+    {id:'missing',propId:'mar',checkIn:'2027-07-10',checkOut:'2027-07-17'},
+    {id:'cancel',propId:'mar',status:'cancelled',checkIn:'2027-07-02',checkOut:'2027-07-05'},
+    {id:'otherstay',propId:'other',checkIn:'2027-07-01',checkOut:'2027-07-08',linkedCleaningId:'otherclean'}
+  ],sessions:[
+    {id:'offered',propId:'mar',date:'2027-07-09',status:'scheduled',crew:{main:[{cleanerId:'a',status:'confirmed'},{cleanerId:'b',status:'offered'}]}},
+    {id:'done',propId:'mar',date:'2027-07-02',status:'done'},
+    {id:'cancelclean',propId:'mar',date:'2027-07-03',status:'cancelled'},
+    {id:'outside',propId:'mar',date:'2027-08-01',status:'scheduled'},
+    {id:'otherclean',propId:'other',date:'2027-07-08',status:'scheduled',cleanerIds:['d']}
+  ]};calTimelineDate='2027-07-01';calFilter='prop-mar';`);
+  const before=app.run('JSON.stringify(D)'),data=plain(app.run('bookingOperations()'));
+  assert.deepEqual(data.sessions.map(s=>s.id),['done','offered']);
+  assert.deepEqual(data.crewNeeds.map(s=>s.id),['offered']);
+  assert.deepEqual(data.checkouts.map(c=>c.bookingId),['missing']);
+  assert.equal(app.run("getMissingCrewCount(D.sessions[0])"),3);
+  app.run("calView='month';calY=2027;calM=7;");
+  assert.deepEqual(plain(app.run('bookingOperations().sessions.map(s=>s.id)')),['outside']);
+  assert.equal(app.run('bookingOperations().checkouts.length'),0);
+  assert.equal(app.run('JSON.stringify(D)'),before);
+  assert.equal(app.requests.length,0);
+});
+
+test('coverage review opens the actual cleaning when a checkout has an outdated link and no same-day candidate', () => {
+  const app=runtime({boot:false});
+  app.run(`D={props:[{id:'p',name:'Test villa'}],cleaners:[],tasks:[],events:[],bookings:[{id:'b',propId:'p',checkIn:'2027-02-01',checkOut:'2027-02-04',linkedCleaningId:'moved'}],sessions:[{id:'moved',propId:'p',date:'2027-02-05',status:'scheduled'}]};calView='month';calY=2027;calM=1;calFilter='all';`);
+  const review=plain(app.run('bookingOperations().checkouts[0]'));
+  assert.equal(review.kind,'review');assert.deepEqual(review.candidateIds,[]);
+  assert.match(app.run('operationsRow({date:bookingOperations().checkouts[0].date,checkout:bookingOperations().checkouts[0]},true)'),/openSessModal\('moved'\)/);
+  assert.deepEqual(plain(app.run('bookingOperationsWindow()')),{start:'2027-02-01',end:'2027-02-28',label:'February 2027'});
+});
+
+test('opening the cleaning planner keeps the calendar month and villa without modifying app records', () => {
+  const app=runtime();
+  const before=app.run('JSON.stringify(D)');
+  app.run("calTimelineDate='2027-08-01';calFilter='prop-'+D.props[0].id;openOperationsSchedule()");
+  assert.equal(app.run('tab'),'cleaning');assert.equal(app.run('schedPropFilter'),app.run('D.props[0].id'));
+  assert.equal(app.run('addDays(startOfWeek(),schedWeekOffset*7)'),app.run("startOfWeek('2027-08-01')"));
+  assert.equal(app.run('calTimelineDate'),'2027-08-01');
+  assert.equal(app.run('JSON.stringify(D)'),before);assert.equal(app.requests.length,0);
+});
+
+test('Cleanings only removes stay bars from the timeline without changing the booking records', () => {
+  const app=runtime();
+  const before=app.run('JSON.stringify(D)');
+  app.run("calFilter='cleanings';calTimelineDate=today()");
+  const timeline=app.run('renderCalendarTimeline()');
+  assert.doesNotMatch(timeline,/data-bk=/);
+  assert.match(timeline,/tl-clean-stripe/);
+  assert.equal(app.run('JSON.stringify(D)'),before);
+});
+
 test('desktop navigation preference survives reload without changing records or calendar context', () => {
   const records=new Map([['sv_sidebar_collapsed','0']]);
   const app=runtime({records});

@@ -1,5 +1,7 @@
 /* Presentation and navigation only. Booking, cleaning and sync records retain their existing models. */
 function workspaceIcon(name){
+  if(name==='plus')return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  if(name==='arrow')return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
   const paths={calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 11h18"/>',cleaning:'<path d="m8 15 9-12M5 13l6 4-3 5H2l3-9ZM17 3l3 2"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',home:'<path d="m3 10 9-7 9 7v10H3ZM9 20v-7h6v7"/>',tasks:'<path d="m9 11 3 3 9-10M21 12v8H3V4h11"/>',property:'<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5M9 8h.01M15 8h.01M9 12h.01M15 12h.01"/>',report:'<path d="M4 3v18h17M9 16v-5M14 16V7M19 16v-8"/>',team:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M17 15a4 4 0 0 1 4 4v2"/>',settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',issues:'<path d="m12 3 10 18H2L12 3ZM12 9v4M12 17h.01"/>',stock:'<path d="m3 7 9-4 9 4v10l-9 4-9-4V7ZM3 7l9 4 9-4M12 11v10M7 5l10 4"/>',contacts:'<rect x="5" y="3" width="16" height="18" rx="2"/><path d="M3 7h4M3 12h4M3 17h4M10 17h6"/><circle cx="13" cy="10" r="2"/>',notes:'<path d="M14 3H5v18h14V8l-5-5ZM14 3v5h5M9 12h6M9 16h6"/>',close:'<path d="M8 4H4v16h4M11 12h10m-6-5-5 5 5 5"/>',filter:'<path d="M4 7h16M7 12h10M10 17h4"/>'};
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[name]||paths.calendar)+'</svg>';
 }
@@ -33,6 +35,8 @@ try{workspaceSidebarCollapsed=SV_STORAGE.getItem('sv_sidebar_collapsed')==='1';}
 
 function applyWorkspaceSidebar(){
   document.documentElement.classList.toggle('workspace-sidebar-collapsed',workspaceSidebarCollapsed);
+  const sidebar=document.getElementById('workspace-sidebar');
+  if(sidebar){if(workspaceSidebarCollapsed)sidebar.setAttribute('inert','');else sidebar.removeAttribute?.('inert');}
   const opener=document.getElementById('workspace-sidebar-open');
   if(opener)opener.setAttribute('aria-expanded',String(!workspaceSidebarCollapsed));
 }
@@ -81,6 +85,14 @@ function updateWorkspaceNav(){
   });});
 }
 initializeWorkspaceSidebar();
+/* The timeline uses different date/label widths on phones. Rebuild only when that breakpoint changes. */
+let workspaceWideTimeline=window.innerWidth>=768;
+if(typeof window.addEventListener==='function')window.addEventListener('resize',function(){
+  const wide=window.innerWidth>=768;
+  if(wide===workspaceWideTimeline)return;
+  workspaceWideTimeline=wide;
+  if(tab==='calendar'&&calView==='timeline')render();
+});
 const WORKSPACE_CATEGORY_DESCRIPTIONS={
   home:'Arrivals, departures & priorities',calendar:'Timeline, month & booking tools',cleaning:'Schedule, coverage & assignments',tasks:'Tasks & property projects',properties:'Villa details, photos & property work',reports:'Revenue, channels & villa performance',team:'Cleaners & individual logins',manage:'Operations summary & weekly review',issues:'Repairs, priorities & progress',stock:'Supplies & stock levels',contacts:'Service providers & directory',notes:'Your operations scratchpad',settings:'Preferences, backups & cloud access'
 };
@@ -92,6 +104,12 @@ function openWorkspaceMenu(){
     h+='</div></section>';
   });
   showModal(h);
+}
+function openWorkspaceCreate(){
+  const items=[['calendar','New booking','Add a stay to the villa calendar','openAddBookingModal()'],['cleaning','Plan cleaning','Choose the villa, window and team','openAddSessModal()'],['tasks','New task','Create property or team work','openNewTaskModal()'],['calendar','Calendar event','Add maintenance, meetings or deliveries','openAddCalEvent(today())'],['calendar','Import bookings','Review your Excel workbook','openExcelImport()']];
+  let h='<div class="modal-title">Create</div><div class="create-menu">';
+  items.forEach(item=>h+='<button onclick="closeModal();'+item[3]+'"><span class="create-icon">'+workspaceIcon(item[0])+'</span><span><strong>'+item[1]+'</strong><small>'+item[2]+'</small></span>'+workspaceIcon('arrow')+'</button>');
+  showModal(h+'</div>');
 }
 function calendarFilterLabel(){
   if(calFilter==='cleanings')return 'Cleanings only';

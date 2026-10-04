@@ -250,14 +250,12 @@ function resetCounterIfNeeded(){
 }
 
 // Master — called after every render
+let workspaceAnimationCategory='';
 function runAnimations(){
-  resetCounterIfNeeded();
-  animateTabEnter();
+  const category=workspaceCurrentCategory();
+  if(category!==workspaceAnimationCategory){animateTabEnter();workspaceAnimationCategory=category;}
   requestAnimationFrame(()=>{
-    staggerCards();
-    attachNavRipple();
     attachSegPills();
-    if(tab==='home')setTimeout(animateCounters,60);
   });
 }
 
@@ -324,7 +322,7 @@ function toggleTheme(){
   SV_STORAGE.setItem('sv_theme',next);
   // update theme-color meta for mobile browser chrome
   const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta)meta.setAttribute('content',next==='light'?'#F5F6F7':'#191C1F');
+  if(meta)meta.setAttribute('content',next==='light'?'#EDF1F2':'#191E21');
   updateThemeBtn();
   toast(next==='light'?'Light mode ☀️':'Dark mode 🌙',2000);
   if(tab==='settings')render();

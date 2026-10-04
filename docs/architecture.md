@@ -22,6 +22,7 @@ Cross-file functions and state remain global for compatibility with inline HTML 
 | `features/home.js` | Home dashboard and operations overview |
 | `features/reports.js` | Weekly review, booking reports, quick-add menu |
 | `features/calendar.js` | Calendar, event views, timeline, booking actions, WhatsApp draft helpers |
+| `features/booking-operations.js` | Read-only selected-month cleaning coverage and list; existing crew/checkout planner actions remain responsible for edits |
 | `features/booking-tools.js` | Existing availability calculation and gap display; agenda/event page wrappers |
 | `features/settings.js` | App preferences, backup/storage controls, sync status and manager access |
 | `features/tasks.js` | Task views, project views, task editing and photos |
