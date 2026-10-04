@@ -4,13 +4,13 @@ A web app for managing holiday villas, bookings, cleaning schedules, tasks, issu
 
 ## Open the project in VS Code
 
-Open this repository folder. The workspace redesign is being reviewed locally on `top-tabs-redesign`. It has not been published.
+Open this repository folder. The Operations workspace release is maintained on `top-tabs-redesign`; GitHub Pages publishes the manager and cleaner pages from `main`.
 
 On desktop, the left sidebar lists all categories. Its **Hide navigation** button expands the workspace; the header menu button reopens it. This preference stays on your device. Phones retain the top tabs.
 
 Each category opens its own page. Reports contains revenue reporting; Properties contains villa information. App preferences, backups, storage, sync and access controls live in **Settings**, pinned at the bottom of the desktop sidebar and available through **More** on phones. See [the category guide](docs/categories.md).
 
-The selected **Operations workspace** design is now applied locally: cool grey canvas, white panels, dark rounded buttons, self-hosted Manrope, muted villa colours and dark mode. Bookings opens the existing Timeline, with Month alongside it. A coverage notice and compact cleaning list follow the selected month and villa, with direct links to the original crew and checkout planning controls. **Create** collects the existing add/import actions. See [the design system](docs/design-system.md).
+The selected **Operations workspace** design uses a cool grey canvas, white panels, dark rounded buttons, self-hosted Manrope, muted villa colours and dark mode. Bookings opens the existing Timeline, with Month alongside it. A coverage notice and compact cleaning list follow the selected month and villa, with direct links to the original crew and checkout planning controls. **Create** collects the existing add/import actions. See [the design system](docs/design-system.md).
 
 ## Development preview
 

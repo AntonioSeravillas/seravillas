@@ -2,7 +2,7 @@
 
 ## Operations workspace — local review, 4 October 2026
 
-Antonio selected the Finom-inspired **Operations workspace** concept after reviewing three interactive directions. It uses a cool grey canvas/sidebar, white 22px panels, charcoal pill buttons, Manrope typography, outline icons and muted sage, lilac, sand and other villa colours. Dark mode has matching tokens. The opening screen remains the existing villa-and-date timeline; Month is an alternative. Calendar details open as pop-ups. Desktop retains the collapsible category sidebar; phones retain top tabs. This branch has not been published.
+Antonio selected the Finom-inspired **Operations workspace** concept after reviewing three interactive directions. It uses a cool grey canvas/sidebar, white 22px panels, charcoal pill buttons, Manrope typography, outline icons and muted sage, lilac, sand and other villa colours. Dark mode has matching tokens. The opening screen remains the existing villa-and-date timeline; Month is an alternative. Calendar details open as pop-ups. Desktop retains the collapsible category sidebar; phones retain top tabs. The release changes the shared frontend design; the existing Cloudflare Worker and database schema remain unchanged.
 
 The reference came from Antonio's screenshot and Finom's public dashboard tour; its signed-in app was unavailable. Motion is our proposed interaction design, not a claim to reproduce Finom's private animations.
 
