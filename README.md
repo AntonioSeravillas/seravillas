@@ -4,9 +4,9 @@ A web app for managing holiday villas, bookings, cleaning schedules, tasks, issu
 
 ## Open the project in VS Code
 
-Open this repository folder. The Operations workspace release is maintained on `top-tabs-redesign`; GitHub Pages publishes the manager and cleaner pages from `main`.
+Open this repository folder. GitHub Pages publishes the manager and cleaner pages from `main`. Use a separate working branch for new changes.
 
-On desktop, the left sidebar lists all categories. Its **Hide navigation** button expands the workspace; the header menu button reopens it. This preference stays on your device. Phones retain the top tabs.
+On desktop, the left sidebar lists all categories. Its **Hide navigation** button expands the workspace; the header menu button reopens it. This preference stays on your device. Phones use a floating bottom menu with **Home, Calendar, Tasks and More**. More opens every category, including Cleaning and Team.
 
 Each category opens its own page. Reports contains revenue reporting; Properties contains villa information. App preferences, backups, storage, sync and access controls live in **Settings**, pinned at the bottom of the desktop sidebar and available through **More** on phones. See [the category guide](docs/categories.md).
 
@@ -34,7 +34,7 @@ To reset the fictional data, remove only the `seravillas_dev:` entries in your b
 | --- | --- |
 | `index.html` | Page shell and script loading order |
 | `assets/css/app.css` | Existing feature layouts and base components |
-| `assets/css/workspace.css`, `src/ui/workspace.js` | Shared light/dark design, collapsible desktop sidebar, phone top tabs, calendar filters and month stay bars |
+| `assets/css/workspace.css`, `src/ui/workspace.js` | Shared light/dark design, collapsible desktop sidebar, phone bottom menu, calendar filters and month stay bars |
 | `src/features/booking-operations.js` | Read-only booking-month coverage and cleaning list; routes edits to the existing planner |
 | `src/app.js` | Startup only |
 | `src/config.js`, `src/storage.js` | Environment detection and isolated browser storage |

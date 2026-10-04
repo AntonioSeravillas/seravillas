@@ -27,6 +27,7 @@ Local redesign review, 2 October 2026. Every existing feature has a home; no rec
 - Properties never switches to Revenue based on the legacy `propsView` flag.
 - Management routes retain their existing `manageTab` values for compatibility with existing dashboard shortcuts, but render only the selected category. The old mixed management tab strip is gone.
 - The desktop sidebar and the phone More dialog share `WORKSPACE_NAV_GROUPS`. Every management section and Settings can be opened directly on either device.
+- The phone bottom island has Home, Calendar, Tasks and More. Home opens Today; Calendar opens Bookings and retains Timeline/Month; More opens the grouped category dialog, including Cleaning and Team.
 - Settings is pinned at the bottom of the desktop sidebar. The sidebar remains collapsible.
 - Calendar events, agenda and availability are child routes of Bookings, with a Back to Bookings control. Timeline and Month remain the two main booking views.
 - Weekly review is a child of Overview. Its existing charts and issue navigation are retained.

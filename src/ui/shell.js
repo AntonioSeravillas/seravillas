@@ -33,8 +33,10 @@ function toast(msg,duration){const el=document.getElementById('toast');el.textCo
 
 function updateBadge(){
   const open=D.tasks.filter(t=>(t.priority==='high'||t.urgent)&&!t.done).length+D.issues.filter(i=>i.status==='open').length;
-  const el=document.getElementById('tasks-badge');
-  if(el){if(open>0){el.textContent=open>9?'9+':open;el.style.display='block';}else el.style.display='none';}
+  ['tasks-badge','mobile-tasks-badge'].forEach(function(id){
+    const el=document.getElementById(id);
+    if(el){if(open>0){el.textContent=open>9?'9+':open;el.style.display='block';}else el.style.display='none';}
+  });
   // Sidebar badge
   const sItem=document.getElementById('snav-tasks');
   if(sItem){

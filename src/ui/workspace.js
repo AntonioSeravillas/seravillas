@@ -77,6 +77,12 @@ function updateWorkspaceNav(){
     el.classList.toggle('active',key===current);
     if(key===current)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
   });
+  const mobileCurrent=['home','calendar','tasks'].includes(selected)?selected:'more';
+  ['home','calendar','tasks','more'].forEach(function(key){
+    const el=document.getElementById('workspace-mobile-'+key);if(!el)return;
+    el.classList.toggle('active',key===mobileCurrent);
+    if(key===mobileCurrent)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
+  });
   WORKSPACE_NAV_GROUPS.forEach(function(group){group[1].forEach(function(item){
     const el=document.getElementById('workspace-side-'+item[0]);if(!el)return;
     el.classList.toggle('active',item[0]===selected);

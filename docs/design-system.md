@@ -1,8 +1,8 @@
 # SeraVillas design system
 
-## Operations workspace — local review, 4 October 2026
+## Operations workspace — 4 October 2026
 
-Antonio selected the Finom-inspired **Operations workspace** concept after reviewing three interactive directions. It uses a cool grey canvas/sidebar, white 22px panels, charcoal pill buttons, Manrope typography, outline icons and muted sage, lilac, sand and other villa colours. Dark mode has matching tokens. The opening screen remains the existing villa-and-date timeline; Month is an alternative. Calendar details open as pop-ups. Desktop retains the collapsible category sidebar; phones retain top tabs. The release changes the shared frontend design; the existing Cloudflare Worker and database schema remain unchanged.
+Antonio selected the Finom-inspired **Operations workspace** concept after reviewing three interactive directions. It uses a cool grey canvas/sidebar, white 22px panels, charcoal pill buttons, Manrope typography, outline icons and muted sage, lilac, sand and other villa colours. Dark mode has matching tokens. The opening screen remains the existing villa-and-date timeline; Month is an alternative. Calendar details open as pop-ups. Desktop retains the collapsible category sidebar; phones use a floating bottom menu. The release changes the shared frontend design; the existing Cloudflare Worker and database schema remain unchanged.
 
 The reference came from Antonio's screenshot and Finom's public dashboard tour; its signed-in app was unavailable. Motion is our proposed interaction design, not a claim to reproduce Finom's private animations.
 
@@ -35,7 +35,8 @@ Light is the default for new visitors. Saved `sv_theme` preferences remain respe
 ## Navigation
 
 - Manager desktop (1024px and wider): a 210px left sidebar lists all categories, including individual management sections. **Hide navigation** closes it; the header menu button reopens it. The choice is saved on the device through `SV_STORAGE` as `sv_sidebar_collapsed`, outside synced app records. Closing it expands the content and reveals **Bookings / Cleaning / More** in the header. Hidden navigation is inert. Collapse uses a short width transition; reduced motion disables it.
-- Phones and smaller tablets retain **Bookings / Cleaning / More** at the top; the desktop sidebar preference does not affect them. Phones have a wordmark/tools row and a navigation row.
+- Phones below 768px use a floating bottom island with exactly **Home / Calendar / Tasks / More**, outline icons and a charcoal selected pill (light selected pill in dark mode). The header contains only the wordmark and tools. More opens the category dialog; Cleaning and Team remain available there. The island respects the bottom safe area, and content, toasts and the Home voice button leave room above it. The active item follows the current category: booking child routes select Calendar; other categories select More. The desktop sidebar preference does not affect this menu.
+- Tablets from 768px to 1023px keep **Bookings / Cleaning / More** in the header.
 - Bookings opens Timeline by default. Switching Timeline/Month retains the selected month.
 - Cleaning directly renders the existing weekly planner, including Daily plan and By cleaner.
 - More opens a grouped dialog with every category, using the same registry as the desktop sidebar. Team, Issues, Stock, Contacts, Notes and Overview open their own pages without the former mixed management tab strip.
@@ -69,4 +70,4 @@ Use subtle colour transitions and a short popup fade/lift. Avoid animating opera
 
 ## Remaining workflow work
 
-This stage supplies shared styling, top navigation and the booking calendar. The collapsible desktop sidebar is part of this local review. Dedicated refinements of Today, Tasks, Properties, reports and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.
+This stage supplies shared styling, responsive navigation and the booking calendar. Desktop uses a collapsible sidebar and phones use a bottom island. Dedicated refinements of Today, Tasks, Properties, reports and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.
