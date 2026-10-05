@@ -2,6 +2,8 @@
 
 Choose **Reports** in the sidebar or **More → Reports** on phones. The report uses the existing workspace design and current booking records. Reports and their filters do not save or alter bookings.
 
+Reports tracks **Villa Mar, Villa Marjals, Villa Diagonal and La Forca**. The manager confirmed that Can Vallori is not tracked: its stable property ID is excluded from report capacity, revenue, stays, channels, booking lists and villa filters. Its property record and any other app records are preserved. This report scope is defined in `REPORT_EXCLUDED_VILLA_IDS` in the report feature, not inferred from whether a villa has bookings. Other tracked villas still contribute capacity when empty.
+
 ## Explore the report
 
 - Choose a year, villa and period. Villa and month filters work together.

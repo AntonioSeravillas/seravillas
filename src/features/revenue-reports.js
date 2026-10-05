@@ -1,6 +1,9 @@
 /* Read-only report calculations and drilldowns. Filters never change app records. */
 let reportMonth=null,reportVilla='',reportBookingSearch='',reportBookingStatus='all',reportBookingSort='arrival',reportChart='revenue';
 const REPORT_MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+// Manager-confirmed report scope: Can Vallori remains in app records but is not tracked in Reports.
+const REPORT_EXCLUDED_VILLA_IDS=Object.freeze(['mo4hhdwukkja']);
+function reportProperties(data){return (data.props||[]).filter(p=>!REPORT_EXCLUDED_VILLA_IDS.includes(p.id));}
 
 function reportDay(date){
   if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
@@ -24,9 +27,9 @@ function reportDateRange(b){
 }
 
 function bookingReportData(data,year,month=null,villaId=''){
-  const period=reportPeriod(year,month),properties=(data.props||[]).filter(p=>!villaId||p.id===villaId);
+  const period=reportPeriod(year,month),properties=reportProperties(data).filter(p=>!villaId||p.id===villaId);
   const propertyIds=new Set(properties.map(p=>p.id));
-  const bookings=(data.bookings||[]).filter(b=>!villaId||b.propId===villaId);
+  const bookings=(data.bookings||[]).filter(b=>!REPORT_EXCLUDED_VILLA_IDS.includes(b.propId)&&(!villaId||b.propId===villaId));
   const result={...period,year,month,properties,arrivals:[],cancelled:[],rows:[],revenueCents:0,activeRevenueCents:0,cancellationRevenueCents:0,stayRevenueCents:0,knownPriceCount:0,unknownPrices:0,unknownStayPrices:0,pricedStayNights:0,fullArrivalNights:0,validArrivalDates:0,guestCount:0,unknownGuests:0,invalidDates:0,unassignedStays:0,overlapNights:0,channels:[]};
   const occupied=new Map(),channels=new Map();
   for(const b of bookings){
@@ -85,7 +88,7 @@ function bookingReportData(data,year,month=null,villaId=''){
 }
 
 function revealReportScope(){render();const content=document.getElementById('content');if(content)content.scrollTop=0;}
-function setReportVilla(id){reportVilla=D.props.some(p=>p.id===id)?id:'';revealReportScope();}
+function setReportVilla(id){reportVilla=reportProperties(D).some(p=>p.id===id)?id:'';revealReportScope();}
 function setReportMonth(value){const month=value===''?null:Number(value);if(month!==null&&(!Number.isInteger(month)||month<0||month>11))return;reportMonth=month;revealReportScope();}
 function setReportYear(value){const year=Number(value);if(Number.isInteger(year)&&year>=1900&&year<=2200){reportYear=year;revealReportScope();}}
 function resetReportFilters(){reportVilla='';reportMonth=null;reportBookingSearch='';reportBookingStatus='all';revealReportScope();}
@@ -102,13 +105,14 @@ function renderReportMonthlyChart(months){
 }
 
 function renderDetailedBookingReport(){
-  if(reportVilla&&!D.props.some(p=>p.id===reportVilla))reportVilla='';
+  const trackedProperties=reportProperties(D);
+  if(reportVilla&&!trackedProperties.some(p=>p.id===reportVilla))reportVilla='';
   const summary=currentBookingReport();
   const years=new Set([reportYear,new Date().getFullYear(),new Date().getFullYear()+1]);
-  D.bookings.forEach(b=>{if(reportDay(b.checkIn)!==null)years.add(Number(b.checkIn.slice(0,4)));});
+  D.bookings.forEach(b=>{if(!REPORT_EXCLUDED_VILLA_IDS.includes(b.propId)&&reportDay(b.checkIn)!==null)years.add(Number(b.checkIn.slice(0,4)));});
   let h='<div class="sv-page-header revenue-header"><div class="sv-page-heading"><div class="sv-title">Revenue reports</div><div class="sv-subtitle">Booked prices, occupancy and performance. Explore a villa or month.</div></div>'
     +'<div class="rpt-year"><button class="week-nav-btn" aria-label="Previous revenue year" onclick="setReportYear(reportYear-1)">‹</button><label class="sr-only" for="report-year">Report year</label><select id="report-year" onchange="setReportYear(this.value)">'+[...years].sort((a,b)=>a-b).map(y=>'<option'+(y===reportYear?' selected':'')+'>'+y+'</option>').join('')+'</select><button class="week-nav-btn" aria-label="Next revenue year" onclick="setReportYear(reportYear+1)">›</button></div></div>';
-  h+='<div class="wr-card rpt-filters"><div class="field"><label for="report-villa">Villa</label><select id="report-villa" onchange="setReportVilla(this.value)"><option value="">All villas</option>'+D.props.map(p=>'<option value="'+esc(p.id)+'"'+(reportVilla===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>'
+  h+='<div class="wr-card rpt-filters"><div class="field"><label for="report-villa">Villa</label><select id="report-villa" onchange="setReportVilla(this.value)"><option value="">All villas</option>'+trackedProperties.map(p=>'<option value="'+esc(p.id)+'"'+(reportVilla===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('')+'</select></div>'
     +'<div class="field"><label for="report-month">Period</label><select id="report-month" onchange="setReportMonth(this.value)"><option value=""'+(reportMonth===null?' selected':'')+'>Full year</option>'+REPORT_MONTHS.map((m,i)=>'<option value="'+i+'"'+(reportMonth===i?' selected':'')+'>'+m+'</option>').join('')+'</select></div>'
     +((reportVilla||reportMonth!==null)?'<button class="sv-btn sv-btn-secondary" onclick="resetReportFilters()">All villas / full year</button>':'')+'</div>';
   h+='<div class="rpt-scope" role="status">'+esc(reportScopeLabel())+'</div>';
@@ -151,7 +155,7 @@ function renderDetailedBookingReport(){
   if(summary.cancelled.length){
     h+='<details class="wr-card rpt-definitions"><summary>Cancelled bookings — money retained ('+summary.cancelled.length+')</summary><p>Only the recorded retained amount contributes to booked revenue. Open a booking and choose Edit to record money retained; €0 means a full refund.</p>'+summary.rows.filter(r=>r.cancelled).map(renderReportBookingRow).join('')+'</details>';
   }
-  h+='<details class="wr-card rpt-definitions"><summary>How these figures work</summary><dl><dt>Booked revenue</dt><dd>Current active booking prices plus recorded cancellation money, assigned to the scheduled arrival month. These are booked values; the app does not track payment receipts or expenses.</dd><dt>Stay value in period</dt><dd>Active booking prices divided across their nights. A stay crossing months contributes only the nights inside each month, including stays arriving in a previous year.</dd><dt>Occupancy and available nights</dt><dd>Checkout day is excluded. Each villa night counts once, even if bookings overlap. Every selected villa is assumed available every night; no owner blocks or out-of-service periods are deducted.</dd><dt>Averages</dt><dd>Booking value uses known-price arrivals. Nightly value uses priced stay nights in this period. Value per available night uses all selected villa nights. Missing prices are excluded from averages; a genuine €0 stays included.</dd></dl></details>';
+  h+='<details class="wr-card rpt-definitions"><summary>How these figures work</summary><dl><dt>Tracked villas</dt><dd>Reports tracks '+trackedProperties.map(p=>esc(p.name)).join(', ')+'. Can Vallori is excluded from all report figures and filters.</dd><dt>Booked revenue</dt><dd>Current active booking prices plus recorded cancellation money, assigned to the scheduled arrival month. These are booked values; the app does not track payment receipts or expenses.</dd><dt>Stay value in period</dt><dd>Active booking prices divided across their nights. A stay crossing months contributes only the nights inside each month, including stays arriving in a previous year.</dd><dt>Occupancy and available nights</dt><dd>Checkout day is excluded. Each villa night counts once, even if bookings overlap. Every selected tracked villa is assumed available every night; no owner blocks or out-of-service periods are deducted.</dd><dt>Averages</dt><dd>Booking value uses known-price arrivals. Nightly value uses priced stay nights in this period. Value per available night uses all selected villa nights. Missing prices are excluded from averages; a genuine €0 stays included.</dd></dl></details>';
   return '<div class="sv-page revenue-page">'+h+'</div>';
 }
 

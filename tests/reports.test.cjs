@@ -86,3 +86,20 @@ test('invalid prices and stay dates remain explicit instead of pretending to be 
   assert.equal(api.reportKnownPrice(booking({totalPrice:0})),true);
   assert.equal(api.reportKnownPrice(booking({totalPrice:'100'})),false);
 });
+
+test('Can Vallori is excluded by stable ID from every report measure without changing its records',()=>{
+  const api=runtime(),excluded='mo4hhdwukkja',d=data([
+    booking({id:'tracked',totalPrice:700}),
+    booking({id:'excluded',propId:excluded,totalPrice:10000}),
+    booking({id:'excluded-cancelled',propId:excluded,status:'cancelled',cancellationRevenue:500})
+  ]);
+  d.props.push({id:excluded,name:'Renamed untracked villa'});
+  const original=JSON.stringify(d),summary=api.bookingReportData(d,2027,0);
+  assert.equal(summary.properties.length,2);assert.equal(summary.capacity,62);
+  assert.equal(summary.revenueCents,70000);assert.equal(summary.cancellationRevenueCents,0);
+  assert.equal(summary.bookedNights,7);assert.equal(summary.arrivals.length,1);
+  assert.equal(summary.rows.length,1);assert.equal(summary.channels[0].count,1);
+  assert.equal(api.bookingReportData(d,2027,0,excluded).rows.length,0);
+  assert.equal(api.bookingReportData(d,2027,0,excluded).capacity,0);
+  assert.equal(JSON.stringify(d),original);
+});
