@@ -21,6 +21,7 @@ Cross-file functions and state remain global for compatibility with inline HTML 
 | --- | --- |
 | `features/home.js` | Home dashboard and operations overview |
 | `features/reports.js` | Weekly review, booking reports, quick-add menu |
+| `features/revenue-reports.js` | Read-only villa/month report calculations, charts, channel drilldowns and booking price lists |
 | `features/calendar.js` | Calendar, event views, timeline, booking actions, WhatsApp draft helpers |
 | `features/booking-operations.js` | Read-only selected-month cleaning coverage and list; existing crew/checkout planner actions remain responsible for edits |
 | `features/booking-tools.js` | Existing availability calculation and gap display; agenda/event page wrappers |

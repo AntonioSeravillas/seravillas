@@ -70,4 +70,4 @@ Use subtle colour transitions and a short popup fade/lift. Avoid animating opera
 
 ## Remaining workflow work
 
-This stage supplies shared styling, responsive navigation and the booking calendar. Desktop uses a collapsible sidebar and phones use a bottom island. Dedicated refinements of Today, Tasks, Properties, reports and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.
+This stage supplies shared styling, responsive navigation and the booking calendar. Desktop uses a collapsible sidebar and phones use a bottom island. Reports uses the same panels and controls for villa/month drilldowns, charts and booking prices; see [the report guide](revenue-reports.md). Dedicated refinements of Today, Tasks, Properties and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.

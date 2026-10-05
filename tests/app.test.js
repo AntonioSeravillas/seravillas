@@ -425,11 +425,12 @@ test('paid cancellations stay outside report stay metrics, occupancy and checkou
   assert.match(report,/Includes €2,500\.23 retained from cancelled bookings/);
   assert.match(report,/>1<\/div><div class="wr-stat-l">Bookings/);
   assert.match(report,/>7n<\/div>/);
-  assert.match(report,/>€1,000<\/div><div class="wr-stat-l">Avg booking/);
-  assert.match(report,/>2%<\/div><div class="wr-stat-l">Avg/);
+  assert.match(report,/>€1,000\.00<\/div><div class="wr-stat-l">Avg booking/);
+  // All selected villas count toward capacity, including the villa with no active stays.
+  assert.match(report,/>1%<\/div><div class="wr-stat-l">Occupancy/);
   assert.match(report,/Cancelled Only Villa/);
   assert.match(report,/>0 nights<\/span><span>0 bookings<\/span>/);
-  assert.match(report,/onclick="openBookingDetail\('paid'\)"/);
+  assert.match(report,/data-report-booking="paid" onclick="openBookingDetail\(this.dataset.reportBooking\)"/);
   assert.equal(app.run("propOccupancyStatus('q','2026-09-22').type"),'empty');
   const sessions=app.run('JSON.stringify(D.sessions)');
   app.run("openBookingDetail('paid');scheduleCleanFromBooking('paid')");

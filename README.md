@@ -72,7 +72,11 @@ The importer handles 2026 and 2027 bookings. Confirm the year, review the dates 
 
 In **Bookings → Timeline**, use **Go to month** to select a month in 2027. The timeline opens at that month and includes the following bookings and cleanings. **Today** returns to the current date. Changing this view does not edit booking data.
 
-## Cancelled bookings and retained payments
+## Revenue reports
+
+Reports now supports villa and month drilldowns, revenue/occupancy charts, current booking prices, channel popups, and booking search and sorting. Read [the detailed report guide](docs/revenue-reports.md) for the calculation rules, including revenue by arrival month and stay value allocated across nights.
+
+### Cancelled bookings and retained payments
 
 In **Reports**, expand **Cancelled bookings — money retained**, open the booking, and choose **Edit**. Enter the amount actually kept under **Money retained after cancellation (€)**. Use 0 for a full refund, the full booking price for a fully paid late cancellation, or the amount kept after a partial refund.
 
@@ -93,7 +97,7 @@ Completed guest-row migrations are retired from the current public files. Older 
 Using Node.js in the VS Code terminal:
 
 ```powershell
-node --test tests/app.test.js tests/excel-import.test.js tests/cleaner-backend.test.cjs tests/sync-merge.test.cjs
+node --test tests/app.test.js tests/excel-import.test.js tests/cleaner-backend.test.cjs tests/sync-merge.test.cjs tests/reports.test.cjs
 ```
 
 Use Node.js 24 or newer (the backend checks use the bundled SQLite API). The checks use fictional records, stubbed storage/network, and an in-memory SQLite database. They cover preview isolation and reload persistence, existing production key mappings, date boundaries, exact voice property matching, cleaning crew coverage, and preservation of saved sync/import metadata. The importer checks also cover duplicate prevention, explicit cancellation review, missing prices/counts, stable IDs, stale previews, scope preservation, rollback, and storage failures. They never contact the live Worker. UI rendering is checked separately in the local preview.

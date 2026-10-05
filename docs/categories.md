@@ -10,7 +10,7 @@ Local redesign review, 2 October 2026. Every existing feature has a home; no rec
 | Cleaning | Weekly planning, Daily plan / By cleaner, checkout planning, staff coverage, assignments, confirmations, completion and message drafts |
 | Tasks | Capture, task board/list, property work, projects, growth tasks, photos and completed work |
 | Properties | Villa list, creation/removal, details, photos and notes; each villa hub includes its related bookings, sessions, tasks, issues and history |
-| Reports | Revenue by year/month, channel/agency and villa; booking value, occupancy, booked nights and retained cancellation income |
+| Reports | Clickable villa/month reports, revenue and occupancy charts, channel/agency details, searchable booking prices, stay value, averages and retained cancellation income. See [the report guide](revenue-reports.md). |
 | Team | Cleaner roster, contact details, add/edit/remove staff and individual cleaner logins |
 | Overview | Operations summary and shortcuts; Weekly review keeps completion charts, issue tracking and project progress |
 | Issues | Repairs, status/priority filters, details, photos and resolution |
