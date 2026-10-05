@@ -1,10 +1,10 @@
 /* Only this cleaner folder is controlled. API responses are never cached here. */
-const CACHE='seravillas-cleaner-20261005-reports';
+const CACHE='seravillas-cleaner-20261005-revenue-overview';
 const FILES=[
   './','./index.html',
   '../assets/css/fonts.css?v=20261004-operations',
   '../assets/css/app.css',
-  '../assets/css/workspace.css?v=20261005-reports',
+  '../assets/css/workspace.css?v=20261005-revenue-overview',
   '../assets/css/cleaner-portal.css?v=20261002-access',
   '../assets/fonts/manrope-latin-variable.woff2',
   '../assets/fonts/manrope-latin-ext-variable.woff2',

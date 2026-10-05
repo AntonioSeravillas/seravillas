@@ -189,12 +189,12 @@ test('revenue and property categories render independently without moving or edi
   app.run("workspaceNavigate('booking-report');_doRender()");
   assert.equal(app.run('tab'),'booking-report');
   const report=app.run("document.getElementById('content').innerHTML");
-  assert.match(report,/Revenue reports/);assert.match(report,/Monthly revenue/);
+  assert.match(report,/Revenue &amp; villa performance/);assert.match(report,/Monthly revenue/);
   assert.doesNotMatch(report,/propsView=|exportData\(\)|openExcelImport\(\)|Upcoming gaps/);
   app.run("workspaceNavigate('properties');propsView='report';_doRender()");
   const properties=app.run("document.getElementById('content').innerHTML");
   assert.match(properties,/ph-prop-card/);
-  assert.doesNotMatch(properties,/Revenue reports|propsView=|Data &amp; Backup|Storage used|Cloud Sync|openExcelImport\(\)|requestNotif\(\)/);
+  assert.doesNotMatch(properties,/Revenue &amp; villa performance|propsView=|Data &amp; Backup|Storage used|Cloud Sync|openExcelImport\(\)|requestNotif\(\)/);
   assert.equal(app.run('JSON.stringify(D)'),before);
   assert.equal(app.requests.length,0);
 });
@@ -423,13 +423,14 @@ test('paid cancellations stay outside report stay metrics, occupancy and checkou
     showModal=function(html){window.lastModal=html;};`);
   const report=app.run('renderBookingReport()');
   assert.match(report,/Includes €2,500\.23 retained from cancelled bookings/);
-  assert.match(report,/>1<\/div><div class="wr-stat-l">Bookings/);
-  assert.match(report,/>7n<\/div>/);
-  assert.match(report,/>€1,000\.00<\/div><div class="wr-stat-l">Avg booking/);
+  assert.match(report,/>Bookings<\/div><div class="wr-stat-n">1<\/div>/);
+  app.run('openReportFigures()');
+  assert.match(app.context.lastModal,/>Booked nights<\/span><strong>7 nights<\/strong>/);
+  assert.match(app.context.lastModal,/>Avg booking value<\/span><strong>€1,000\.00<\/strong>/);
   // All selected villas count toward capacity, including the villa with no active stays.
-  assert.match(report,/>1%<\/div><div class="wr-stat-l">Occupancy/);
+  assert.match(report,/>Occupancy<\/div><div class="wr-stat-n">1%<\/div>/);
   assert.match(report,/Cancelled Only Villa/);
-  assert.match(report,/>0 nights<\/span><span>0 bookings<\/span>/);
+  assert.match(report,/>0 bookings<\/span><span>0% occupied<\/span><span>0 nights<\/span>/);
   assert.match(report,/data-report-booking="paid" onclick="openBookingDetail\(this.dataset.reportBooking\)"/);
   assert.equal(app.run("propOccupancyStatus('q','2026-09-22').type"),'empty');
   const sessions=app.run('JSON.stringify(D.sessions)');

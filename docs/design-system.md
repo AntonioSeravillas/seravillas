@@ -71,3 +71,7 @@ Use subtle colour transitions and a short popup fade/lift. Avoid animating opera
 ## Remaining workflow work
 
 This stage supplies shared styling, responsive navigation and the booking calendar. Desktop uses a collapsible sidebar and phones use a bottom island. Reports uses the same panels and controls for villa/month drilldowns, charts and booking prices; see [the report guide](revenue-reports.md). Dedicated refinements of Today, Tasks, Properties and cleaner assignment workflows can follow preview review. The manager's offline page shell remains a separate infrastructure task.
+
+## Reports — Revenue overview, 5 October 2026
+
+Antonio selected **Revenue overview** from three dashboard prototypes, with the existing soft sage chart style as the reference. The report uses a prominent charcoal revenue banner, three white headline metrics, monthly revenue/occupancy bars beside the villa comparison on laptops, and stacked panels on phones. Chart bars have rounded upper corners, concise values above and month labels below; the chart scrolls horizontally on phones. Exact monthly figures remain in the expandable Monthly breakdown. More figures uses the existing accessible popup for secondary metrics. Channel and booking details remain below the overview. The desktop sidebar, phone bottom island and saved dark-mode preference use the existing workspace shell.

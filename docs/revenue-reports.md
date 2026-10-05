@@ -6,9 +6,10 @@ Reports tracks **Villa Mar, Villa Marjals, Villa Diagonal and La Forca**. The ma
 
 ## Explore the report
 
+- The **Revenue overview** dashboard puts total booked revenue in a charcoal banner, followed by bookings, occupancy and average booked-night value. **More figures** opens the additional metrics for the current year/villa/period in a popup. The revenue basis remains booked prices and retained cancellations.
 - Choose a year, villa and period. Villa and month filters work together.
-- Click a villa in Property performance to see only that villa. Click a month or chart bar to see that month's figures and bookings. The view returns to the summary at the top.
-- The annual chart switches between revenue and occupancy. Its monthly rows remain available while exploring a selected month.
+- Click a villa under **By villa** to see only that villa. Click a month or chart bar to see that month's figures and bookings. The view returns to the summary at the top.
+- The annual chart switches between revenue and occupancy. Its soft sage bars have values above and month labels below; on phones the chart scrolls horizontally. **Monthly breakdown** expands all twelve monthly rows, including exact revenue, occupancy, nights and arrivals.
 - Open any channel or agency for a popup containing its revenue and bookings within the selected villa and period.
 - Booking details includes full booking prices, dates, guests, nights inside the period and the value allocated to those nights. Search by guest, villa or channel, filter active/cancelled bookings and sort by arrival or price. Clicking a record opens the existing booking detail popup.
 - **All villas / full year** clears the villa, month, search and status filters.
@@ -29,6 +30,8 @@ Reports tracks **Villa Mar, Villa Marjals, Villa Diagonal and La Forca**. The ma
 | Guests | Known guest counts on active arrivals, with missing counts shown separately. |
 
 These figures are booked values. The app does not record payment receipts or operating expenses, so these reports do not claim to show cash collected or profit. Genuine zero prices remain known; absent, invalid or negative prices are unknown and flagged. Original cancelled prices are never counted as retained income. Dates use UTC day indexes for DST-safe night calculations and Gregorian leap-year rules. Invalid dates and missing villa references are flagged rather than adding invented occupied nights.
+
+The popup labels the existing **Available nights** figure **Unbooked nights**, and **Value per available night** as **Value / calendar night**, to distinguish remaining unsold nights from total capacity. These are presentation labels; their calculation rules are unchanged. **Possible villa nights** shows the denominator explicitly.
 
 The former year-end clipping error is corrected: a stay departing on 1 January includes the night of 31 December. Portfolio occupancy now includes every selected villa, rather than averaging only villas with bookings.
 
