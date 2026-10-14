@@ -1,0 +1,30 @@
+# Merge these sections into the dedicated seravillas profile's config.yaml.
+# Preserve the model/provider selected by hermes model. Do not replace that block.
+platform_toolsets:
+  api_server:
+    - memory
+    - session_search
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+gateway:
+  api_server:
+    max_concurrent_runs: 1
+
+# The DEFAULT Hermes home (%LOCALAPPDATA%\hermes\config.yaml) runs the one shared
+# gateway (`hermes -p default gateway`). Merge these into ITS existing sections,
+# keeping its own model and memory settings:
+#   gateway:
+#     multiplex_profiles: true
+#     api_server:
+#       max_concurrent_runs: 1
+#   platform_toolsets:
+#     api_server: [memory, session_search]
+# Jarvis then reaches this profile at http://127.0.0.1:8642/p/seravillas/
+# with this profile's own API_SERVER_KEY.
+
+# Each Hermes home's private .env (not this file) should contain:
+# API_SERVER_ENABLED=true
+# API_SERVER_HOST=127.0.0.1
+# API_SERVER_PORT=8642
+# API_SERVER_KEY=<a random private key generated on your PC>

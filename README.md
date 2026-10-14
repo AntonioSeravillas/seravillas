@@ -92,12 +92,22 @@ The manager app still supports the existing shared access-key login. The new ser
 
 Completed guest-row migrations are retired from the current public files. Older public Git history may still contain the original embedded rows; this release does not erase historical copies.
 
+## Jarvis from a phone or another computer
+
+Jarvis runs on one PC. The live app on other devices reaches it through the existing Cloudflare Worker: the manager key authenticates those devices, and the PC collects work with its own revocable code (`tools/jarvis/live-relay.mjs`). The PC must stay on and awake, with Jarvis and the relay running. AI WhatsApp drafts, model consent and WhatsApp linking stay on the PC only. See [the live release guide](docs/jarvis-live-release.md) for the deployment steps, data retention, limitations and rollback.
+
 ## Run the checks
 
 Using Node.js in the VS Code terminal:
 
 ```powershell
 node --test tests/app.test.js tests/excel-import.test.js tests/cleaner-backend.test.cjs tests/sync-merge.test.cjs tests/reports.test.cjs
+```
+
+Jarvis and live relay checks (mock Worker, mock PC server, no network):
+
+```powershell
+node --test tests/jarvis.test.cjs tests/jarvis-actions.test.cjs tests/jarvis-workflow.test.cjs tests/jarvis-bridge.test.mjs tests/jarvis-whatsapp.test.mjs tests/jarvis-whatsapp-ui.test.cjs tests/jarvis-relay-worker.test.mjs tests/jarvis-live-relay.test.mjs tests/jarvis-transport.test.cjs
 ```
 
 Use Node.js 24 or newer (the backend checks use the bundled SQLite API). The checks use fictional records, stubbed storage/network, and an in-memory SQLite database. They cover preview isolation and reload persistence, existing production key mappings, date boundaries, exact voice property matching, cleaning crew coverage, and preservation of saved sync/import metadata. The importer checks also cover duplicate prevention, explicit cancellation review, missing prices/counts, stable IDs, stale previews, scope preservation, rollback, and storage failures. They never contact the live Worker. UI rendering is checked separately in the local preview.

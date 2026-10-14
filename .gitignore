@@ -3,3 +3,21 @@
 *.xls
 *.csv
 seravillas-backup-*.json
+
+# Jarvis: private keys, environment files, runtime packages and local state never belong in Git
+.env
+.env.*
+*.pem
+*.key
+node_modules/
+tools/jarvis/whatsapp-runtime/node_modules/
+jarvis-live-relay.json
+jarvis-whatsapp/
+inbox.json
+*.ledger.json
+auth_info*/
+baileys_auth*/
+*.log
+logs/
+.wrangler/
+.dev.vars

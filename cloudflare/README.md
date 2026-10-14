@@ -5,6 +5,8 @@
 - Bindings: existing KV `DB`, new D1 `STAFF_DB`, existing secret `SECRET`.
 - Optional `SITE_TIME_ZONE`: defaults to `Europe/Madrid` for cleaning completion dates.
 
+- Jarvis live relay: `relay_devices` and `relay_jobs` in `STAFF_DB`, created automatically on the first manager relay request. They never touch `app_state` or KV and need no migration. See [the Jarvis live release guide](../docs/jarvis-live-release.md).
+
 Follow [the rollout guide](../docs/cloudflare-rollout.md). Merely committing these files does not deploy Cloudflare. Migration is explicit and requires a fresh, private backup.
 
 Local tests run against an in-memory SQLite database with fictional records; they never connect to Cloudflare.

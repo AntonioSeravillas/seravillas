@@ -1,0 +1,166 @@
+{
+  "name": "Seravillas Jarvis - Hermes pilot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seravillas-jarvis",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "jarvis-webhook",
+      "name": "Jarvis request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "seravillas-jarvis-pilot",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Jarvis webhook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nif (!body || typeof body.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(body.sessionId) || !body.payload || body.payload.model !== 'hermes-agent' || !Array.isArray(body.payload.messages) || body.payload.messages.length !== 2 || body.payload.messages[0].role !== 'system' || body.payload.messages[1].role !== 'user' || body.payload.messages.some(m => typeof m.content !== 'string' || m.content.length > 85000)) throw new Error('Invalid Jarvis request');\nreturn [{json:{sessionId:body.sessionId,payload:{model:'hermes-agent',stream:false,messages:body.payload.messages}}}];"
+      },
+      "id": "jarvis-validate",
+      "name": "Validate request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8642/p/seravillas/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Hermes-Session-Id",
+              "value": "={{ $json.sessionId }}"
+            },
+            {
+              "name": "X-Hermes-Session-Key",
+              "value": "seravillas:antonio"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "timeout": 105000
+        }
+      },
+      "id": "jarvis-hermes",
+      "name": "Ask Hermes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Hermes local API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const value = $input.first().json.choices?.[0]?.message?.content;\nconst reply = Array.isArray(value) ? value.filter(x => x.type === 'text').map(x => x.text).join('\\n') : value;\nif (typeof reply !== 'string' || !reply.trim()) throw new Error('Hermes returned no reply');\nreturn [{json:{reply:reply.slice(0,18000)}}];"
+      },
+      "id": "jarvis-normalize",
+      "name": "Prepare reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "jarvis-respond",
+      "name": "Return to Jarvis",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        960,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Jarvis request": {
+      "main": [
+        [
+          {
+            "node": "Validate request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate request": {
+      "main": [
+        [
+          {
+            "node": "Ask Hermes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Hermes": {
+      "main": [
+        [
+          {
+            "node": "Prepare reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare reply": {
+      "main": [
+        [
+          {
+            "node": "Return to Jarvis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {},
+  "tags": []
+}

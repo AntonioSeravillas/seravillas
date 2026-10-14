@@ -1,0 +1,371 @@
+/* Opt-in Jarvis overlay. Agent replies are text, never executable app actions.
+   Explicit change requests from the user become local review drafts (jarvis-actions.js).
+   Desktop layout: Today/Tasks (left) · ring and voice controls (centre) · conversation and WhatsApp review (right).
+   The voice loop (jarvis-voice.js) starts only when the microphone is tapped and pauses for every reply, review or form. */
+(function(){
+  let root=null,phase='idle',panel=null,mode='local',lines=[],lastReply='',recognizer=null,voice=null,micToken=0,waEmbedded=false;
+  let generation=0,request=null,ringCleanup=null,micStream=null,meterFrame=0,audioContext=null;
+  let speechTimer=null,speechUtterance=null,speechChunks=[],settings={language:'en-GB',muted:false,sounds:true,continuous:true};
+  let health={ready:false,message:'Open the local Jarvis server to connect Hermes.'},requestToken='',sessionId='',returnFocus=null,background=null,wasInert=false;
+  const motion={input:0,output:0,speech:false,inputPulse:-Infinity,outputPulse:-Infinity,measuredOutput:false};
+  const icons={close:'<path d="m6 6 12 12M18 6 6 18"/>',mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',pause:'<path d="M9 6v12M15 6v12"/>',keyboard:'<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16h10"/>',settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',send:'<path d="m6 12 6-6 6 6M12 6v14"/>',speaker:'<path d="m11 4-6 5H2v6h3l6 5V4ZM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"/>'};
+  const svg=(name,size=22)=>'<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[name]+'</svg>';
+  const el=id=>root?.querySelector('#'+id);
+  const desktop=()=>!!window.matchMedia?.('(min-width: 1100px)')?.matches;
+  function newId(){return window.crypto?.randomUUID?.()||'sv-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);}
+  function restoreSession(){try{sessionId=SV_STORAGE.getItem('sv_jarvis_session')||newId();SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{sessionId=newId();}}
+  const LABELS={idle:'At your service',connecting:'Connecting',listening:'Listening',waiting:'Listening',thinking:'Thinking',speaking:'Speaking',paused:'Paused',error:'Paused'};
+  function hintFor(value){
+    if(value==='listening')return 'Speak naturally, then pause.';
+    if(value==='waiting')return voice?.note||'Listening again in a moment.';
+    if(value==='speaking')return 'Tap the microphone to interrupt.';
+    if(value==='thinking')return 'A moment of thought.';
+    if(value==='paused'||value==='error')return voice?.note&&value==='paused'?voice.note:'Tap the microphone to continue.';
+    return settings.continuous?'Conversation mode · ready':'Single reply · ready';
+  }
+  function setPhase(value){
+    phase=value;if(!root)return;
+    el('jarvis-status').textContent=LABELS[value]||LABELS.idle;el('jarvis-hint').textContent=hintFor(value);
+    const mic=el('jarvis-mic'),busy=['listening','waiting','thinking','connecting'].includes(value);
+    mic.classList.toggle('active',busy||value==='speaking');mic.innerHTML=svg(busy?'pause':'mic',24);
+    mic.setAttribute('aria-label',busy?'Pause listening':value==='speaking'?'Interrupt and listen':'Start conversation');
+    root.dataset.phase=value;
+  }
+  function error(text){const target=el('jarvis-error');if(target){target.textContent=text;target.hidden=!text;}}
+  function caption(text){const node=el('jarvis-caption-text');if(node){node.textContent=text;node.hidden=!text;}}
+  function releaseMic(){micToken++;cancelAnimationFrame(meterFrame);micStream?.getTracks().forEach(t=>t.stop());micStream=null;motion.input=0;motion.speech=false;}
+  /* Stops speech and any pending reply, without touching the conversation opt-in. */
+  function cancelReply(){generation++;request?.abort();request=null;clearTimeout(speechTimer);if(speechUtterance){speechUtterance.onstart=speechUtterance.onend=speechUtterance.onerror=speechUtterance.onboundary=null;}speechUtterance=null;speechChunks=[];try{window.speechSynthesis?.cancel();}catch{}}
+  /* Full stop: reply, loop, recognizer and microphone. Used by close, hide, settings, reviews and navigation. */
+  function stop(){cancelReply();clearFocus();voice?.stop();recognizer?.cancel();recognizer=null;releaseMic();setPhase('idle');}
+  /* Explicit pause: always shows Paused, whether or not a voice loop was running. */
+  function pauseVoice(text){cancelReply();clearFocus();voice?.pause(text);recognizer?.cancel();recognizer=null;releaseMic();setPhase('paused');}
+  function prepareAudio(){try{const AC=window.AudioContext||window.webkitAudioContext;if(AC&&(!audioContext||audioContext.state==='closed'))audioContext=new AC();void audioContext?.resume().catch(()=>{});}catch{}}
+  function cue(kind){if(!settings.sounds)return;try{prepareAudio();if(!audioContext)return;const osc=audioContext.createOscillator(),gain=audioContext.createGain(),now=audioContext.currentTime;osc.frequency.setValueAtTime(kind==='ready'?460:680,now);osc.frequency.exponentialRampToValueAtTime(kind==='ready'?690:850,now+.09);gain.gain.setValueAtTime(.025,now);gain.gain.exponentialRampToValueAtTime(.0001,now+.12);osc.connect(gain);gain.connect(audioContext.destination);osc.start();osc.stop(now+.13);osc.onended=()=>{osc.disconnect();gain.disconnect();};}catch{}}
+  /* After the last spoken chunk (or a muted/text reply) the loop may listen again; otherwise Jarvis rests. */
+  function replyDone(){focusReplyDone();if(!voice?.replyFinished())setPhase(phase==='paused'||phase==='error'?phase:'idle');}
+  function speak(text,manual=false){
+    lastReply=text;if(!manual&&settings.muted){replyDone();return;}
+    if(!window.speechSynthesis||!window.SpeechSynthesisUtterance){error('Spoken replies are unavailable in this browser. Your reply is in Conversation.');replyDone();return;}
+    try{window.speechSynthesis.cancel();clearTimeout(speechTimer);const id=generation;const chunks=text.replace(/\n/g,'. ').match(/[^.!?]{1,180}(?:[.!?]|\s|$)|.{1,180}/g)||[text];speechChunks=chunks;
+      /* Once-only: the reply finishes exactly once, and only callbacks from the chunk now playing count. */
+      let finished=false;
+      const finish=message=>{if(finished||id!==generation)return;finished=true;clearTimeout(speechTimer);speechChunks=[];speechUtterance=null;if(message)error(message);if(manual)setPhase('idle');else replyDone();};
+      const next=()=>{if(finished||id!==generation||!root)return;const chunk=speechChunks.shift();if(!chunk){finish('');return;}const u=new SpeechSynthesisUtterance(chunk);speechUtterance=u;u.lang=settings.language;u.rate=.92;const voices=speechSynthesis.getVoices();const v=voices.find(x=>x.lang===settings.language&&/Daniel|George|Microsoft Ryan|Microsoft David/i.test(x.name))||voices.find(x=>x.lang===settings.language);if(v)u.voice=v;
+        let ended=false;const current=()=>!finished&&!ended&&id===generation&&speechUtterance===u;
+        u.onstart=()=>{if(!current())return;clearTimeout(speechTimer);voice?.speaking();setPhase('speaking');motion.outputPulse=performance.now();speechTimer=setTimeout(()=>{if(current()){ended=true;speechSynthesis.cancel();finish('Voice playback stopped. Tap Play reply to try again.');}},30000);};
+        u.onboundary=()=>{if(current())motion.outputPulse=performance.now();};
+        u.onend=()=>{if(!current())return;ended=true;clearTimeout(speechTimer);next();};
+        u.onerror=()=>{if(!current())return;ended=true;finish('Audio could not play. Tap Play reply to enable it.');};
+        speechTimer=setTimeout(()=>{if(current()){ended=true;speechSynthesis.cancel();finish('Tap Play reply to enable spoken audio.');}},6000);speechSynthesis.speak(u);};next();
+    }catch{error('Audio could not start. Your reply is in Conversation.');replyDone();}
+  }
+  function add(role,text){lines.push({role,text});lines=lines.slice(-40);renderTranscript();}
+  function renderTranscript(){const host=el('jarvis-transcript');if(!host)return;host.replaceChildren();if(!lines.length){const empty=document.createElement('p');empty.className='jarvis-empty';empty.textContent='Ask about today’s cleanings, arrivals or tasks.';host.appendChild(empty);}lines.forEach(line=>{const node=document.createElement('div');node.className='jarvis-line'+(line.role==='You'?' you':'');const label=document.createElement('small');label.textContent=line.role;const text=document.createElement('p');text.textContent=line.text;node.append(label,text);host.appendChild(node);});host.scrollTop=host.scrollHeight;}
+  function updateConnection(){if(!root)return;el('jarvis-mode-text').textContent=mode==='hermes'?(health.route==='n8n'?'Hermes · n8n':'Hermes'):'App tools';el('jarvis-mode-dot').classList.toggle('live',mode==='hermes'&&health.ready);el('jarvis-agent-option').disabled=!health.ready;el('jarvis-mode-select').value=mode;el('jarvis-connection-detail').textContent=health.message||'Local Hermes connection ready.';}
+  /* Live app: Jarvis's own calls go through the relay to the Jarvis PC (jarvis-transport.js); preview: same origin. */
+  const transport=()=>window.SV_JARVIS_TRANSPORT||null;
+  const viaRelay=()=>!!transport()?.remote?.();
+  const jarvisFetch=(url,init)=>transport()?transport().fetch(url,init):fetch(url,init);
+  async function checkConnection(){
+    if(!DEV_MODE&&!transport()){health={ready:false,message:'Jarvis on other devices needs the live relay. App tools work here without an AI connection.'};updateConnection();return;}
+    const opened=root;
+    try{const res=await jarvisFetch('/api/jarvis/health',{cache:'no-store',signal:AbortSignal.timeout(viaRelay()?22000:5000)});const data=await res.json().catch(()=>({}));if(root!==opened)return;if(!res.ok)throw Object.assign(Error(),{detail:typeof data.error==='string'?data.error:''});health={ready:data.ready===true,route:data.route,message:data.message};requestToken=typeof data.requestToken==='string'?data.requestToken:'';if(health.ready&&requestToken)mode='hermes';}
+    catch(e){if(root!==opened)return;health={ready:false,message:viaRelay()?(e?.detail||'The Jarvis PC is not reachable. It must be on, with Jarvis and the live relay running.')+' App tools still work here.':'Start the local Jarvis server to connect Hermes. Your app questions still work in App tools mode.'};}
+    updateConnection();
+  }
+
+  /* Owner-only PC registration for the live relay. The one-time code is shown once after an explicit choice,
+     kept only in this field, and cleared when Jarvis closes. Nothing is stored in the browser. */
+  async function relayAction(action){
+    const t=transport(),status=el('jarvis-relay-status'),opened=root;if(!t?.remote?.()||!status)return;
+    const show=text=>{if(root===opened)status.textContent=text;};
+    try{
+      if(action==='relay-register'){
+        if(typeof window.confirm==='function'&&!window.confirm('Register the Jarvis PC? Any previously registered PC loses access.'))return;
+        const {deviceToken}=await t.registerDevice();if(root!==opened)return;
+        el('jarvis-relay-code').value=deviceToken;el('jarvis-relay-code-label').hidden=false;show('Registered. Paste the code into the relay configuration on the PC, then start the relay there.');return;
+      }
+      if(action==='relay-revoke'){
+        if(typeof window.confirm==='function'&&!window.confirm('Revoke the Jarvis PC? Other devices stop reaching Jarvis until it is registered again.'))return;
+        await t.revokeDevice();if(root!==opened)return;el('jarvis-relay-code').value='';el('jarvis-relay-code-label').hidden=true;show('PC access revoked.');return;
+      }
+      const s=await t.deviceStatus();
+      show(!s.registered?'No Jarvis PC is registered.':s.online?'The Jarvis PC is online.':'The Jarvis PC is registered but offline'+(s.lastSeen?' (last seen '+new Date(s.lastSeen).toLocaleString('en-GB')+')':'')+'.');
+    }catch(e){show(e?.message||'The relay is not available right now.');}
+  }
+
+  /* ── Today and Tasks (read-only, textContent only) ── */
+  function row(list,{time,title,meta,trailing,focused=false}){
+    const li=document.createElement('li');li.className=focused?'jarvis-row is-focus':'jarvis-row';
+    if(time!==undefined){const t=document.createElement('span');t.className='jarvis-row-time';t.textContent=time||'—';li.appendChild(t);}
+    const body=document.createElement('span');body.className='jarvis-row-body';const b=document.createElement('span');b.textContent=title;body.appendChild(b);
+    if(meta){const m=document.createElement('small');m.textContent=meta;body.appendChild(m);}li.appendChild(body);
+    if(trailing){const r=document.createElement('span');r.className='jarvis-row-trailing';r.textContent=trailing;li.appendChild(r);}
+    list.appendChild(li);
+  }
+  function renderDashboard(){
+    if(!root||!window.SV_JARVIS_DATA?.dashboard)return;
+    let data;try{data=SV_JARVIS_DATA.dashboard();}catch{return;}
+    el('jarvis-today-date').textContent=data.dateLabel;
+    const today=el('jarvis-today-list'),tasks=el('jarvis-task-list');today.replaceChildren();tasks.replaceChildren();
+    if(!data.today.length){const li=document.createElement('li');li.className='jarvis-row-empty';li.textContent='No cleanings, arrivals or departures today.';today.appendChild(li);}
+    data.today.forEach(item=>row(today,{time:item.time,title:item.property,meta:item.label}));
+    if(data.todayMore){const li=document.createElement('li');li.className='jarvis-row-empty';li.textContent='+'+data.todayMore+' more today';today.appendChild(li);}
+    if(!data.tasks.length){const li=document.createElement('li');li.className='jarvis-row-empty';li.textContent='No open tasks.';tasks.appendChild(li);}
+    data.tasks.forEach(item=>row(tasks,{title:item.text,trailing:item.due}));
+    if(data.tasksMore){const li=document.createElement('li');li.className='jarvis-row-empty';li.textContent='+'+data.tasksMore+' more';tasks.appendChild(li);}
+  }
+  /* ── Attention focus: the user's own cleanings/tasks question shows where the answer comes from.
+     Only the latest turn owns it. It is visual only: no navigation, no data change, nothing from model text. ── */
+  const FOCUS_HOLD=6000;
+  let focus=null,focusSeq=0;
+  const reducedMotion=()=>!!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  function beginFocus(text){
+    clearFocus();
+    if(!root||!window.SV_JARVIS_DATA?.focusFor)return;
+    let data;try{data=SV_JARVIS_DATA.focusFor(text);}catch{data=null;}
+    if(!data)return;
+    focus={id:++focusSeq,data,state:'active',hold:null};
+    const section=el(data.kind==='tasks'?'jarvis-tasks-section':'jarvis-today-section');section?.classList.add('is-attention');
+    if(data.kind==='cleanings'){
+      el('jarvis-today-title').textContent='Cleanings';el('jarvis-today-date').textContent=data.label;
+      const list=el('jarvis-today-list');list.replaceChildren();
+      if(!data.rows.length){const li=document.createElement('li');li.className='jarvis-row-empty';li.textContent=data.empty;list.appendChild(li);}
+      data.rows.forEach(r=>row(list,{time:r.time,title:r.property,meta:(data.multiDay?r.dateLabel+' · ':'')+r.status,focused:true}));
+      if(data.more){const li=document.createElement('li');li.className='jarvis-row-empty';li.textContent='+'+data.more+' more';list.appendChild(li);}
+    }
+    root.classList.add('has-focus');root.classList.remove('focus-hold');
+    linkStart();
+  }
+  /* After the reply: hold briefly, then fade back to the normal Today view. */
+  function focusReplyDone(){
+    if(!focus||focus.state!=='active')return;
+    const id=focus.id;focus.state='hold';root?.classList.add('focus-hold');linkStop(false);hideDots();
+    focus.hold=setTimeout(()=>{if(focus&&focus.id===id)clearFocus();},FOCUS_HOLD);
+  }
+  function clearFocus(){
+    if(!focus)return;
+    const f=focus;focus=null;clearTimeout(f.hold);linkStop(true);
+    if(!root)return;
+    root.classList.remove('has-focus','focus-hold');
+    el('jarvis-today-section')?.classList.remove('is-attention');el('jarvis-tasks-section')?.classList.remove('is-attention');
+    el('jarvis-today-title').textContent='Today';
+    if(f.data.kind==='cleanings')renderDashboard();
+  }
+  /* Connector: a thin curve from the ring's membrane to the focused rows, with a few travelling accents. Desktop only;
+     skipped when geometry is unavailable (hidden, unmounted, or test DOM). Recomputed on resize and scroll. */
+  const link={raf:0,listen:false,start:0};
+  const measurable=node=>!!node&&typeof node.getBoundingClientRect==='function';
+  function linkTarget(){
+    if(!focus)return null;
+    if(focus.data.kind==='tasks')return el('jarvis-tasks-title');
+    const list=el('jarvis-today-list'),first=[...(list?.children||[])].find(li=>/\bis-focus\b/.test(li.className||''));
+    return first||el('jarvis-today-title');
+  }
+  function linkLayout(){
+    const svgNode=el('jarvis-link'),path=el('jarvis-link-path'),ring=el('jarvis-ring'),target=linkTarget();
+    if(!svgNode||!path||!focus||!desktop()||!measurable(ring)||!measurable(target)){svgNode?.setAttribute('hidden','');return false;}
+    const r=ring.getBoundingClientRect(),t=target.getBoundingClientRect(),vh=window.innerHeight||0;
+    if(!r.width||!t.width||(vh&&(t.bottom<0||t.top>vh))||t.right>=r.left){svgNode.setAttribute('hidden','');return false;}
+    const cx=r.left+r.width/2,cy=r.top+r.height/2,ex=t.right+14,ey=t.top+t.height/2,angle=Math.atan2(ey-cy,ex-cx),radius=r.width*.316;
+    const sx=cx+Math.cos(angle)*radius,sy=cy+Math.sin(angle)*radius,dx=sx-ex;
+    path.setAttribute('d','M'+sx.toFixed(1)+' '+sy.toFixed(1)+' C'+(sx-dx*.45).toFixed(1)+' '+sy.toFixed(1)+' '+(ex+dx*.35).toFixed(1)+' '+ey.toFixed(1)+' '+ex.toFixed(1)+' '+ey.toFixed(1));
+    svgNode.removeAttribute('hidden');return true;
+  }
+  function linkFrame(now){
+    link.raf=0;if(!focus||focus.state!=='active'||!root)return;
+    const path=el('jarvis-link-path');
+    if(!linkLayout()){hideDots();return;}
+    if(typeof path?.getTotalLength==='function'){
+      const length=path.getTotalLength();
+      for(let i=0;i<3;i++){const dot=el('jarvis-link-dot-'+i),p=((now-link.start)/2400+i/3)%1,pt=path.getPointAtLength(length*p);dot?.setAttribute('cx',pt.x.toFixed(1));dot?.setAttribute('cy',pt.y.toFixed(1));dot?.setAttribute('opacity',(Math.sin(Math.PI*p)*.9).toFixed(2));}
+    }
+    link.raf=window.requestAnimationFrame?.(linkFrame)||0;
+  }
+  function hideDots(){for(let i=0;i<3;i++)el('jarvis-link-dot-'+i)?.setAttribute('opacity','0');}
+  /* Resize/scroll: while active, redraw and (re)start the accents when the geometry allows it; when narrow, reduced,
+     off-screen or already holding, stop the accents and hide the line so nothing stays at an old position. */
+  function onLayout(){
+    if(!focus||!root)return;
+    if(focus.state!=='active'){el('jarvis-link')?.setAttribute('hidden','');hideDots();return;}
+    const shown=linkLayout(),still=reducedMotion();
+    root.classList.toggle('link-static',still);
+    if(shown&&!still&&!link.raf&&window.requestAnimationFrame){link.start=link.start||performance.now();link.raf=window.requestAnimationFrame(linkFrame);}
+    if((!shown||still)&&link.raf){window.cancelAnimationFrame?.(link.raf);link.raf=0;hideDots();}
+  }
+  function linkStart(){
+    linkStop(true);if(!root)return;
+    if(!link.listen){window.addEventListener?.('resize',onLayout);el('jarvis-today-col')?.addEventListener?.('scroll',onLayout,{passive:true});link.listen=true;}
+    link.start=0;onLayout();
+  }
+  function linkStop(remove){
+    if(link.raf){window.cancelAnimationFrame?.(link.raf);link.raf=0;}
+    if(!remove)return;
+    hideDots();link.start=0;
+    if(link.listen){window.removeEventListener?.('resize',onLayout);el('jarvis-today-col')?.removeEventListener?.('scroll',onLayout);link.listen=false;}
+    const svgNode=el('jarvis-link');svgNode?.setAttribute('hidden','');el('jarvis-link-path')?.setAttribute('d','');
+  }
+
+  function setNav(name){root?.querySelectorAll('[data-nav]').forEach(b=>{if(b.dataset.nav===name)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});}
+  function goWorkspace(destination){stop();closeJarvis();if(typeof workspaceNavigate==='function')workspaceNavigate(destination);}
+
+  /* ── WhatsApp in the right column (desktop). Same protected inbox, routes and approvals; stand-alone elsewhere. ── */
+  function closeContext(){if(!root)return;el('jarvis-context').hidden=true;root.classList.remove('has-context');waEmbedded=false;setNav('overview');}
+  function openWhatsApp(intent){
+    pauseVoice('Paused while WhatsApp is open.');
+    if(!window.SV_JARVIS_WHATSAPP)return;
+    if(!root||!desktop()){const launch=document.getElementById('jarvis-launch');closeJarvis();SV_JARVIS_WHATSAPP.open({returnFocus:launch,intent});return;}
+    if(SV_JARVIS_WHATSAPP.isOpen?.())SV_JARVIS_WHATSAPP.close();
+    const host=el('jarvis-wa-host');el('jarvis-context').hidden=false;root.classList.add('has-context');setNav('whatsapp');
+    waEmbedded=SV_JARVIS_WHATSAPP.open({host,intent,returnFocus:el('jarvis-mic'),onClose:closeContext})!==false;
+  }
+
+  async function send(text,{fromVoice=false}={}){
+    text=String(text||'').trim().slice(0,2000);if(!text)return;
+    // A new turn always takes over: any earlier attention focus is removed first.
+    cancelReply();clearFocus();if(!fromVoice&&voice?.active)voice.stop();
+    error('');caption('');const id=generation;add('You',text);if(el('jarvis-input')&&!fromVoice)el('jarvis-input').value='';setPhase('thinking');
+    if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){voice?.pause('Paused. Tap the microphone to talk again.');add('Jarvis','Paused. Tap the microphone when you want to talk again.');if(!voice?.active)setPhase('paused');return;}
+    // Only the user's own words are routed. WhatsApp commands open the inbox locally; a spoken "send" never sends.
+    const wa=window.SV_JARVIS_WHATSAPP?.parseCommand?.(text);
+    if(wa&&(wa.kind==='clarify'||wa.kind==='refuse_send')){add('Jarvis',wa.message);speak(wa.message);return;}
+    if(wa){add('Jarvis',wa.kind==='open'?'Opening the WhatsApp chat.':'Your message is ready to review. Nothing is sent until you press Approve and send.');openWhatsApp(wa);return;}
+    // Task and cleaning changes open a local review in both modes and are never sent to the agent; closing Jarvis releases the microphone first.
+    const routed=SV_JARVIS_ACTIONS.route(text,mode);
+    if(routed.kind==='review'){add('Jarvis',routed.message);stop();closeJarvis();SV_JARVIS_ACTIONS.openReview(routed.draft);return;}
+    if(routed.kind==='correct'){add('Jarvis','Please check the request on screen. Nothing is saved yet.');stop();closeJarvis();SV_JARVIS_ACTIONS.openCorrection(routed.correction);return;}
+    if(routed.kind==='reply'){add('Jarvis',routed.message);speak(routed.message);return;}
+    if(mode==='local'){
+      if(routed.kind==='legacy'){stop();closeJarvis();openVoiceCommandModal();elFromPage('vc-transcript').value=text;handleVoiceCommandTranscript(text);return;}
+      beginFocus(text);
+      const answer=SV_JARVIS_DATA.localAnswer(text);
+      if(answer){add('Jarvis · app tools',answer);speak(answer);return;}
+      const message='App tools can answer about scheduled cleanings, arrivals, departures and due tasks, or prepare a task or cleaning change for you to review. Open Settings and connect Hermes for conversation and persistent memory.';add('Jarvis · app tools',message);replyDone();return;
+    }
+    if(!health.ready||!requestToken){pauseVoice('Paused — Hermes is not connected.');error('Hermes is not connected. Open Settings and check the connection.');return;}
+    beginFocus(text);
+    const controller=new AbortController();request=controller;const timeout=setTimeout(()=>controller.abort(),120000);
+    try{const res=await jarvisFetch('/api/jarvis/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:JSON.stringify({text,sessionId,context:SV_JARVIS_DATA.context()}),signal:request.signal});const data=await res.json();if(id!==generation||!root)return;if(!res.ok)throw Error(data.error||'The agent could not respond.');if(typeof data.reply!=='string'||!data.reply.trim())throw Error('Hermes returned an empty reply.');add('Jarvis · Hermes',data.reply);speak(data.reply);}
+    catch(e){if(id===generation&&root){pauseVoice('Paused after an error.');error(e.name==='AbortError'?'The agent request timed out. Check Hermes and n8n, then try again.':e.message||'Could not connect to Hermes.');}}
+    finally{clearTimeout(timeout);if(id===generation)request=null;}
+  }
+  function elFromPage(id){return document.getElementById(id);}
+
+  /* ── Voice: the controller decides when to listen; this only adapts the browser recognizer and level meter. ── */
+  function ensureVoice(){
+    if(voice||!window.SV_JARVIS_VOICE)return voice;
+    voice=SV_JARVIS_VOICE.createConversation({
+      startRecognition:(callbacks,kind)=>beginRecognition(callbacks,kind),
+      onTranscript:text=>void send(text,{fromVoice:true}),
+      onStatus:(next,note)=>{if(next==='error'||next==='paused')clearFocus();if(next==='error')error(note);else if(next==='listening')error('');setPhase(next);}
+    });
+    voice.setContinuous(settings.continuous);return voice;
+  }
+  function beginRecognition(callbacks,kind){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){Promise.resolve().then(()=>callbacks.error('service-not-allowed'));return {cancel(){}};}
+    releaseMic();const token=micToken;
+    if(kind!=='retry')cue('ready');
+    const controller=createRecognizer(SR,settings.language,{
+      ready(){if(token!==micToken)return;const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(Chrome|Chromium|Edg)\//.test(navigator.userAgent);if(!safari&&navigator.mediaDevices?.getUserMedia)void navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(stream=>{if(token!==micToken||phase!=='listening'){stream.getTracks().forEach(t=>t.stop());return;}micStream=stream;try{const analyser=audioContext.createAnalyser();analyser.fftSize=512;audioContext.createMediaStreamSource(stream).connect(analyser);const values=new Float32Array(analyser.fftSize);const tick=()=>{if(token!==micToken)return;analyser.getFloatTimeDomainData(values);let sum=0;for(const v of values)sum+=v*v;motion.input=Math.min(1,Math.max(0,Math.sqrt(sum/values.length)-.008)*10);meterFrame=requestAnimationFrame(tick);};tick();}catch{}}).catch(()=>{});},
+      activity(active){if(token!==micToken)return;motion.speech=active;if(active)motion.inputPulse=performance.now();},
+      draft(text){if(token!==micToken)return;caption(text);},
+      done(text){if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.done(text);},
+      error(code){if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.error(code);}
+    });
+    recognizer=controller;controller.start();
+    return {cancel(){if(recognizer===controller)recognizer=null;controller.cancel();releaseMic();}};
+  }
+  /* While a WhatsApp chat or review is open in the right column, the microphone stays off. */
+  const whatsappOpen=()=>waEmbedded&&!!window.SV_JARVIS_WHATSAPP?.isEmbedded?.();
+  function startVoice(){
+    if(whatsappOpen()){error('The microphone stays off while WhatsApp is open. Close WhatsApp first, then tap the microphone.');setPhase('paused');return;}
+    error('');const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR||!window.SV_JARVIS_VOICE){error('Speech recognition is unavailable here. Type in Conversation instead.');el('jarvis-input')?.focus();return;}
+    cancelReply();prepareAudio();ensureVoice().start();
+  }
+  function micPressed(){
+    if(whatsappOpen()){pauseVoice('');startVoice();return;}
+    prepareAudio();
+    if(phase==='speaking'){cancelReply();clearFocus();if(voice?.active)voice.interrupt();else startVoice();return;}
+    if(['listening','waiting','thinking','connecting'].includes(phase)){pauseVoice('Paused. Tap the microphone to talk again.');return;}
+    startVoice();
+  }
+  function setContinuous(on){settings.continuous=on;voice?.setContinuous(on);el('jarvis-keep')?.setAttribute('aria-pressed',String(on));if(phase==='idle')setPhase('idle');}
+  function createRecognizer(Recognition,language,callbacks){
+    const rec=new Recognition();rec.lang=language;rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;let closed=false,latest='',settling=null,watchdog=null;
+    const cleanup=()=>{clearTimeout(settling);clearTimeout(watchdog);rec.onstart=rec.onresult=rec.onerror=rec.onend=rec.onspeechstart=rec.onspeechend=rec.onsoundstart=rec.onsoundend=null;callbacks.activity(false);};
+    const complete=code=>{if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}if(code)callbacks.error(code);else if(latest.trim())callbacks.done(latest.trim());else callbacks.error('no-speech');};
+    const finish=()=>{if(closed)return;clearTimeout(settling);try{rec.stop();}catch{complete();return;}if(!closed)settling=setTimeout(()=>complete(),1200);};
+    rec.onstart=()=>{if(!closed)callbacks.ready();};rec.onspeechstart=rec.onsoundstart=()=>{if(!closed)callbacks.activity(true);};rec.onspeechend=rec.onsoundend=()=>{if(!closed)callbacks.activity(false);};
+    rec.onresult=e=>{if(closed)return;const drafts=[],finals=[];for(let i=0;i<e.results.length;i++){drafts.push(e.results[i][0].transcript);if(e.results[i].isFinal)finals.push(e.results[i][0].transcript);}latest=drafts.join(' ').trim();callbacks.draft(latest);callbacks.activity(true);clearTimeout(settling);settling=setTimeout(finish,finals.join(' ').trim()===latest?550:1800);};
+    rec.onerror=e=>complete(e.error);rec.onend=()=>complete();return {start(){watchdog=setTimeout(()=>complete(latest?undefined:'timeout'),30000);try{rec.start();}catch{complete('audio-capture');}},finish,cancel(){if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}}};
+  }
+
+  function closePanel(){panel=null;el('jarvis-panel').hidden=true;el('jarvis-mic')?.focus();}
+  function openPanel(kind){
+    if(kind==='chat'){const input=el('jarvis-input');el('jarvis-chat-body')?.scrollIntoView?.({block:'nearest'});input?.focus();return;}
+    stop();panel=kind;el('jarvis-panel').hidden=false;el('jarvis-settings-body').hidden=false;el('jarvis-panel-title').textContent='Make it yours';updateConnection();el('jarvis-mode-select')?.focus();
+  }
+  const MARKUP=()=>'<div class="jarvis-shell">'
+    +'<header class="jarvis-header"><span class="jarvis-wordmark" aria-hidden="true">JARVIS</span><div class="jarvis-header-right"><button class="jarvis-connection" data-j="settings" aria-label="Connection and voice settings"><i id="jarvis-mode-dot"></i><span id="jarvis-mode-text">App tools</span></button><button class="jarvis-icon" data-j="close" aria-label="Close Jarvis">'+svg('close',20)+'</button></div></header>'
+    +'<aside class="jarvis-today" id="jarvis-today-col" aria-label="Today"><section id="jarvis-today-section"><h2 class="jarvis-kicker" id="jarvis-today-title">Today</h2><p class="jarvis-date" id="jarvis-today-date"></p><ol class="jarvis-rows" id="jarvis-today-list"></ol><button class="jarvis-text-link" data-j="nav-cleaning">View cleanings</button></section>'
+    +'<section id="jarvis-tasks-section"><h2 class="jarvis-kicker" id="jarvis-tasks-title">Tasks</h2><ol class="jarvis-rows" id="jarvis-task-list"></ol><button class="jarvis-text-link" data-j="nav-tasks">View tasks</button></section></aside>'
+    +'<main class="jarvis-presence"><canvas class="jarvis-ring" id="jarvis-ring" aria-hidden="true"></canvas><div class="jarvis-status" id="jarvis-status" role="status" aria-live="polite">At your service</div><p class="jarvis-hint" id="jarvis-hint">Conversation mode · ready</p><p class="jarvis-caption" id="jarvis-caption-text" aria-live="polite" hidden></p>'
+    +'<div class="jarvis-error" id="jarvis-error" role="alert" hidden></div>'
+    +'<button class="jarvis-keep" id="jarvis-keep" data-j="keep" aria-pressed="true"><i aria-hidden="true"></i><span>Keep listening</span></button>'
+    +'<div class="jarvis-controls"><button class="jarvis-icon" data-j="chat" aria-label="Type a message">'+svg('keyboard')+'</button><button class="jarvis-mic" id="jarvis-mic" data-j="mic" aria-label="Start conversation">'+svg('mic',24)+'</button><button class="jarvis-icon" data-j="settings" aria-label="Voice settings">'+svg('settings')+'</button></div>'
+    +'<button class="jarvis-play" data-j="replay">'+svg('speaker',16)+'<span>Play reply</span></button></main>'
+    +'<aside class="jarvis-side" aria-label="Conversation"><section class="jarvis-conversation" id="jarvis-chat-body"><h2 class="jarvis-kicker">Conversation</h2><div class="jarvis-transcript" id="jarvis-transcript"></div><form class="jarvis-form" id="jarvis-form"><input id="jarvis-input" autocomplete="off" aria-label="Message Jarvis" placeholder="Message Jarvis…" maxlength="2000"><button aria-label="Send message">'+svg('send',18)+'</button></form><button class="jarvis-clear" data-j="new">New conversation</button></section>'
+    +'<section class="jarvis-context" id="jarvis-context" aria-label="WhatsApp" hidden><h2 class="jarvis-kicker">Message review</h2><div id="jarvis-wa-host"></div></section></aside>'
+    +'<nav class="jarvis-nav" aria-label="Jarvis"><button data-nav="overview" data-j="nav-overview" aria-current="page">Overview</button><button data-nav="whatsapp" data-j="nav-whatsapp">WhatsApp</button><button data-nav="cleaning" data-j="nav-cleaning">Cleanings</button><button data-nav="tasks" data-j="nav-tasks">Tasks</button></nav>'
+    +'<p class="jarvis-footnote">Manual approval for every send</p></div>'
+    +'<svg class="jarvis-link" id="jarvis-link" aria-hidden="true" focusable="false" hidden><path id="jarvis-link-path" d=""/><circle class="jarvis-link-dot" id="jarvis-link-dot-0" r="1.6" opacity="0"/><circle class="jarvis-link-dot" id="jarvis-link-dot-1" r="1.3" opacity="0"/><circle class="jarvis-link-dot" id="jarvis-link-dot-2" r="1.1" opacity="0"/></svg>'
+    +'<div class="jarvis-panel-backdrop" id="jarvis-panel" hidden><section class="jarvis-sheet" role="dialog" aria-modal="true" aria-labelledby="jarvis-panel-title"><div class="jarvis-sheet-head"><div><small>JARVIS</small><h2 id="jarvis-panel-title">Make it yours</h2></div><button class="jarvis-icon" data-j="close-panel" aria-label="Close settings">'+svg('close',20)+'</button></div>'
+    +'<div class="jarvis-settings" id="jarvis-settings-body" hidden><label>Connection<select id="jarvis-mode-select"><option value="local">App tools · no AI model</option><option value="hermes" id="jarvis-agent-option" disabled>Hermes agent</option></select></label><div class="jarvis-connection-detail" id="jarvis-connection-detail"></div><button class="jarvis-wide" data-j="check">Check connection</button><button class="jarvis-wide" data-j="whatsapp">WhatsApp inbox</button><details class="jarvis-relay" id="jarvis-relay" hidden><summary>Use Jarvis from this device</summary><p class="jarvis-privacy">Phones and other computers reach Jarvis through your existing Cloudflare service. The Jarvis PC must stay on and awake, with Jarvis and the live relay running. Your request text and the reply pass through Cloudflare: a request expires if the PC does not pick it up (after 30 seconds for a WhatsApp send, 5 minutes otherwise) and a reply after 2 minutes. Expired text is removed the next time the relay is used, so it can stay stored longer while nobody uses Jarvis remotely. Sending on WhatsApp still needs Review and Approve on screen; AI WhatsApp drafts stay off.</p><p class="jarvis-privacy" id="jarvis-relay-status" role="status"></p><button class="jarvis-wide" data-j="relay-status">Check the Jarvis PC</button><button class="jarvis-wide" data-j="relay-register">Register the Jarvis PC…</button><label id="jarvis-relay-code-label" hidden>One-time PC code — paste it into the relay configuration on the PC. It is not shown again.<input id="jarvis-relay-code" readonly autocomplete="off" spellcheck="false"></label><button class="jarvis-wide" data-j="relay-revoke">Revoke PC access</button></details><label>Speech language<select id="jarvis-language"><option value="en-GB">English</option><option value="es-ES">Español</option><option value="hr-HR">Hrvatski</option><option value="de-DE">Deutsch</option></select></label><label class="jarvis-check"><span>Listening sounds</span><input type="checkbox" id="jarvis-sounds" checked></label><label class="jarvis-check"><span>Mute replies</span><input type="checkbox" id="jarvis-muted"></label><button class="jarvis-wide" data-j="test-speaker">'+svg('speaker',16)+'Test speaker</button>'
+    +'<p class="jarvis-privacy">The microphone starts only when you tap it. With Keep listening on, Jarvis listens again after each reply until you pause, open a review or close Jarvis. It never listens while it is speaking.</p><p class="jarvis-privacy" id="jarvis-data-note"></p><p class="jarvis-privacy">Hermes holds agent memory on your computer. New conversation starts a fresh chat; it does not erase Hermes memory.</p><p class="jarvis-privacy">Jarvis can prepare a new task, a task due date or priority change, a cleaning move, or a WhatsApp message for you to review. Nothing is saved or sent until you confirm on screen.</p></div></section></div>';
+  function openJarvis(){
+    if(root)return;if(!DEV_MODE&&!SYNC_SECRET){toast('Sign in before opening Jarvis.');return;}returnFocus=document.activeElement;background=document.querySelector('.app-wrapper');wasInert=background?.hasAttribute('inert')||false;
+    root=document.createElement('div');root.className='jarvis-root';root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Jarvis assistant');root.innerHTML=MARKUP();
+    document.body.appendChild(root);background?.setAttribute('inert','');restoreSession();
+    root.addEventListener('click',e=>{
+      const action=e.target.closest('[data-j]')?.dataset.j;
+      if(action==='close'){closeJarvis();return;}
+      if(action==='close-panel')closePanel();
+      if(action==='chat'||action==='settings')openPanel(action);
+      if(action==='mic')micPressed();
+      if(action==='keep')setContinuous(!settings.continuous);
+      if(action==='replay'){stop();error('');speak(lastReply||'At your service, Antonio.',true);}
+      if(action==='test-speaker'){stop();closePanel();error('');speak('At your service, Antonio. Your speaker is ready.',true);}
+      if(action==='check')void checkConnection();
+      if(action==='relay-status'||action==='relay-register'||action==='relay-revoke')void relayAction(action);
+      if(action==='whatsapp'){closePanel();openWhatsApp(null);return;}
+      if(action==='nav-whatsapp'){openWhatsApp(null);return;}
+      if(action==='nav-overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();clearFocus();renderDashboard();return;}
+      if(action==='nav-cleaning'){goWorkspace('cleaning');return;}
+      if(action==='nav-tasks'){goWorkspace('tasks');return;}
+      if(action==='new'){stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
+      if(e.target===el('jarvis-panel'))closePanel();
+    });
+    root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(panel)closePanel();else closeJarvis();}if(e.key==='Tab'){const scope=panel?el('jarvis-panel'):root;const items=[...scope.querySelectorAll('button,input,select,textarea,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
+    /* Typing a message ends voice listening so the microphone never records in the background. */
+    el('jarvis-input').addEventListener('focus',()=>{if(voice?.active)pauseVoice('Paused while you type.');});
+    el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();prepareAudio();const text=el('jarvis-input').value;void send(text);});
+    el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&phase==='speaking'){cancelReply();replyDone();}});
+    el('jarvis-data-note').textContent=DEV_MODE?'This local preview uses fictional data until you restore your private app backup in Settings. Hermes receives a limited operations summary when you send an agent message.':'App tools read your current app data. Hermes runs on the Jarvis PC; other devices reach it through the live relay.';
+    if(viaRelay())el('jarvis-relay').hidden=false;
+    setContinuous(settings.continuous);renderTranscript();renderDashboard();
+    try{ringCleanup=createJarvisRing(el('jarvis-ring'),()=>phase,()=>motion);}catch{error('The ring animation could not start. Conversation is still available.');}setPhase('idle');updateConnection();el('jarvis-mic').focus();void checkConnection();
+  }
+  function closeJarvis(){
+    stop();
+    if(waEmbedded&&window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();waEmbedded=false;
+    ringCleanup?.();ringCleanup=null;root?.remove();root=null;panel=null;requestToken='';mode='local';
+    if(background&&!wasInert)background.removeAttribute('inert');background=null;try{void audioContext?.close().catch(()=>{});}catch{}audioContext=null;returnFocus?.focus?.();returnFocus=null;
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&root)stop();});
+  window.openJarvis=openJarvis;window.closeJarvis=closeJarvis;
+  // Parser/lifecycle hooks allow deterministic tests without microphone hardware.
+  window.SV_JARVIS={createRecognizer,getPhase:()=>phase,send:text=>send(text)};
+})();

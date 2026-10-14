@@ -98,10 +98,157 @@ export function applyAssignment(data,cleanerId,input,nowDate,nowISO) {
   next._savedAt=Date.now();
   return next;
 }
+/* ── Jarvis live relay ──────────────────────────────────────────────────────────────────────────────
+   Lets the signed-in manager app reach the Jarvis PC (which has no public port). The PC polls outbound with
+   its own device token. Isolated relay_* tables (created lazily, never app_state); jobs are short-lived,
+   bounded, claimed atomically once and never requeued. The device token cannot read app data or manager APIs. */
+/* A WhatsApp send must start within 30 s (well inside the app's 60 s wait) or it expires unsent; other requests 5 min. */
+const RELAY = {requestTtl:300000, sendTtl:30000, resultTtl:120000, onlineMs:45000, maxQueued:20, maxPayload:100000, maxResult:262144};
+let relayNow = () => Date.now();
+/* Tests only: lets the fake clock drive TTLs. Production never calls this. */
+export function setRelayClockForTests(fn) { relayNow = typeof fn === 'function' ? fn : () => Date.now(); }
+const RELAY_SCHEMA = [
+  'CREATE TABLE IF NOT EXISTS relay_devices (id INTEGER PRIMARY KEY CHECK(id=1), token_hash TEXT NOT NULL, created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL DEFAULT 0, revoked INTEGER NOT NULL DEFAULT 0)',
+  'CREATE TABLE IF NOT EXISTS relay_jobs (id TEXT PRIMARY KEY, op TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL, device_hash TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, claimed_at INTEGER, result TEXT, result_expires_at INTEGER)',
+  'CREATE INDEX IF NOT EXISTS relay_jobs_queue ON relay_jobs (status, created_at)'
+];
+const relayReady = new WeakSet();
+/* Creates the relay tables. Called only after manager authentication; device requests never create schema. */
+async function relaySql(env) {
+  const sql = db(env);
+  if (!relayReady.has(env.STAFF_DB)) { for (const statement of RELAY_SCHEMA) await sql.prepare(statement).run(); relayReady.add(env.STAFF_DB); }
+  return sql;
+}
+async function relayPurge(sql, now) {
+  await sql.prepare("DELETE FROM relay_jobs WHERE (status='done' AND result_expires_at<?1) OR (status IN ('queued','processing','expired') AND expires_at<?2)").bind(now, now - RELAY.resultTtl).run();
+  await sql.prepare("UPDATE relay_jobs SET status='expired', payload='' WHERE status='queued' AND expires_at<?1").bind(now).run();
+}
+const expireQueued = sql => sql.prepare("UPDATE relay_jobs SET status='expired', payload='' WHERE status='queued'");
+/* The broker strips the PC's local session token and the WhatsApp pairing QR even if an agent forgot to. */
+function relayClean(body) {
+  const clean = JSON.parse(JSON.stringify(body));
+  delete clean.requestToken;
+  if (clean.connection && typeof clean.connection === 'object') delete clean.connection.qr;
+  return clean;
+}
+const HEX20 = /^[a-f0-9]{20}$/, HEX64 = /^[a-f0-9]{64}$/;
+const relayText = (value, max) => { if (typeof value !== 'string' || value.length > max) fail(400, 'Invalid relay request'); return value; };
+/* Exactly the operations the PC agent will run. AI drafting, model consent and WhatsApp connect/pairing are not here. */
+const RELAY_OPS = {
+  'health': p => { assertKeys(p, []); return {}; },
+  'wa-status': p => { assertKeys(p, []); return {}; },
+  'chat': p => {
+    assertKeys(p, ['text','sessionId','context']);
+    if (!relayText(p.text, 2000).trim() || !/^[a-zA-Z0-9_-]{8,100}$/.test(p.sessionId || '') || !p.context || typeof p.context !== 'object' || Array.isArray(p.context)) fail(400, 'Invalid relay request');
+    return {text:p.text, sessionId:p.sessionId, context:p.context};
+  },
+  'wa-inbox': p => { assertKeys(p, ['chat']); if (p.chat !== undefined && !HEX20.test(p.chat)) fail(400, 'Invalid relay request'); return p.chat ? {chat:p.chat} : {}; },
+  'wa-review': p => {
+    assertKeys(p, ['chat','version','text','checkedPhone']);
+    if (!HEX20.test(p.chat || '') || !Number.isInteger(p.version) || p.version < 0 || (p.checkedPhone !== undefined && typeof p.checkedPhone !== 'boolean')) fail(400, 'Invalid relay request');
+    return {chat:p.chat, version:p.version, text:relayText(p.text, 2000), checkedPhone:p.checkedPhone === true};
+  },
+  'wa-send': p => {
+    assertKeys(p, ['chat','reviewToken','text']);
+    if (!HEX20.test(p.chat || '') || !/^[A-Za-z0-9_-]{16,64}$/.test(p.reviewToken || '') || !relayText(p.text, 2000).trim()) fail(400, 'Invalid relay request');
+    return {chat:p.chat, reviewToken:p.reviewToken, text:p.text};
+  },
+  'wa-discard': p => { assertKeys(p, ['chat']); if (!HEX20.test(p.chat || '')) fail(400, 'Invalid relay request'); return {chat:p.chat}; }
+};
+const deviceHeader = request => { const access = request.headers.get('Authorization') || ''; if (!/^Bearer [a-f0-9]{64}$/.test(access)) fail(401, 'Unauthorized'); return access; };
+/* Device authentication against the existing table only (fails closed if the relay was never set up). Returns the
+   device generation: the hash of the currently registered token. */
+async function relayDevice(request, sql) {
+  const access = deviceHeader(request), hash = await digest(access.slice(7));
+  let row = null;
+  try { row = await sql.prepare('SELECT token_hash FROM relay_devices WHERE id=1 AND revoked=0').first(); } catch { fail(401, 'This PC is not registered'); }
+  if (!row || row.token_hash !== hash) fail(401, 'This PC is no longer registered');
+  return hash;
+}
+async function relayRoutes(request, env, path, isManager) {
+  if (!path.startsWith('/api/relay/')) return null;
+  const now = relayNow(), method = request.method;
+  if (path === '/api/relay/device' && (method === 'GET' || method === 'POST')) {
+    if (!isManager) fail(401, 'Unauthorized');
+    const sql = await relaySql(env);
+    if (method === 'GET') {
+      const row = await sql.prepare('SELECT last_seen, revoked FROM relay_devices WHERE id=1').first(), active = !!row && !row.revoked;
+      return Response.json({registered:active, online:active && row.last_seen > 0 && now - row.last_seen < RELAY.onlineMs, lastSeen:active && row.last_seen ? new Date(row.last_seen).toISOString() : ''});
+    }
+    const input = await body(request, 512); assertKeys(input, ['action']);
+    /* One transaction: the new (or no) generation and the expiry of every waiting job happen together. */
+    if (input.action === 'register') {
+      const deviceToken = token();
+      await sql.batch([
+        sql.prepare('INSERT INTO relay_devices (id, token_hash, created_at, last_seen, revoked) VALUES (1, ?, ?, 0, 0) ON CONFLICT(id) DO UPDATE SET token_hash=excluded.token_hash, created_at=excluded.created_at, last_seen=0, revoked=0').bind(await digest(deviceToken), now),
+        expireQueued(sql)
+      ]);
+      return Response.json({registered:true, deviceToken});
+    }
+    if (input.action === 'revoke') {
+      await sql.batch([sql.prepare('UPDATE relay_devices SET revoked=1, last_seen=0 WHERE id=1'), expireQueued(sql)]);
+      return Response.json({revoked:true});
+    }
+    fail(400, 'Invalid device action');
+  }
+  if (path === '/api/relay/jobs' && method === 'POST') {
+    if (!isManager) fail(401, 'Unauthorized');
+    const input = await body(request, RELAY.maxPayload + 1024); assertKeys(input, ['op','params']);
+    const check = Object.prototype.hasOwnProperty.call(RELAY_OPS, input.op) ? RELAY_OPS[input.op] : null;
+    if (!check) fail(400, 'This request is not available from other devices');
+    const params = check(input.params === undefined ? {} : input.params), payload = JSON.stringify(params);
+    if (payload.length > RELAY.maxPayload) fail(413, 'Request too large');
+    const sql = await relaySql(env); await relayPurge(sql, now);
+    /* One conditional insert: only for the active, online device generation and only below the queue cap. */
+    const jobId = token(), ttl = input.op === 'wa-send' ? RELAY.sendTtl : RELAY.requestTtl;
+    const added = await sql.prepare("INSERT INTO relay_jobs (id, op, payload, status, device_hash, created_at, expires_at) SELECT ?1, ?2, ?3, 'queued', d.token_hash, ?4, ?5 FROM relay_devices d WHERE d.id=1 AND d.revoked=0 AND d.last_seen>?6 AND (SELECT COUNT(*) FROM relay_jobs WHERE status='queued')<?7")
+      .bind(jobId, input.op, payload, now, now + ttl, now - RELAY.onlineMs, RELAY.maxQueued).run();
+    if (!added.meta.changes) {
+      const device = await sql.prepare('SELECT last_seen FROM relay_devices WHERE id=1 AND revoked=0').first();
+      if (!device || !device.last_seen || now - device.last_seen >= RELAY.onlineMs) fail(503, 'The Jarvis PC is offline. It must be switched on with Jarvis and the live relay running.');
+      fail(429, 'Jarvis is busy. Wait a moment and try again.');
+    }
+    return Response.json({jobId, expiresAt:new Date(now + ttl).toISOString()}, {status:202});
+  }
+  const job = path.match(/^\/api\/relay\/jobs\/([a-f0-9]{64})$/);
+  if (job && method === 'GET') {
+    if (!isManager) fail(401, 'Unauthorized');
+    const sql = await relaySql(env); await relayPurge(sql, now);
+    const row = await sql.prepare('SELECT status, result FROM relay_jobs WHERE id=?').bind(job[1]).first();
+    if (!row) return Response.json({status:'gone'}, {status:404});
+    return Response.json(row.status === 'done' ? {status:'done', result:JSON.parse(row.result)} : {status:row.status});
+  }
+  if (path.startsWith('/api/relay/device/') && method === 'POST') {
+    deviceHeader(request);
+    const sql = db(env), generation = await relayDevice(request, sql);
+    await sql.prepare('UPDATE relay_devices SET last_seen=? WHERE id=1 AND revoked=0 AND token_hash=?').bind(now, generation).run();
+    if (path === '/api/relay/device/heartbeat') return Response.json({ok:true});
+    if (path === '/api/relay/device/claim') {
+      await relayPurge(sql, now);
+      /* The active-generation check is inside the same statement, so a registration or revoke that lands between
+         authentication and this claim cannot hand work to a stale code. */
+      const claimed = await sql.prepare("UPDATE relay_jobs SET status='processing', claimed_at=?1 WHERE id=(SELECT id FROM relay_jobs WHERE status='queued' AND expires_at>?1 AND device_hash=?2 ORDER BY created_at, id LIMIT 1) AND status='queued' AND device_hash=?2 AND EXISTS (SELECT 1 FROM relay_devices WHERE id=1 AND revoked=0 AND token_hash=?2) RETURNING id, op, payload").bind(now, generation).first();
+      return Response.json({job:claimed ? {jobId:claimed.id, op:claimed.op, params:JSON.parse(claimed.payload)} : null});
+    }
+    if (path === '/api/relay/device/complete') {
+      const input = await body(request, RELAY.maxResult + 2048); assertKeys(input, ['jobId','result']);
+      const result = input.result;
+      if (!HEX64.test(input.jobId || '') || !result || typeof result !== 'object' || Array.isArray(result) || !Number.isInteger(result.status) || result.status < 100 || result.status > 599 || !result.body || typeof result.body !== 'object' || Array.isArray(result.body)) fail(400, 'Invalid result');
+      const stored = JSON.stringify({status:result.status, body:relayClean(result.body)});
+      if (stored.length > RELAY.maxResult) fail(413, 'Result too large');
+      const done = await sql.prepare("UPDATE relay_jobs SET status='done', result=?1, payload='', result_expires_at=?2 WHERE id=?3 AND status='processing' AND device_hash=?4 AND EXISTS (SELECT 1 FROM relay_devices WHERE id=1 AND revoked=0 AND token_hash=?4)").bind(stored, now + RELAY.resultTtl, input.jobId, generation).run();
+      if (!done.meta.changes) fail(409, 'This request is no longer waiting for a result');
+      return Response.json({ok:true});
+    }
+  }
+  fail(404, 'Not found');
+}
+
 async function routes(request,env) {
   const url=new URL(request.url), path=url.pathname.replace(/\/$/,'') || '/';
   const isManager=manager(request,env);
   if (path==='/' && !isManager) fail(401,'Unauthorized');
+  const relay=await relayRoutes(request,env,path,isManager); if(relay) return relay;
   if (path==='/api/admin/capabilities') { if(!isManager) fail(401,'Unauthorized'); return Response.json({cleanerAccess:!!env.STAFF_DB && !!await snapshot(db(env)),versionedSync:!!env.STAFF_DB && !!await snapshot(db(env))}); }
   if (path==='/api/admin/migrate' && request.method==='POST') {
     if(!isManager) fail(401,'Unauthorized');
