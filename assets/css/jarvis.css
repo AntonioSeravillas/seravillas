@@ -83,6 +83,7 @@
 .jarvis-sheet small{font-size:10px;letter-spacing:.3em;color:var(--j-muted)}.jarvis-sheet h2{margin:6px 0 0;font-size:20px;font-weight:300}
 .jarvis-settings[hidden]{display:none}
 .jarvis-settings label{display:block;margin:18px 0;font-size:13px;color:var(--j-soft)}
+.jarvis-settings label[hidden]{display:none}
 .jarvis-settings select{display:block;width:100%;margin-top:8px;padding:11px 10px;border:1px solid #2a2a2a;border-radius:8px;background:#121212;color:var(--j-text);font-size:14px}
 .jarvis-settings .jarvis-check{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .jarvis-wide{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:10px 0;padding:12px;border:1px solid #2a2a2a!important;border-radius:8px;font-size:13px}
