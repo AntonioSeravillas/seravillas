@@ -109,6 +109,34 @@ The relay script reads only the configuration file path. The PC code never appea
 - **Usage counts against the Cloudflare plan.** The PC polls the Worker while the relay runs, and open apps poll for results. Check the free-tier request and D1 limits in the Cloudflare dashboard after the first days.
 - AI WhatsApp drafts stay off remotely. WhatsApp linking and consent happen only on the PC.
 
+## Optional ElevenLabs voice
+
+The live desktop and phone app can play the same custom voice. The existing PC relay generates speech;
+the WhatsApp session and local Jarvis server are unchanged. Only spoken reply text goes to ElevenLabs.
+Text and MP3 audio pass through the same authenticated relay, with its existing expiry and cleanup rules.
+
+Create `%LOCALAPPDATA%/hermes/profiles/seravillas/jarvis-elevenlabs.json` privately on the PC:
+
+```json
+{"enabled":true,"apiKey":"YOUR_PRIVATE_TTS_KEY","voiceId":"YOUR_VOICE_ID","monthlyCharacters":10000}
+```
+
+Never commit this file or paste its key into the browser app or chat. Restrict the key to Text to Speech
+in ElevenLabs. Restart only `live-relay.mjs` after saving it. Health then advertises the custom voice;
+Jarvis settings offers **Jarvis Seravillas · ElevenLabs** and **Device voice · free**.
+
+The PC reserves a conservative 10,000-character monthly test budget before each generation, including
+failed requests. Usage persists beside the private config; no credit-consuming request is automatically
+retried. Recent exact speech repeats are cached in memory on the PC and in the open Jarvis panel.
+The provider's own quota still applies, including usage outside Jarvis. No subscription or auto top-up
+is configured by this integration. The user must ensure their plan covers their intended use.
+
+Speech is split at word/sentence boundaries into sections of at most600 characters. Each MP3 is bounded
+to180KB before returning it. Closing, hiding, interrupting or entering a review stops playback; listening
+resumes only after the final audio section. If audio is blocked, tap **Play reply**; on iPhone keep Silent
+Mode off when using Device voice. Disabling or removing the private config and restarting the relay
+returns to the original browser voice.
+
 ## Rollback
 
 Choose the smallest step that fixes the problem.

@@ -89,8 +89,8 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false}={}){
-  const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false}={}){
+  const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
   /* Setting innerHTML registers every element that has an id, with its initial text and hidden state from the real markup. */
   const register=html=>{for(const m of String(html).matchAll(/<(\w+)([^>]*?)\sid="([^"]+)"([^>]*)>([^<]*)/g)){const sel='#'+m[3];if(!els.has(sel))els.set(sel,fakeEl());const node=els.get(sel),tagAttrs=m[2]+' '+m[4];node.textContent=m[5].trim();if(/(?:^|\s)hidden(?:\s|$|=)/.test(tagAttrs)){node.hidden=true;node.attrs.hidden='';}}};
@@ -104,19 +104,20 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   const background=fakeEl();
   class FakeSR{constructor(){recs.push(this);this.aborted=false;}start(){audioEvents.push('record');this.onstart?.();}stop(){this.onend?.();}abort(){this.aborted=true;}}
   class FakeUtterance{constructor(text){this.text=text;(text.trim()?utterances:primes).push(this);}}
-  const sandbox={console,Date,Math,AbortController,performance:{now:()=>1},navigator:{userAgent:'test'},DEV_MODE:true,
+  class FakeAudio{constructor(){this.src='';audios.push(this);}setAttribute(){}removeAttribute(){this.src='';}play(){return Promise.resolve();}pause(){}load(){}}
+  const sandbox={console,Date,Math,AbortController,Audio:FakeAudio,Blob,atob,Uint8Array,URL:{createObjectURL:()=>'blob:test',revokeObjectURL(){}},performance:{now:()=>1},navigator:{userAgent:'test'},DEV_MODE:true,
     document:{addEventListener(){},createElement:()=>fakeEl(),body:{appendChild(c){if(!root)root=c;}},querySelector:s=>s==='.app-wrapper'?background:null,getElementById:()=>null,activeElement:null,hidden:false},
     setTimeout(fn,ms){timers.set(++n,{fn,ms});return n;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(fn){rafs.push(fn);return rafs.length;},cancelAnimationFrame(){},
     addEventListener(t,f){(winListeners[t]=winListeners[t]||[]).push(f);},removeEventListener(t,f){winListeners[t]=(winListeners[t]||[]).filter(x=>x!==f);},
     matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(u){if(inGesture)speechUnlocked=true;if(speechGate&&!speechUnlocked)return;spoken.push(u);audioEvents.push(u.text.trim()?'reply':'prime');},cancel(){audioEvents.push('cancel');},getVoices:()=>[]},
     D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>agent?{kind:'chat'}:{kind:'reply',message:reply})}};
-  if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async url=>{await Promise.resolve();return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n'}:{reply}};};}
+  if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async(url,init)=>{await Promise.resolve();if(String(url).endsWith('/speech')){speechRequests.push(JSON.parse(init.body));return {ok:true,json:async()=>({contentType:'audio/mpeg',audio:Buffer.alloc(100,7).toString('base64')})};}return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n',...(customSpeech?{speech:{available:true,provider:'elevenlabs',name:'Jarvis Seravillas'}}:{})}:{reply}};};}
   sandbox.window=sandbox;
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
-  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-voice.js','src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root_,file),'utf8'));
-  const app={run,context,recs,utterances,primes,spoken,audioEvents,wa,timers,background,winListeners,rafs,
+  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root_,file),'utf8'));
+  const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
     click(j){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j}})}});}finally{inGesture=false;}},
     submit(text){app.el('jarvis-input').value=text;inGesture=true;try{app.el('jarvis-form').listeners.submit({preventDefault(){}});}finally{inGesture=false;}},
@@ -130,6 +131,16 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 }
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('custom voice: actual overlay uses ElevenLabs audio, waits for playback before listening and offers the device voice without cloud synthesis',async()=>{
+  const app=desktopRuntime({agent:true,customSpeech:true,reply:'At your service.'});app.run('openJarvis()');await flush();
+  assert.equal(app.el('jarvis-voice-choice').value,'elevenlabs');app.click('mic');app.hear('Hello');await flush();
+  assert.deepEqual(app.speechRequests,[{text:'At your service.'}]);assert.equal(app.utterances.length,0);assert.equal(app.recs.length,1);
+  app.audios[0].onplaying();assert.equal(app.phase(),'speaking');app.runDelay(450);assert.equal(app.recs.length,1);
+  app.audios[0].onended();await flush();app.runDelay(450);assert.equal(app.recs.length,2);
+  app.click('settings');app.el('jarvis-voice-choice').listeners.change({target:{value:'device'}});assert.equal(app.el('jarvis-voice-choice').value,'device');
+  app.click('test-speaker');assert.equal(app.utterances.length,1);assert.equal(app.speechRequests.length,1);app.click('close');
+});
 
 test('iPhone gesture gate: a microphone tap enables a later spoken reply before recording, including when listening sounds are off',async()=>{
   const app=desktopRuntime({speechGate:true,desktop:false,reply:'Your connection is working.'});app.run('openJarvis()');await flush();

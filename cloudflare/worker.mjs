@@ -136,6 +136,7 @@ const relayText = (value, max) => { if (typeof value !== 'string' || value.lengt
 /* Exactly the operations the PC agent will run. AI drafting, model consent and WhatsApp connect/pairing are not here. */
 const RELAY_OPS = {
   'health': p => { assertKeys(p, []); return {}; },
+  'speech': p => { assertKeys(p, ['text']); if(!relayText(p.text,600).trim())fail(400,'Invalid speech request'); return {text:p.text}; },
   'wa-status': p => { assertKeys(p, []); return {}; },
   'chat': p => {
     assertKeys(p, ['text','sessionId','context']);

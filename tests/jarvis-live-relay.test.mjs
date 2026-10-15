@@ -10,7 +10,7 @@ const CODE='d'.repeat(64),LOCAL_TOKEN='LOCAL_SESSION_TOKEN_SENTINEL',config={clo
 const json=(status,body)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 const job=(op,params={})=>({jobId:(op.length.toString(16)+'f'.repeat(64)).slice(0,64),op,params});
 function memoryStore(initial={...config}){let data=JSON.parse(JSON.stringify(initial));return {load:()=>JSON.parse(JSON.stringify(data)),save(v){data=JSON.parse(JSON.stringify(v));},peek:()=>data};}
-function harness({jobs=[],local=async()=>json(200,{}),cloud=null,store=memoryStore(),every}={}){
+function harness({jobs=[],local=async()=>json(200,{}),cloud=null,store=memoryStore(),every,speechProvider=null}={}){
   const queue=[...jobs],completed=[],localCalls=[],cloudCalls=[];let agent;
   const fetchImpl=async(url,init)=>{
     assert.equal(init.redirect,'error');
@@ -29,7 +29,7 @@ function harness({jobs=[],local=async()=>json(200,{}),cloud=null,store=memorySto
     return local(url,init);
   };
   const sleeps=[];
-  agent=createRelayAgent({config:store.load(),store,fetchImpl,sleep:async ms=>{sleeps.push(ms);if(!queue.length&&ms===2500)agent.stop();},...(every?{every}:{})});
+  agent=createRelayAgent({config:store.load(),store,speechProvider,fetchImpl,sleep:async ms=>{sleeps.push(ms);if(!queue.length&&ms===2500)agent.stop();},...(every?{every}:{})});
   return {agent,completed,localCalls,cloudCalls,sleeps,store};
 }
 
@@ -38,6 +38,14 @@ test('configuration: only the production Worker over https and an exact loopback
   for(const cloudUrl of ['http://seravillas-sync.antonio-01e.workers.dev','https://evil.workers.dev','https://seravillas-sync.antonio-01e.workers.dev/other','https://user:pass@seravillas-sync.antonio-01e.workers.dev'])assert.throws(()=>validateConfig({...config,cloudUrl}),/cloudUrl/);
   for(const localUrl of ['http://192.168.1.20:5500','https://127.0.0.1:5500','http://127.0.0.1:5500/api','http://user:p@127.0.0.1:5500','http://127.0.0.2:5500'])assert.throws(()=>validateConfig({...config,localUrl}),/localUrl/);
   assert.throws(()=>validateConfig({...config,deviceToken:'SECRET_LIKE_VALUE'}),e=>/deviceToken/.test(e.message)&&!e.message.includes('SECRET_LIKE_VALUE'));
+});
+
+test('speech uses only the fixed PC provider, health advertises it, and duplicate jobs cannot spend credits twice',async()=>{
+  let generations=0;const provider={status:()=>({available:true,provider:'elevenlabs',name:'Jarvis Seravillas'}),generate:async text=>{generations++;assert.equal(text,'Hello');return {contentType:'audio/mpeg',audio:'SYNTHETIC_AUDIO'};}};
+  const speechJob={...job('speech',{text:'Hello'}),jobId:'e'.repeat(64)},h=harness({jobs:[job('health'),speechJob,speechJob],speechProvider:provider,local:async()=>json(200,{ready:true})});await h.agent.run();
+  assert.equal(generations,1);assert.equal(h.localCalls.length,1);assert.equal(h.completed[0].result.body.speech.name,'Jarvis Seravillas');assert.equal(h.completed[1].result.body.audio,'SYNTHETIC_AUDIO');
+  assert.throws(()=>mapJob(job('speech',{text:'Hi',voiceId:'UNTRUSTED'})),/not allowed/);assert.throws(()=>mapJob(job('speech',{text:'x'.repeat(601)})),/not allowed/);
+  const absent=harness({jobs:[job('speech',{text:'Hello'})]});await absent.agent.run();assert.equal(absent.completed[0].result.status,503);
 });
 
 test('jobs map to exactly one existing local endpoint; AI drafting, consent and WhatsApp linking are refused',()=>{

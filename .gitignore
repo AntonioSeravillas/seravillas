@@ -12,6 +12,8 @@ seravillas-backup-*.json
 node_modules/
 tools/jarvis/whatsapp-runtime/node_modules/
 jarvis-live-relay.json
+jarvis-elevenlabs.json
+jarvis-elevenlabs.json.usage.json
 jarvis-whatsapp/
 inbox.json
 *.ledger.json

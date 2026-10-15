@@ -29,6 +29,15 @@ function setup(){
 test.after(()=>worker.setRelayClockForTests(null));
 const SEND={chat:'a'.repeat(20),reviewToken:'R'.repeat(24),text:'Hi Bex'};
 
+test('speech relay accepts bounded text only; no client voice ID, key, URL or hidden commands reach the PC',async()=>{
+  const app=setup(),code=await app.register();await app.device('/api/relay/device/heartbeat',code);
+  for(const params of [{text:''},{text:'x'.repeat(601)},{text:'hello',apiKey:'secret'},{text:'hello',voiceId:'other'},{text:'hello',url:'https://evil.invalid'}])assert.equal((await app.job('speech',params)).status,400);
+  assert.equal((await app.job('speech',{text:'At your service.'})).status,202);
+  const {job}=await (await app.device('/api/relay/device/claim',code)).json();assert.equal(job.op,'speech');assert.deepEqual(job.params,{text:'At your service.'});
+  await app.device('/api/relay/device/complete',code,{jobId:job.jobId,result:{status:200,body:{contentType:'audio/mpeg',audio:'SYNTHETIC_AUDIO'}}});
+  const done=await (await app.manager('/api/relay/jobs/'+job.jobId)).json();assert.equal(done.result.body.audio,'SYNTHETIC_AUDIO');assert.equal(app.sql.sqlite.prepare('SELECT COUNT(*) AS n FROM app_state').get().n,0);
+});
+
 test('relay auth: device codes never create schema or reach manager routes; the manager cannot act as the PC; foreign origins are refused',async()=>{
   const app=setup();
   assert.equal((await app.device('/api/relay/device/claim','a'.repeat(64))).status,401);
