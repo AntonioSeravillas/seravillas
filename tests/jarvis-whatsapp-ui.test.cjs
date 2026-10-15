@@ -12,7 +12,7 @@ function runtime(fetchImpl){
   const root={innerHTML:'',listeners:{},removed:false,addEventListener(type,fn){this.listeners[type]=fn;},querySelector:sel=>nodes.get(sel)||null,querySelectorAll:()=>[],remove(){this.removed=true;}};
   const background={attrs:new Set(),setAttribute(a){this.attrs.add(a);},removeAttribute(a){this.attrs.delete(a);},hasAttribute(a){return this.attrs.has(a);}};
   nodes.set('#wa-title',{focus(){focused++;}});
-  const sandbox={console,AbortSignal,
+  const sandbox={console,AbortSignal,AbortController,
     document:{createElement:()=>root,body:{appendChild(){bodyAppends++;}},querySelector:sel=>sel==='.app-wrapper'?background:null,activeElement:null},
     setTimeout(fn,ms){timers.push({fn,ms});return timers.length;},clearTimeout(){},setInterval(){throw Error('Unexpected interval');},
     fetch:async(url,init={})=>{requests.push({url:String(url),init});return fetchImpl(String(url),init);},
@@ -26,6 +26,19 @@ function runtime(fetchImpl){
   return app;
 }
 const reply=(status,data)=>({ok:status>=200&&status<300,status,json:async()=>data});
+test('unread questions including greetings stay local; dictated bodies never become inbox commands',()=>{
+  const app=runtime(()=>{}),parse=app.context.SV_JARVIS_WHATSAPP.parseCommand;
+  for(const text of ['Hi Jarvis good morning, do we have any unread messages on WhatsApp?','Read my unread WhatsApp messages','Any new messages on WhatsApp?'])assert.equal(parse(text).kind,'unread');
+  assert.notEqual(parse('Do not read my unread WhatsApp messages')?.kind,'unread');
+  assert.equal(parse('Write a WhatsApp message to Bex saying read my unread WhatsApp messages').kind,'write');
+});
+test('inbox monitor suppresses baseline history, announces each new contact message once, shares requests and stops on close',async()=>{
+  let inbox={connection:{state:'open'},recent:[{id:'a'.repeat(20),unread:true,text:'Old'}]},calls=0;const arrivals=[],timers=new Map();let n=0;
+  const app=runtime(()=>{}),monitor=app.context.SV_JARVIS_WHATSAPP.createMonitor({fetchImpl:async(url,init)=>{calls++;if(url.endsWith('status'))return reply(200,{available:true,requestToken:'test'});if(url.endsWith('read')){assert.deepEqual(JSON.parse(init.body),{messages:['b'.repeat(20)]});return reply(200,{read:1});}return reply(200,inbox);},onArrivals:rows=>arrivals.push(...rows),schedule:(fn,ms)=>{timers.set(++n,fn);return n;},cancel:id=>timers.delete(id)});
+  const first=monitor.refresh();assert.equal(first,monitor.refresh());await first;assert.equal(calls,2);assert.equal(arrivals.length,0);
+  inbox={connection:{state:'open'},recent:[{id:'b'.repeat(20),unread:true,text:'New'},...inbox.recent]};await monitor.refresh();await monitor.refresh();assert.equal(arrivals.length,1);assert.equal(arrivals[0].text,'New');
+  await monitor.markRead(['b'.repeat(20)]);monitor.stop();assert.equal(timers.size,0);const before=calls;await monitor.refresh();assert.equal(calls,before);
+});
 
 test('an unreachable server shows Not connected and never switches to the sample inbox on its own',async()=>{
   const app=runtime(async()=>{throw Error('offline');});const before=app.data();

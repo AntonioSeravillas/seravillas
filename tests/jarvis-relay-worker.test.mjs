@@ -27,6 +27,13 @@ function setup(){
   return {env,sql,call,manager,device,tables,register,job,tick:ms=>{now+=ms;}};
 }
 test.after(()=>worker.setRelayClockForTests(null));
+test('read acknowledgements require manager authentication and accept only up to ten message keys',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  assert.equal((await h.call('/api/relay/jobs','POST',{op:'wa-read',params:{messages:['a'.repeat(20)]}})).status,401);
+  assert.equal((await h.job('wa-read',{messages:['a'.repeat(20)]})).status,202);
+  for(const messages of [[],['bad'],Array(11).fill('a'.repeat(20))])assert.equal((await h.job('wa-read',{messages})).status,400);
+  assert.equal((await h.job('wa-read',{messages:['a'.repeat(20)],send:true})).status,400);
+});
 const SEND={chat:'a'.repeat(20),reviewToken:'R'.repeat(24),text:'Hi Bex'};
 
 test('speech relay accepts bounded text only; no client voice ID, key, URL or hidden commands reach the PC',async()=>{

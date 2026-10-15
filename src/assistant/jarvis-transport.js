@@ -5,7 +5,7 @@
    - The PC's local session token never reaches the browser: a "relay" placeholder keeps the existing UI gating.
    Only Jarvis's own calls use this; nothing global is patched. */
 (function(){
-  const TIMEOUT={health:20000,chat:110000,speech:60000,'wa-status':20000,'wa-inbox':25000,'wa-review':40000,'wa-send':60000,'wa-discard':25000};
+  const TIMEOUT={health:20000,chat:110000,speech:60000,'wa-status':20000,'wa-inbox':25000,'wa-read':25000,'wa-review':40000,'wa-send':60000,'wa-discard':25000};
   const SENTINEL='relay';
   const remote=()=>typeof DEV_MODE!=='undefined'&&!DEV_MODE;
   const relayUrl=()=>typeof SYNC_URL==='string'?SYNC_URL:'';
@@ -24,6 +24,7 @@
       const action=wa[1];
       if(action==='status'&&method==='GET')return {op:'wa-status',params:{}};
       if(action==='inbox'&&method==='GET'){const chat=u.searchParams.get('chat')||'';return {op:'wa-inbox',params:chat?{chat}:{}};}
+      if(action==='read'&&method==='POST')return {op:'wa-read',params:{messages:body.messages}};
       if(action==='review'&&method==='POST')return {op:'wa-review',params:{chat:body.chat,version:body.version,text:body.text,checkedPhone:body.checkedPhone===true}};
       if(action==='send'&&method==='POST')return {op:'wa-send',params:{chat:body.chat,reviewToken:body.reviewToken,text:body.text}};
       if(action==='draft'&&method==='POST'&&body.action==='discard')return {op:'wa-discard',params:{chat:body.chat}};

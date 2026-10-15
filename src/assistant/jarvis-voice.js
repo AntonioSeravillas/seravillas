@@ -45,6 +45,8 @@
       /* Any explicit stop: pause button, settings, typing, review, WhatsApp, hide or close. */
       pause(text='Paused. Tap the microphone to talk again.'){if(!active&&!rec&&timer===null)return false;halt('paused',text);return true;},
       stop(){halt('idle','');},
+      /* An incoming announcement may take a quiet listening gap, retaining the user's conversation opt-in. */
+      holdForReply(){if(!active)return false;turn++;clearTimer();const current=rec;rec=null;try{current?.cancel?.();}catch{}set('thinking');return true;},
       /* Host cancelled speech; listen straight away and keep the conversation opt-in. */
       interrupt(){if(!active)return false;silent=0;return listen('interrupt');},
       speaking(){if(active&&(phase==='thinking'||phase==='speaking'))set('speaking');},

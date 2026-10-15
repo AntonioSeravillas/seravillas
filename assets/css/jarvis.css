@@ -77,6 +77,7 @@
 .jarvis-footnote{grid-column:3;justify-self:end;align-self:center;margin:0;font-size:13px;color:var(--j-muted)}
 
 /* Settings sheet. */
+.jarvis-inbox-status{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}.jarvis-inbox-status button{font:inherit;min-height:36px;text-align:left}.jarvis-inbox-status button:hover{color:var(--j-text)}
 .jarvis-panel-backdrop{position:fixed;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:#000a;padding:24px}.jarvis-panel-backdrop[hidden]{display:none}
 .jarvis-sheet{width:100%;max-width:480px;max-height:88dvh;overflow:auto;background:#0c0c0c;border:1px solid #232323;border-radius:16px;padding:24px 26px}
 .jarvis-sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}

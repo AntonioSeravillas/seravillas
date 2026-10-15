@@ -8,6 +8,11 @@ import {validateConfig,mapJob,sanitize,createRelayAgent,createFileStore,PRODUCTI
 /* Mock cloud + mock loopback server only. No real Worker, Jarvis server, WhatsApp or network. */
 const CODE='d'.repeat(64),LOCAL_TOKEN='LOCAL_SESSION_TOKEN_SENTINEL',config={cloudUrl:PRODUCTION_RELAY,localUrl:'http://127.0.0.1:5500',deviceToken:CODE};
 const json=(status,body)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
+test('read acknowledgements map only bounded exact message identifiers to the local protected endpoint',()=>{
+  assert.deepEqual(mapJob({op:'wa-read',params:{messages:['a'.repeat(20)]}}),{method:'POST',path:'/api/jarvis/whatsapp/read',needsToken:true,body:{messages:['a'.repeat(20)]}});
+  for(const messages of [[],['bad'],Array(11).fill('a'.repeat(20))])assert.throws(()=>mapJob({op:'wa-read',params:{messages}}));
+  assert.throws(()=>mapJob({op:'wa-read',params:{messages:['a'.repeat(20)],send:true}}));
+});
 const job=(op,params={})=>({jobId:(op.length.toString(16)+'f'.repeat(64)).slice(0,64),op,params});
 function memoryStore(initial={...config}){let data=JSON.parse(JSON.stringify(initial));return {load:()=>JSON.parse(JSON.stringify(data)),save(v){data=JSON.parse(JSON.stringify(v));},peek:()=>data};}
 function harness({jobs=[],local=async()=>json(200,{}),cloud=null,store=memoryStore(),every,speechProvider=null}={}){

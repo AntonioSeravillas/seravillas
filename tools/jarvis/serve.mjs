@@ -22,7 +22,7 @@ const SYSTEM='You are Jarvis, Antonio’s Seravillas operations assistant. Be co
   'If he asks you to make such a change, tell him to say or type it directly, for example “Add task for [property name] due 22 October 2026: check the pool pump”, and never say it was done. '+
   'Never invent guest names, draft bookings, booking references or dates that are not in the current snapshot. '+
   'If a message is only a fragment, such as a time or date without clear context, ask what he means instead of filling it in from old bookings or memory. '+
-  'WhatsApp, Outlook and Uplisting are NOT connected. Never claim to read, send, book, assign or edit through them. '+
+  'The app handles WhatsApp inbox questions and reviewed replies separately; you do not receive WhatsApp messages or perform WhatsApp actions. Outlook and Uplisting are not connected. Never invent unread counts or claim to have sent messages. '+
   'No commands, file editing or external messages are available in this pilot. Reply with plain text suitable for speech.';
 
 export function sanitizeContext(input){
@@ -89,12 +89,13 @@ export function createWhatsAppDraftGenerator({hermesUrl='http://127.0.0.1:8642/p
   };
 }
 /* Real wiring, created only on the first protected inbox request. Importing these modules touches no files. */
-export async function createDefaultWhatsApp({hermesUrl,apiKey}={}){
+export async function createDefaultWhatsApp({hermesUrl,apiKey,runtimeDir=process.env.JARVIS_WHATSAPP_RUNTIME}={}){
   const [{createWhatsAppService,createFileStore},{createBaileysConnector,defaultDataDir}]=await Promise.all([import('./whatsapp-service.mjs'),import('./whatsapp-connector.mjs')]);
   const dir=defaultDataDir();if(!dir)throw safeError('The private WhatsApp folder could not be found on this computer.');
   let service=null;
-  const connector=createBaileysConnector({sessionDir:path.join(dir,'session'),onMessage:event=>service?.receive(event)});
+  const connector=createBaileysConnector({sessionDir:path.join(dir,'session'),...(runtimeDir?{runtimeDir}:{}),onMessage:event=>service?.receive(event)});
   service=createWhatsAppService({store:createFileStore(path.join(dir,'inbox')),connector,generator:createWhatsAppDraftGenerator({hermesUrl,apiKey})});
+  void service.resume().catch(()=>{});
   return service;
 }
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.woff2':'font/woff2','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.wav':'audio/wav'};
@@ -108,7 +109,7 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
     waLoading=waLoading||Promise.resolve().then(()=>whatsapp());
     try{waService=await waLoading;return waService;}finally{waLoading=null;}
   }
-  const WA_ROUTES={inbox:'GET',connect:'POST',disconnect:'POST','model-consent':'POST',draft:'POST',review:'POST',send:'POST'};
+  const WA_ROUTES={inbox:'GET',read:'POST',connect:'POST',disconnect:'POST','model-consent':'POST',draft:'POST',review:'POST',send:'POST'};
   async function handleWhatsApp(req,res,url){
     const action=url.pathname.slice('/api/jarvis/whatsapp/'.length);
     if(action==='status'&&req.method==='GET'){send(res,200,{available:typeof whatsapp==='function',requestToken:token});return;}
@@ -124,6 +125,7 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
     try{
       const wa=await getWhatsApp(),chat=typeof body.chat==='string'?body.chat:'';
       if(action==='inbox'){send(res,200,{connection:wa.connectionStatus(),...wa.inbox({chat:url.searchParams.get('chat')||''})});return;}
+      if(action==='read'){send(res,200,wa.markRead({messages:body.messages}));return;}
       if(action==='connect'){send(res,200,{connection:await wa.connect({acceptRisk:body.acceptRisk===true})});return;}
       if(action==='disconnect'){send(res,200,{connection:await wa.disconnect()});return;}
       if(action==='model-consent'){send(res,200,wa.setModelConsent({enabled:body.enabled===true,acknowledged:body.acknowledged===true}));return;}

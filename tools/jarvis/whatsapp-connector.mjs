@@ -72,8 +72,7 @@ export function createBaileysConnector({sessionDir='',runtimeDir=RUNTIME_DIR,loa
   }
   function retry(id,first){
     if(!optIn||id!==generation)return;
-    if(attempt>=reconnectDelays.length){optIn=false;set('disconnected','The connection was lost. Press Connect to try again.');return;}
-    const delay=first&&attempt===0?first:reconnectDelays[attempt];attempt++;
+    const delay=first&&attempt===0?first:(reconnectDelays[Math.min(attempt,reconnectDelays.length-1)]||60000);attempt=Math.min(attempt+1,reconnectDelays.length);
     set('connecting','Reconnecting…');
     timer=schedule(()=>{timer=null;if(optIn&&id===generation)void open();},delay);
   }
@@ -113,7 +112,7 @@ export function createBaileysConnector({sessionDir='',runtimeDir=RUNTIME_DIR,loa
     const live=()=>optIn&&id===generation&&s===sock;
     if(!live()||(type!=='notify'&&type!=='append'))return;
     for(const raw of (Array.isArray(messages)?messages:[]).slice(0,50)){
-      const event=normalizeMessage(raw);if(!event)continue;
+      const event=normalizeMessage(raw);if(!event)continue;event.live=type==='notify';
       if(chatKind(event.chatJid)==='group')event.groupName=await groupName(s,event.chatJid);
       /* Disconnect may happen while the group name was being fetched: nothing from a stale socket is ingested. */
       if(!live())return;

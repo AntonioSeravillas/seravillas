@@ -11,6 +11,23 @@ import {createJarvisServer,createWhatsAppDraftGenerator,WHATSAPP_SYSTEM} from '.
 const DM='34600000001@s.whatsapp.net',DM2='34600000002@s.whatsapp.net',GROUP='120363000000000001@g.us',MEMBER='34600000003@s.whatsapp.net';
 const key=chatKeyFor(DM),key2=chatKeyFor(DM2),gkey=chatKeyFor(GROUP);
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+test('unread tracking excludes history and owner echoes, acknowledges exact messages, persists and preserves newer arrivals',()=>{
+  const {service,store}=setup();service.receive(incoming('history','Earlier',{live:false}));service.receive(incoming('owner','My message',{fromMe:true}));
+  service.receive(incoming('one','First'));const first=service.inbox();assert.equal(first.unreadCount,1);assert.equal(first.recent.length,1);
+  service.receive(incoming('two','New arrival'));service.receive(incoming('one','Duplicate'));
+  assert.equal(service.markRead({messages:[first.unread[0].id]}).read,1);
+  const next=service.inbox();assert.equal(next.unreadCount,1);assert.equal(next.unread[0].text,'New arrival');assert.equal(next.chats[0].unreadCount,1);
+  assert.equal(setup({store}).service.inbox().unreadCount,1);assert.throws(()=>service.markRead({messages:['invalid']}),/ten received/);
+  assert.throws(()=>service.markRead({messages:Array(11).fill(first.unread[0].id)}),/ten received/);
+  const saved=store.load();for(const c of Object.values(saved.chats))for(const m of c.messages)delete m.unread;
+  assert.equal(setup({store:createMemoryStore(saved)}).service.inbox().unreadCount,0,'old inbox migration must not announce historical messages');
+});
+test('saved authorised links resume, explicit Disconnect persists and never resumes until Connect',async()=>{
+  let connects=0;const connector={...fakeConnector(),connect:async()=>{connects++;}};const {service,store}=setup({connector});
+  await service.resume();assert.equal(connects,0);await service.connect({acceptRisk:true});assert.equal(connects,1);
+  await setup({store,connector}).service.resume();assert.equal(connects,2);
+  await service.disconnect();await setup({store,connector}).service.resume();assert.equal(connects,2);
+});
 function fakeConnector(result=async()=>({id:'out-1'})){
   const sent=[];
   return {sent,status:()=>({state:'open',message:'Connected as a linked device.'}),connect:async()=>{},disconnect:async()=>{},sendText:async(jid,text)=>{sent.push({jid,text});return result(jid,text);}};

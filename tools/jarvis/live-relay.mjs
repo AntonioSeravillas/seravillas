@@ -13,7 +13,7 @@ import {createElevenLabsVoice,loadVoiceConfig,defaultVoicePath} from './elevenla
 
 export const PRODUCTION_RELAY='https://seravillas-sync.antonio-01e.workers.dev';
 export const defaultConfigPath=(env=process.env)=>env.LOCALAPPDATA?path.join(env.LOCALAPPDATA,'hermes','profiles','seravillas','jarvis-live-relay.json'):'';
-const TIMEOUTS={health:20000,chat:110000,speech:50000,'wa-status':15000,'wa-inbox':20000,'wa-review':30000,'wa-send':55000,'wa-discard':20000};
+const TIMEOUTS={health:20000,chat:110000,speech:50000,'wa-status':15000,'wa-inbox':20000,'wa-read':20000,'wa-review':30000,'wa-send':55000,'wa-discard':20000};
 const UNCERTAIN_SEND={status:200,body:{status:'uncertain',message:'The Jarvis PC could not confirm this send. Check WhatsApp on the phone before sending again.'}};
 const bad=()=>Object.assign(new Error('This request is not allowed from other devices.'),{code:'UNSUPPORTED'});
 
@@ -39,6 +39,7 @@ export function mapJob({op,params}={}){
     case 'wa-status':return {method:'GET',path:'/api/jarvis/whatsapp/status',needsToken:false};
     case 'chat':{if(!/^[a-zA-Z0-9_-]{8,100}$/.test(String(p.sessionId||''))||!p.context||typeof p.context!=='object'||Array.isArray(p.context))throw bad();return {method:'POST',path:'/api/jarvis/chat',needsToken:true,body:{text:text(p.text),sessionId:p.sessionId,context:p.context}};}
     case 'wa-inbox':return {method:'GET',path:'/api/jarvis/whatsapp/inbox'+(p.chat?'?chat='+chat(p.chat):''),needsToken:true};
+    case 'wa-read':{if(Object.keys(p).some(k=>k!=='messages')||!Array.isArray(p.messages)||p.messages.length<1||p.messages.length>10)throw bad();return {method:'POST',path:'/api/jarvis/whatsapp/read',needsToken:true,body:{messages:p.messages.map(chat)}};}
     case 'wa-review':{if(!Number.isInteger(p.version)||p.version<0||typeof p.text!=='string'||p.text.length>2000)throw bad();return {method:'POST',path:'/api/jarvis/whatsapp/review',needsToken:true,body:{chat:chat(p.chat),version:p.version,text:p.text,checkedPhone:p.checkedPhone===true}};}
     case 'wa-send':{if(!/^[A-Za-z0-9_-]{16,64}$/.test(String(p.reviewToken||'')))throw bad();return {method:'POST',path:'/api/jarvis/whatsapp/send',needsToken:true,body:{chat:chat(p.chat),reviewToken:p.reviewToken,text:text(p.text)}};}
     case 'wa-discard':return {method:'POST',path:'/api/jarvis/whatsapp/draft',needsToken:true,body:{chat:chat(p.chat),action:'discard'}};

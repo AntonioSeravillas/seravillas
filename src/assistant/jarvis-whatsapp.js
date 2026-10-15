@@ -36,6 +36,8 @@
     t=t.replace(WAKE,'');for(let i=0;i<3;i++){const next=t.replace(LEAD,'');if(next===t)break;t=next;}t=t.trim();
     if(SEND_ONLY.test(t))return {kind:'refuse_send',message:'I can’t send by voice. Check the review on screen and press Approve and send.'};
     const sep=t.search(SEP),head=sep>=0?t.slice(0,sep):t;
+    /* Read-only inbox questions are separate from dictated reply bodies. Never parse after "saying". */
+    if(sep<0&&/\bwhats\s?app\b/i.test(t)&&/\b(?:unread|new messages|read (?:my |the )?messages)\b/i.test(t)&&!(/\b(?:don't|don’t|do not|never|stop)\b/i.test(t)))return {kind:'unread'};
     if(!/\bwhats\s?app\b/i.test(head)||!VERB.test(head))return null;
     const clarify=message=>({kind:'clarify',message});
     if(/^["“'‘]/.test(t)||QUESTION.test(head)||(sep<0&&/\?\s*$/.test(t))||UNSURE.test(head))return clarify('I didn’t open anything. '+HELP);
@@ -52,6 +54,32 @@
     return clarify('I didn’t understand that WhatsApp request. '+HELP);
   }
 
+  /* One cancellable watcher per open Jarvis. Initial history establishes a baseline, never an announcement.
+     The only acknowledgement is an explicit list of messages whose playback finished (or owner marked read). */
+  function createMonitor({fetchImpl=jarvisFetch,onUpdate=()=>{},onArrivals=()=>{},schedule=setTimeout,cancel=clearTimeout,delay=8000}={}){
+    let stopped=false,token='',timer=null,pending=null,baseline=false;const seen=new Set(),controller=new AbortController();
+    async function api(name,body){
+      const timeout=AbortSignal.timeout(27000);
+      /* Each request has its own deadline without invalidating the watcher's lifetime. */
+      const callController=new AbortController(),cancelCall=()=>callController.abort();controller.signal.addEventListener('abort',cancelCall,{once:true});timeout.addEventListener('abort',cancelCall,{once:true});
+      try{const res=await fetchImpl(API+name,{method:body?'POST':'GET',headers:{'X-Jarvis-Session-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',signal:callController.signal});const data=await res.json();if(!res.ok)throw Error(data.error||'The WhatsApp inbox could not be reached.');return data;}
+      finally{controller.signal.removeEventListener('abort',cancelCall);timeout.removeEventListener('abort',cancelCall);}
+    }
+    function refresh(){
+      if(stopped)return Promise.resolve(null);if(pending)return pending;cancel(timer);
+      pending=(async()=>{
+        try{
+          if(!token){const status=await api('status');if(!status.available||typeof status.requestToken!=='string')throw Error('WhatsApp is not enabled on the Jarvis PC.');token=status.requestToken;}
+          const data=await api('inbox');if(stopped)return null;
+          const arrivals=(data.recent||[]).filter(m=>m.unread===true&&!seen.has(m.id));
+          for(const m of data.recent||[])seen.add(m.id);while(seen.size>200)seen.delete(seen.values().next().value);
+          onUpdate(data);if(baseline&&arrivals.length)onArrivals(arrivals.reverse());baseline=true;return data;
+        }catch(err){if(!stopped){token='';onUpdate({connection:{state:'unreachable',message:err.message},unreadCount:null});}return null;}
+        finally{pending=null;if(!stopped)timer=schedule(()=>void refresh(),delay);}
+      })();return pending;
+    }
+    return {refresh,async markRead(messages){if(stopped||!messages.length)return;await api('read',{messages:messages.slice(0,10)});},stop(){stopped=true;cancel(timer);controller.abort();}};
+  }
   const sampleChat=(st,key)=>st.sample.chats.find(c=>c.key===key)||null;
   const summaryOf=c=>({key:c.key,kind:c.kind,name:c.name,detail:c.detail,version:c.version,preview:(c.messages.at(-1)||{}).text||'',draftStatus:c.draft?c.draft.status:'',sendStatus:''});
   const live=st=>S===st&&st.mode==='live';
@@ -110,9 +138,10 @@
   }
 
   /* ── Rendering: every dynamic value goes through e(). Rendering never reads the editor back. ── */
-  function connectionView(c){
+  function connectionView(c,compact=false){
     const st=(c&&c.state)||'disconnected',label={open:'Connected',qr:'Waiting for the phone to scan',connecting:'Connecting…',missing_dependencies:'Not connected — WhatsApp support is not installed',logged_out:'Not connected — the phone ended this linked device',error:'Not connected',not_configured:'Not connected',disconnected:'Not connected'}[st]||'Not connected';
     let h='<div class="wa-banner'+(st==='open'?' ok':' warn')+'" role="status"><b>'+e(label)+'</b>'+(c&&c.message?'<span>'+e(c.message)+'</span>':'')+'</div>';
+    if(compact)return h;
     if(st==='qr'&&c.qr&&/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(c.qr))h+='<img class="wa-qr" alt="Pairing code for WhatsApp Linked devices" src="'+e(c.qr)+'">';
     /* Linking, pairing and disconnecting happen on the Jarvis PC only. */
     if(viaRelay())return h+(st==='open'?'':'<p class="wa-note">Connect WhatsApp on the Jarvis PC itself.</p>');
@@ -130,7 +159,7 @@
   function listView(st,chats){
     const rows=(chats||[]).filter(c=>c.kind===st.tab);
     return '<div class="wa-tabs" role="tablist"><button role="tab" aria-selected="'+(st.tab==='direct')+'" data-wa="tab" data-tab="direct">Direct</button><button role="tab" aria-selected="'+(st.tab==='group')+'" data-wa="tab" data-tab="group">Groups</button></div>'
-      +'<ul class="wa-list">'+(rows.length?rows.map(c=>'<li><button class="wa-chat'+(c.key===st.selected?' on':'')+'" data-wa="select" data-key="'+e(c.key)+'"><b>'+e(c.name)+'</b><small>'+e(c.detail)+'</small><span>'+e(c.preview)+'</span>'+(c.draftStatus==='ready'?'<em>Draft ready</em>':'')+(c.sendStatus==='uncertain'?'<em class="bad">Check phone</em>':'')+'</button></li>').join(''):'<li class="wa-empty">No '+(st.tab==='group'?'group':'direct')+' messages yet.</li>')+'</ul>';
+      +'<ul class="wa-list">'+(rows.length?rows.map(c=>'<li><button class="wa-chat'+(c.key===st.selected?' on':'')+'" data-wa="select" data-key="'+e(c.key)+'"><b>'+e(c.name)+'</b><small>'+e(c.detail)+'</small><span>'+e(c.preview)+'</span>'+(c.unreadCount?'<em>'+e(c.unreadCount)+' unread in Jarvis</em>':'')+(c.draftStatus==='ready'?'<em>Draft ready</em>':'')+(c.sendStatus==='uncertain'?'<em class="bad">Check phone</em>':'')+'</button></li>').join(''):'<li class="wa-empty">No '+(st.tab==='group'?'group':'direct')+' messages yet.</li>')+'</ul>';
   }
   function messageView(m,kind){
     const who=m.from==='owner'?(m.viaJarvis?'You · via Jarvis':'You'):kind==='group'?(m.sender||'Group member'):'Contact';
@@ -171,7 +200,7 @@
     let h='<div class="wa-panel wa-panel-embedded"><div class="wa-embedded-bar">'+(isLive?'':'<span class="wa-note">Sample inbox · nothing is sent</span>')+'<button class="wa-text" id="wa-close" data-wa="close" aria-label="Close WhatsApp">Close</button></div>';
     if(isLive&&st.offline)h+='<div class="wa-banner warn" role="status"><b>Not connected</b><span>'+e(st.offline)+'</span></div>';
     else if(isLive&&!st.data)h+='<div class="wa-banner" role="status">Loading…</div>';
-    else if(isLive&&state!=='open')h+='<div class="wa-banner warn" role="status"><b>Not connected</b><span>Open Inbox settings to connect.</span></div>';
+    else if(isLive)h+=connectionView(st.data.connection,true)+'<p class="wa-note">'+e(st.data.unreadCount||0)+' unread in Jarvis. Read aloud from the Jarvis conversation. Phone read status and older history are not synced.</p>';
     if(st.error)h+='<div class="wa-banner warn" role="alert">'+e(st.error)+'</div>';
     h+=intentView(it);
     if(chat&&!choosing)h+=chatView(st,chat);
@@ -352,5 +381,5 @@
     st.returnFocus?.focus?.();
     try{st.onClose?.();}catch{}
   }
-  window.SV_JARVIS_WHATSAPP=Object.freeze({open,close,parseCommand,isOpen:()=>!!S,isEmbedded:()=>!!(S&&S.embedded)});
+  window.SV_JARVIS_WHATSAPP=Object.freeze({open,close,parseCommand,createMonitor,isOpen:()=>!!S,isEmbedded:()=>!!(S&&S.embedded)});
 })();

@@ -131,6 +131,32 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 }
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+test('Jarvis footer avoids workspace data-nav capture; Tasks and Cleanings close Jarvis and navigate on desktop and phone',async()=>{
+  for(const desktop of [true,false])for(const [action,destination] of [['nav-tasks','tasks'],['nav-cleaning','cleaning']]){
+    const app=desktopRuntime({desktop}),visited=[];app.context.workspaceNavigate=target=>visited.push(target);app.run('openJarvis()');await flush();
+    assert.doesNotMatch(app.root().innerHTML,/\sdata-nav=/);assert.match(app.root().innerHTML,/data-jarvis-nav="whatsapp"/);
+    app.click(action);assert.deepEqual(visited,[destination]);assert.equal(app.root().removed,true);assert.equal(app.background.hasAttribute('inert'),false);
+  }
+});
+test('WhatsApp announcements wait for audio opt-in, finish before marking read, pause quiet recognition and stop on close',async()=>{
+  const app=desktopRuntime({agent:true});let hooks,stopped=0;const read=[],m={id:'a'.repeat(20),name:'Sample cleaner',text:'Hello',unread:true};
+  app.context.SV_JARVIS_WHATSAPP.createMonitor=options=>{hooks=options;return {refresh:async()=>null,markRead:async ids=>read.push(...ids),stop(){stopped++;}};};
+  app.run('openJarvis()');await flush();hooks.onUpdate({connection:{state:'open'},unreadCount:1,recent:[m]});hooks.onArrivals([m]);assert.equal(app.utterances.length,0);
+  app.click('message-audio');assert.equal(app.utterances.length,1);assert.equal(read.length,0);app.finishSpeech();await flush();assert.deepEqual(read,[m.id]);
+  app.click('mic');const rec=app.recs.at(-1),next={...m,id:'b'.repeat(20)};hooks.onUpdate({connection:{state:'open'},unreadCount:1,recent:[next]});hooks.onArrivals([next]);assert.equal(rec.aborted,true);assert.equal(read.length,1);
+  app.finishSpeech();await flush();app.runDelay(450);assert.equal(app.phase(),'listening');assert.equal(read.length,2);
+  const last={...m,id:'c'.repeat(20)};hooks.onUpdate({connection:{state:'open'},unreadCount:1,recent:[last]});hooks.onArrivals([last]);app.click('close');app.finishSpeech();await flush();assert.equal(read.length,2);assert.equal(stopped,1);
+});
+test('unread WhatsApp question is answered from the inbox and interrupted or muted speech never marks messages read',async()=>{
+  for(const outcome of ['complete','interrupt','mute']){
+    const app=desktopRuntime({agent:true}),read=[],m={id:'a'.repeat(20),name:'Sample cleaner',text:'Can we start at ten?'};
+    app.context.SV_JARVIS_WHATSAPP.parseCommand=()=>({kind:'unread'});
+    app.context.SV_JARVIS_WHATSAPP.createMonitor=()=>({refresh:async()=>({connection:{state:'open'},unreadCount:1,unread:[m]}),markRead:async ids=>read.push(...ids),stop(){}});
+    app.run('openJarvis()');await flush();if(outcome==='mute'){app.el('jarvis-muted').listeners.change({target:{checked:true}});}
+    await app.run(`SV_JARVIS.send('Hi Jarvis, do we have unread WhatsApp messages?')`);
+    assert.equal(read.length,0);if(outcome==='interrupt')app.click('close');app.finishSpeech();await flush();assert.equal(read.length,outcome==='complete'?1:0,outcome);
+  }
+});
 
 test('custom voice: actual overlay uses ElevenLabs audio, waits for playback before listening and offers the device voice without cloud synthesis',async()=>{
   const app=desktopRuntime({agent:true,customSpeech:true,reply:'At your service.'});app.run('openJarvis()');await flush();

@@ -89,7 +89,7 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
     if(kind==='group'&&event.groupName)chat.name=clip(event.groupName,limits.name);
     if(kind==='direct'&&!fromMe&&event.senderName)chat.name=clip(event.senderName,limits.name);
     const at=Number(event.timestamp);
-    chat.messages=[...chat.messages,{id:providerId,from:fromMe?'owner':'contact',sender:kind==='group'&&!fromMe?clip(event.senderName,limits.name)||'Group member':'',participantKey:kind==='group'&&!fromMe&&event.participant?sha('member:'+event.participant).slice(0,12):'',text,media,at:Number.isFinite(at)&&at>0?Math.floor(at):Math.floor(now()/1000),viaJarvis:false}].slice(-limits.messagesPerChat);
+    chat.messages=[...chat.messages,{id:providerId,live:event.live!==false,unread:!fromMe&&event.live!==false,receivedAt:now(),from:fromMe?'owner':'contact',sender:kind==='group'&&!fromMe?clip(event.senderName,limits.name)||'Group member':'',participantKey:kind==='group'&&!fromMe&&event.participant?sha('member:'+event.participant).slice(0,12):'',text,media,at:Number.isFinite(at)&&at>0?Math.floor(at):Math.floor(now()/1000),viaJarvis:false}].slice(-limits.messagesPerChat);
     chat.version+=1;chat.updatedAt=now();
     invalidate(chat,fromMe?'owner_reply':'new_message');
     evict();persist();
@@ -217,16 +217,27 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
   async function connect({acceptRisk}={}){
     if(acceptRisk!==true)throw fail(400,'Confirm that you accept the linked-device risk first.');
     if(!connector)throw fail(503,'WhatsApp is not set up on this server.');
-    state.settings={...state.settings,accountConsent:true};persist();
+    state.settings={...state.settings,accountConsent:true,reconnect:true};persist();
     await connector.connect();return connectionStatus();
   }
-  async function disconnect(){if(connector)await connector.disconnect();return connectionStatus();}
+  async function disconnect(){state.settings.reconnect=false;persist();if(connector)await connector.disconnect();return connectionStatus();}
+  /* Resume only a previously authorised link. Explicit Disconnect survives a server restart. */
+  async function resume(){if(connector&&state.settings.accountConsent===true&&state.settings.reconnect!==false)await connector.connect();}
+  const readKey=(chat,m)=>sha('read:'+chat.key+':'+m.id).slice(0,20);
+  function markRead({messages}={}){
+    if(!Array.isArray(messages)||messages.length<1||messages.length>10||messages.some(id=>typeof id!=='string'||!/^[a-f0-9]{20}$/.test(id)))throw fail(400,'Choose up to ten received messages to mark read.');
+    const ids=new Set(messages);let count=0;
+    for(const chat of Object.values(state.chats))for(const m of chat.messages)if(m.unread===true&&ids.has(readKey(chat,m))){m.unread=false;count++;}
+    if(count)persist();return {read:count};
+  }
   function summary(chat){
     const last=chat.messages.at(-1);
-    return {key:chat.key,...recipient(chat),version:chat.version,updatedAt:chat.updatedAt,preview:last?(last.text||mediaLabel(last.media)).slice(0,140):'',lastFrom:last?.from||'',draftStatus:chat.draft?.status||'',sendStatus:chat.lastSend?.status||''};
+    return {key:chat.key,...recipient(chat),version:chat.version,updatedAt:chat.updatedAt,unreadCount:chat.messages.filter(m=>m.unread===true).length,preview:last?(last.text||mediaLabel(last.media)).slice(0,140):'',lastFrom:last?.from||'',draftStatus:chat.draft?.status||'',sendStatus:chat.lastSend?.status||''};
   }
   function inbox({chat:key=''}={}){
-    const out={consent:{account:state.settings.accountConsent===true,model:state.settings.modelConsent===true,modelAvailable:!!generator},chats:Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt).map(summary)};
+    const unread=Object.values(state.chats).flatMap(c=>c.messages.filter(m=>m.unread===true).map(m=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,sender:m.sender,text:m.text,media:mediaLabel(m.media),receivedAt:m.receivedAt||0}))).sort((a,b)=>a.receivedAt-b.receivedAt);
+    const recent=Object.values(state.chats).flatMap(c=>c.messages.filter(m=>m.from==='contact'&&m.live===true).map(m=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,sender:m.sender,text:m.text,media:mediaLabel(m.media),receivedAt:m.receivedAt||0,unread:m.unread}))).sort((a,b)=>b.receivedAt-a.receivedAt).slice(0,10);
+    const out={unreadCount:unread.length,unread:unread.slice(0,10),recent,unreadScope:'Messages received by Jarvis since unread tracking was enabled. Reading on the phone is not synchronised. Older WhatsApp history is not imported.',consent:{account:state.settings.accountConsent===true,model:state.settings.modelConsent===true,modelAvailable:!!generator},chats:Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt).map(summary)};
     const chat=key&&/^[a-f0-9]{20}$/.test(key)?state.chats[key]:null;
     if(chat)out.chat={...summary(chat),notice:chat.notice||'',reviewOpen:!!chat.review,
       messages:chat.messages.map((m,i)=>({n:i,from:m.from,sender:m.sender,member:m.participantKey,text:m.text,media:m.media?{type:m.media.type,label:mediaLabel(m.media),mimetype:m.media.mimetype,sizeBytes:m.media.sizeBytes,seconds:m.media.seconds}:null,at:m.at,viaJarvis:m.viaJarvis===true})),
@@ -234,5 +245,5 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
       lastSend:chat.lastSend?{status:chat.lastSend.status,error:chat.lastSend.error,acknowledged:chat.lastSend.acknowledged===true,at:chat.lastSend.at}:null};
     return out;
   }
-  return {receive,review,send,discardDraft,requestDraft,setModelConsent,connect,disconnect,connectionStatus,inbox,idle};
+  return {receive,review,send,discardDraft,requestDraft,setModelConsent,connect,disconnect,resume,markRead,connectionStatus,inbox,idle};
 }

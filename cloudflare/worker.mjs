@@ -144,6 +144,7 @@ const RELAY_OPS = {
     return {text:p.text, sessionId:p.sessionId, context:p.context};
   },
   'wa-inbox': p => { assertKeys(p, ['chat']); if (p.chat !== undefined && !HEX20.test(p.chat)) fail(400, 'Invalid relay request'); return p.chat ? {chat:p.chat} : {}; },
+  'wa-read': p => { assertKeys(p, ['messages']); if(!Array.isArray(p.messages)||p.messages.length<1||p.messages.length>10||p.messages.some(id=>typeof id!=='string'||!HEX20.test(id)))fail(400,'Invalid relay request'); return {messages:p.messages}; },
   'wa-review': p => {
     assertKeys(p, ['chat','version','text','checkedPhone']);
     if (!HEX20.test(p.chat || '') || !Number.isInteger(p.version) || p.version < 0 || (p.checkedPhone !== undefined && typeof p.checkedPhone !== 'boolean')) fail(400, 'Invalid relay request');

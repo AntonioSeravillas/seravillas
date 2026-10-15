@@ -139,6 +139,16 @@ returns to the original browser voice.
 
 ## Rollback
 
+### WhatsApp navigation and unread update — 15 October 2026
+
+Jarvis navigation uses its own `data-jarvis-nav` attributes so the workspace's capture handler cannot swallow footer clicks. The open assistant checks the inbox every eight seconds remotely (five locally), with one request at a time. Initial history establishes a quiet baseline. Incoming messages can play a cue and be read aloud after a microphone/send tap or **Enable message audio**. Reading waits during speech, active dictation, settings and WhatsApp review. Closing or hiding Jarvis cancels watching and audio; this is not a background phone notification service.
+
+“Good morning Jarvis, do we have any unread messages on WhatsApp?” is handled from the protected inbox, without an AI call. Unread means retained messages received by Jarvis since tracking was enabled, not WhatsApp's phone read status or older account history. A completed read-out acknowledges only its exact message keys; interrupted, failed or muted playback does not clear them. The `wa-read` relay operation accepts at most ten hashed message keys and cannot send or change chat content. Sending still requires an exact-text review and approval. AI drafting stays off.
+
+Previously authorised links resume when the server loads the inbox; explicit Disconnect persists. Transient disconnects retry with delays capped at sixty seconds. A phone logout still requires linking again. The PC server can use its existing installed Baileys runtime via `JARVIS_WHATSAPP_RUNTIME`; keys and linked-device credentials stay in the private profile. Automatic startup after a PC reboot is not configured.
+
+For this update alone, the previous app commit is `21a8c8e` and previous Worker version is `a47a5ca4`. No database migration is involved. The older rollback instructions below describe the original full relay release.
+
 Choose the smallest step that fixes the problem.
 
 1. **Stop remote access only:** close the relay window on the PC, or choose **Revoke PC access** in Jarvis settings. The rest of the app is unaffected.
