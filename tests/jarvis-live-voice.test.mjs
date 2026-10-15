@@ -38,6 +38,8 @@ test('app read-back mutes live input/output, ignores agent speech, and resumes o
 test('native tool fields resolve bounded relative days, and typing keeps the microphone muted while replies can play',async()=>{
   const h=harness();const validate=h.sandbox.window.SV_JARVIS_LIVE.validateTool;
   const q=validate('lookup_records',{entity:'cleanings',view:'details',start:'tomorrow',end:'day after tomorrow'},{today:'2026-12-31'});assert.equal(q.start,'2027-01-01');assert.equal(q.end,'2027-01-02');
+  const day=validate('lookup_records',{entity:'cleanings',view:'details',start:'2027-01-01'},{today:'2026-12-31',ownerText:'Who is cleaning tomorrow?'});assert.equal(day.end,'2027-01-01');
+  const future=validate('lookup_records',{entity:'cleanings',start:'2027-01-01'},{today:'2026-12-31',ownerText:'Show all cleanings from tomorrow onwards'});assert.equal(future.end,undefined);
   assert.throws(()=>validate('lookup_records',{entity:'cleanings',start:'sometime'},{today:'2026-12-31'}),/valid date/);
   assert.equal(validate('whatsapp_request',{kind:'write',name:'Bex',text:'Hello'}).text,'Hello');assert.throws(()=>validate('whatsapp_request',{kind:'send'}),/not allowed/);
   await h.player.start();h.player.muteInput();h.player.sendText('Hello');assert.equal(h.player.inputMuted,true);assert.deepEqual(h.events.filter(e=>e[0]==='mic').at(-1),['mic',true]);

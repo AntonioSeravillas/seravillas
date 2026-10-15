@@ -8,7 +8,7 @@
   let speechTimer=null,speechUtterance=null,speechChunks=[],customAudio=null,manualAudio=false,settings={language:'en-GB',muted:false,sounds:true,continuous:true,customVoice:true};
   let health={ready:false,message:'Open the local Jarvis server to connect Hermes.'},requestToken='',sessionId='',returnFocus=null,background=null,wasInert=false;
   let inboxMonitor=null,inboxState=null,announcements=[],messageAudioArmed=false,speechCompletion=null;
-  let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null,records=null,recordsView=null,live=null,liveHasReplied=false;
+  let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null,records=null,recordsView=null,live=null,liveHasReplied=false,liveOwnerText='';
   settings.liveVoice=true;
   const ios=()=>/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   settings.messageAnnouncements=true;
@@ -428,16 +428,16 @@
       connect:async signal=>{const r=await jarvisFetch('/api/jarvis/live-session',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:'{}',signal});const data=await r.json();if(!r.ok)throw Error(data.error||'The live voice agent could not connect.');return data;},
       context:liveContext,
       onUser:text=>{
-        if(!root||document.hidden)return true;cancelReply();clearFocus();error('');add('You',text);
+        if(!root||document.hidden)return true;liveOwnerText=text;cancelReply();clearFocus();error('');add('You',text);
         if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){pauseVoice('Paused. Tap the microphone to talk again.');return true;}
         const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
         if(['approve','cancel','review'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&waConversation?.snapshot()?.stage==='review'){void whatsappTurn(text,generation);return true;}
         waConversation?.suspendApproval();setPhase('thinking');return false;
       },
-      onReply:text=>{if(!root)return;text=text.replace(/\[(?:slow|laughs|whispers|sighs|excited|chuckles|clears throat|sigh|laughing)\]\s*/gi,'');liveHasReplied=true;lastReply=text;add('Jarvis · live voice',text);},
+      onReply:text=>{if(!root)return;text=text.replace(/\[(?:slow|calm|laughs|whispers|sighs|excited|chuckles|clears throat|sigh|laughing)\]\s*/gi,'');liveHasReplied=true;lastReply=text;add('Jarvis · live voice',text);},
       onTool:async(name,args,{current})=>{
         if(!root||document.hidden||!current())return {error:'The conversation is paused.'};
-        let value;try{value=SV_JARVIS_LIVE.validateTool(name,args,{today:today()});}catch{return {error:'Use the documented structured fields and valid dates. Today is '+today()+'. Resolve relative dates and retry the tool; do not invent a result.'};}
+        let value;try{value=SV_JARVIS_LIVE.validateTool(name,args,{today:today(),ownerText:liveOwnerText});}catch{return {error:'Use the documented structured fields and valid dates. Today is '+today()+'. Resolve relative dates and retry the tool; do not invent a result.'};}
         if(name==='lookup_records'){
           const result=recordsTurn(value,{silent:true});if(!result)return {error:'App records are unavailable.'};
           const label={arrival:'Arrival',departure:'Departure',guests:'Guests',crew:value.entity==='bookings'?'Linked cleaning':'Team',status:'Status',due:'Due',priority:'Priority'}[value.field];

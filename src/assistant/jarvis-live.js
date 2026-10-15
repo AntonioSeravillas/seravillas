@@ -1,13 +1,20 @@
 /* ElevenLabs owns live audio; the app owns business operations and approval. Exact WhatsApp
    read-backs temporarily mute this session so only app-controlled audio can arm approval. */
 (function(){
-  function validateTool(name,args,{today}={}){
+  function validateTool(name,args,{today,ownerText=''}={}){
     const parse=(key,max)=>{if(!args||Object.keys(args).length!==1||typeof args[key]!=='string'||!args[key].trim()||args[key].length>max)throw Error('Invalid tool arguments.');return JSON.parse(args[key]);};
     if(name==='lookup_records'){
       const q=args&&Object.keys(args).length===1&&args.query!==undefined?typeof args.query==='object'?args.query:parse('query',2000):{...args};
       for(const key of ['start','end']){
         const relative=typeof q[key]==='string'?q[key].trim().toLowerCase():'',days={today:0,tomorrow:1,'day after tomorrow':2,'the day after tomorrow':2}[relative];
         if(days!==undefined&&/^20\d{2}-\d{2}-\d{2}$/.test(today||''))q[key]=new Date(Date.parse(today+'T12:00:00Z')+days*86400000).toISOString().slice(0,10);
+      }
+      // A one-day question must not silently become an open-ended search when the model omits end.
+      const words=ownerText.toLowerCase().replace(/[’']/g,'');
+      const rest=words.replace(/(?:the )?day after tomorrow|tomorrow|today/g,'');
+      if(['bookings','cleanings','tasks'].includes(q.entity)&&q.view!=='availability'&&!/\b(from|starting|after|before|onwards|between|until|not|instead|rather|or)\b/.test(rest)&&/^20\d{2}-\d{2}-\d{2}$/.test(today||'')){
+        const days=/\bday after tomorrow\b/.test(words)?2:/\btomorrow\b/.test(words)?1:/\btoday\b/.test(words)?0:undefined;
+        if(days!==undefined){q.start=q.end=new Date(Date.parse(today+'T12:00:00Z')+days*86400000).toISOString().slice(0,10);}
       }
       return window.SV_JARVIS_RECORDS.sanitizeQuery(q);
     }
