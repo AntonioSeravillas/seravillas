@@ -35,6 +35,14 @@ test('app read-back mutes live input/output, ignores agent speech, and resumes o
   const h=harness();await h.player.start();const o=h.options();h.player.suspend();o.onModeChange({mode:'speaking'});o.onMessage({source:'ai',message:'Do not repeat',event_id:2});assert.equal(h.events.some(e=>e[1]==='Do not repeat'),false);assert.deepEqual(h.events.filter(e=>e[0]==='mic').at(-1),['mic',true]);
   h.player.resume();assert.deepEqual(h.events.filter(e=>e[0]==='volume').at(-1),['volume',0]);o.onModeChange({mode:'listening'});assert.deepEqual(h.events.filter(e=>e[0]==='volume').at(-1),['volume',1]);h.player.stop();
 });
+test('native tool fields resolve bounded relative days, and typing keeps the microphone muted while replies can play',async()=>{
+  const h=harness();const validate=h.sandbox.window.SV_JARVIS_LIVE.validateTool;
+  const q=validate('lookup_records',{entity:'cleanings',view:'details',start:'tomorrow',end:'day after tomorrow'},{today:'2026-12-31'});assert.equal(q.start,'2027-01-01');assert.equal(q.end,'2027-01-02');
+  assert.throws(()=>validate('lookup_records',{entity:'cleanings',start:'sometime'},{today:'2026-12-31'}),/valid date/);
+  assert.equal(validate('whatsapp_request',{kind:'write',name:'Bex',text:'Hello'}).text,'Hello');assert.throws(()=>validate('whatsapp_request',{kind:'send'}),/not allowed/);
+  await h.player.start();h.player.muteInput();h.player.sendText('Hello');assert.equal(h.player.inputMuted,true);assert.deepEqual(h.events.filter(e=>e[0]==='mic').at(-1),['mic',true]);
+  const o=h.options();o.onMessage({source:'user',message:'Background audio',event_id:1});o.onMessage({source:'ai',message:'Hello Antonio',event_id:2});assert.equal(h.events.some(e=>e[1]==='Background audio'),false);assert.equal(h.events.some(e=>e[1]==='Hello Antonio'),true);h.player.unmuteInput();assert.equal(h.player.inputMuted,false);h.player.stop();
+});
 test('literal owner approval is app-only, model tool arguments cannot approve or send, and stale tools cannot complete a newer turn',async()=>{
   let resolve;const h=harness({onTool:()=>new Promise(r=>{resolve=r;})});await h.player.start();const o=h.options();o.onMessage({source:'user',message:'Look up a cleaning',event_id:1});const pending=o.clientTools.lookup_records({query:'{}'});o.onMessage({source:'user',message:'Actually tomorrow',event_id:2});resolve({text:'old'});assert.match(await pending,/superseded/);
   o.onMessage({source:'user',message:'Approve and send',event_id:3});assert.equal(h.player.suspended,true);assert.match(await o.clientTools.whatsapp_request({intent:'{"kind":"approve"}'}),/paused/);

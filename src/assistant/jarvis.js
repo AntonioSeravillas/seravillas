@@ -21,6 +21,7 @@
   function restoreSession(){try{sessionId=SV_STORAGE.getItem('sv_jarvis_session')||newId();SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{sessionId=newId();}}
   const LABELS={idle:'At your service',connecting:'Connecting',listening:'Listening',waiting:'Listening',thinking:'Thinking',speaking:'Speaking',paused:'Paused',error:'Paused'};
   function hintFor(value){
+    if(live?.active&&live.inputMuted&&!live.suspended)return 'Microphone paused · type or tap the microphone to speak';
     if(live?.active&&value==='speaking')return 'You can interrupt naturally.';
     if(live?.active&&value==='listening')return 'Live conversation · speak naturally';
     if(value==='listening')return 'Speak naturally, then pause.';
@@ -34,8 +35,8 @@
     phase=value;if(!root)return;
     el('jarvis-status').textContent=LABELS[value]||LABELS.idle;el('jarvis-hint').textContent=hintFor(value);
     const mic=el('jarvis-mic'),busy=['listening','waiting','thinking','connecting'].includes(value);
-    mic.classList.toggle('active',busy||value==='speaking');mic.innerHTML=svg(busy?'pause':'mic',24);
-    mic.setAttribute('aria-label',live?.active?'Pause conversation':busy?'Pause listening':value==='speaking'?'Interrupt and listen':'Start conversation');
+    const liveMuted=live?.active&&live.inputMuted&&!live.suspended;mic.classList.toggle('active',!liveMuted&&(busy||value==='speaking'));mic.innerHTML=svg(!liveMuted&&busy?'pause':'mic',24);
+    mic.setAttribute('aria-label',live?.active?(live.inputMuted&&!live.suspended?'Resume microphone':'Pause conversation'):busy?'Pause listening':value==='speaking'?'Interrupt and listen':'Start conversation');
     root.dataset.phase=value;
   }
   function error(text){const target=el('jarvis-error');if(target){target.textContent=text;target.hidden=!text;}}
@@ -433,10 +434,10 @@
         if(['approve','cancel','review'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&waConversation?.snapshot()?.stage==='review'){void whatsappTurn(text,generation);return true;}
         waConversation?.suspendApproval();setPhase('thinking');return false;
       },
-      onReply:text=>{if(!root)return;liveHasReplied=true;lastReply=text;add('Jarvis · live voice',text);},
+      onReply:text=>{if(!root)return;text=text.replace(/\[(?:slow|laughs|whispers|sighs|excited|chuckles|clears throat|sigh|laughing)\]\s*/gi,'');liveHasReplied=true;lastReply=text;add('Jarvis · live voice',text);},
       onTool:async(name,args,{current})=>{
         if(!root||document.hidden||!current())return {error:'The conversation is paused.'};
-        const value=SV_JARVIS_LIVE.validateTool(name,args);
+        let value;try{value=SV_JARVIS_LIVE.validateTool(name,args,{today:today()});}catch{return {error:'Use the documented structured fields and valid dates. Today is '+today()+'. Resolve relative dates and retry the tool; do not invent a result.'};}
         if(name==='lookup_records'){
           const result=recordsTurn(value,{silent:true});if(!result)return {error:'App records are unavailable.'};
           const label={arrival:'Arrival',departure:'Departure',guests:'Guests',crew:value.entity==='bookings'?'Linked cleaning':'Team',status:'Status',due:'Due',priority:'Priority'}[value.field];
@@ -508,6 +509,7 @@
   }
   function micPressed(){
     prepareAudio();
+    if(live?.active&&live.inputMuted&&!live.suspended){live.unmuteInput();return;}
     if(live?.active){pauseVoice('Paused. Tap the microphone to continue.');return;}
     if(phase==='speaking'){cancelReply();clearFocus();if(voice?.active)voice.interrupt();else startVoice();return;}
     if(['listening','waiting','thinking','connecting'].includes(phase)){pauseVoice('Paused. Tap the microphone to talk again.');return;}
@@ -579,9 +581,9 @@
     });
     root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(panel)closePanel();else closeJarvis();}if(e.key==='Tab'){const scope=panel?el('jarvis-panel'):root;const items=[...scope.querySelectorAll('button,input,select,textarea,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
     /* Typing a message ends voice listening so the microphone never records in the background. */
-    el('jarvis-input').addEventListener('focus',()=>{if(live?.active)live.suspend();else if(voice?.active)pauseVoice('Paused while you type.');});
+    el('jarvis-input').addEventListener('focus',()=>{if(live?.active)live.muteInput();else if(voice?.active)pauseVoice('Paused while you type.');});
     root.addEventListener('focusin',event=>{if(event.target?.id==='wa-editor'&&(voice?.active||live?.active))pauseVoice('Paused while you edit the WhatsApp reply.');});
-    el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();if(live?.active){const input=el('jarvis-input'),text=input.value.trim();if(text){input.value='';input.blur?.();live.sendText(text);}return;}cancelReply();prepareAudio();prepareSpeech();const text=el('jarvis-input').value;void send(text);});
+    el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();if(live?.active){if(!live.ready){error('The live connection is still starting. Wait a moment, then send your message.');return;}const input=el('jarvis-input'),text=input.value.trim();if(text){input.value='';input.blur?.();live.sendText(text);}return;}cancelReply();prepareAudio();prepareSpeech();const text=el('jarvis-input').value;void send(text);});
     el('jarvis-voice-choice').addEventListener('change',e=>{stop();customFallback=false;settings.liveVoice=e.target.value==='live';settings.customVoice=e.target.value!=='device';updateConnection();});
     el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&live?.active)pauseVoice('Paused while replies are muted.');if(settings.muted&&(phase==='speaking'||customAudio?.active)){cancelReply();replyDone();}});
     el('jarvis-data-note').textContent=DEV_MODE?'This local preview uses fictional data until you restore your private app backup in Settings. Hermes receives a limited operations summary when you send an agent message.':'App tools read your current app data. Hermes runs on the Jarvis PC; other devices reach it through the live relay.';
