@@ -139,7 +139,9 @@ test('custom voice: actual overlay uses ElevenLabs audio, waits for playback bef
   app.audios[0].onplaying();assert.equal(app.phase(),'speaking');app.runDelay(450);assert.equal(app.recs.length,1);
   app.audios[0].onended();await flush();app.runDelay(450);assert.equal(app.recs.length,2);
   app.click('settings');app.el('jarvis-voice-choice').listeners.change({target:{value:'device'}});assert.equal(app.el('jarvis-voice-choice').value,'device');
-  app.click('test-speaker');assert.equal(app.utterances.length,1);assert.equal(app.speechRequests.length,1);app.click('close');
+  app.click('test-speaker');assert.equal(app.utterances.length,1);assert.equal(app.speechRequests.length,1);
+  app.el('jarvis-voice-choice').listeners.change({target:{value:'elevenlabs'}});app.click('test-speaker');await flush();app.audios[0].onerror();await flush();
+  assert.equal(app.phase(),'paused');assert.equal(app.el('jarvis-caption-text').textContent,'');assert.match(app.el('jarvis-error').textContent,/Play reply/);app.runDelay(450);assert.equal(app.recs.length,2);app.click('close');
 });
 
 test('iPhone gesture gate: a microphone tap enables a later spoken reply before recording, including when listening sounds are off',async()=>{

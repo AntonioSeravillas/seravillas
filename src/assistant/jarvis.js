@@ -35,7 +35,7 @@
   function caption(text){const node=el('jarvis-caption-text');if(node){node.textContent=text;node.hidden=!text;}}
   function releaseMic(){micToken++;cancelAnimationFrame(meterFrame);micStream?.getTracks().forEach(t=>t.stop());micStream=null;motion.input=0;motion.speech=false;}
   /* Stops speech and any pending reply, without touching the conversation opt-in. */
-  function cancelReply(){generation++;request?.abort();request=null;customAudio?.stop();clearTimeout(speechTimer);if(speechUtterance){speechUtterance.onstart=speechUtterance.onend=speechUtterance.onerror=speechUtterance.onboundary=null;}speechUtterance=null;speechChunks=[];try{window.speechSynthesis?.cancel();}catch{}}
+  function cancelReply(){generation++;request?.abort();request=null;customAudio?.stop();caption('');clearTimeout(speechTimer);if(speechUtterance){speechUtterance.onstart=speechUtterance.onend=speechUtterance.onerror=speechUtterance.onboundary=null;}speechUtterance=null;speechChunks=[];try{window.speechSynthesis?.cancel();}catch{}}
   /* Full stop: reply, loop, recognizer and microphone. Used by close, hide, settings, reviews and navigation. */
   function stop(){cancelReply();clearFocus();voice?.stop();recognizer?.cancel();recognizer=null;releaseMic();setPhase('idle');}
   /* Explicit pause: always shows Paused, whether or not a voice loop was running. */
