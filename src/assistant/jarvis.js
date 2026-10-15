@@ -8,7 +8,7 @@
   let speechTimer=null,speechUtterance=null,speechChunks=[],customAudio=null,manualAudio=false,settings={language:'en-GB',muted:false,sounds:true,continuous:true,customVoice:true};
   let health={ready:false,message:'Open the local Jarvis server to connect Hermes.'},requestToken='',sessionId='',returnFocus=null,background=null,wasInert=false;
   let inboxMonitor=null,inboxState=null,announcements=[],messageAudioArmed=false,speechCompletion=null;
-  let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null;
+  let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null,records=null,recordsView=null;
   const ios=()=>/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   settings.messageAnnouncements=true;
   const motion={input:0,output:0,speech:false,inputPulse:-Infinity,outputPulse:-Infinity,measuredOutput:false};
@@ -81,7 +81,9 @@
       manualAudio=manual;const id=generation;customTurn={id,text,manual,onDone,started:false};setPhase('thinking');caption('Preparing voice…');void customAudio.play(text).finally(()=>{if(id===generation)caption('');});return;
     }
     if(!window.speechSynthesis||!window.SpeechSynthesisUtterance){speechCompletion=null;error('Spoken replies are unavailable in this browser. Your reply is in Conversation.');replyDone();return;}
-    try{window.speechSynthesis.cancel();if(speechSynthesis.paused)speechSynthesis.resume();clearTimeout(speechTimer);const id=generation;const chunks=text.replace(/\n/g,'. ').match(/[^.!?]{1,180}(?:[.!?]|\s|$)|.{1,180}/g)||[text];speechChunks=chunks;
+    try{window.speechSynthesis.cancel();if(speechSynthesis.paused)speechSynthesis.resume();clearTimeout(speechTimer);const id=generation;const chunks=[];
+      // A decimal point is part of an amount, not the end of a spoken sentence.
+      for(const sentence of text.replace(/\n/g,'. ').match(/[\s\S]+?(?:[.!?]+(?=\s|$)|$)/g)||[text]){let rest=sentence.trim();while(rest){let cut=rest.length<=180?rest.length:rest.lastIndexOf(' ',180);if(cut<1)cut=Math.min(rest.length,180);chunks.push(rest.slice(0,cut));rest=rest.slice(cut).trim();}}speechChunks=chunks;
       /* Once-only: the reply finishes exactly once, and only callbacks from the chunk now playing count. */
       let finished=false;
       const finish=message=>{if(finished||id!==generation)return;finished=true;clearTimeout(speechTimer);speechChunks=[];speechUtterance=null;if(message){pauseVoice(message);error(message);return;}if(manual)setPhase('idle');else replyDone();};
@@ -219,6 +221,7 @@
     if(!root)return;
     root.classList.remove('has-focus','focus-hold');
     el('jarvis-today-section')?.classList.remove('is-attention');el('jarvis-tasks-section')?.classList.remove('is-attention');
+    el('jarvis-records')?.classList.remove('is-attention');
     el('jarvis-today-title').textContent='Today';
     if(f.data.kind==='cleanings')renderDashboard();
   }
@@ -228,6 +231,7 @@
   const measurable=node=>!!node&&typeof node.getBoundingClientRect==='function';
   function linkTarget(){
     if(!focus)return null;
+    if(focus.data.kind==='records')return el('jarvis-record-title');
     if(focus.data.kind==='tasks')return el('jarvis-tasks-title');
     const list=el('jarvis-today-list'),first=[...(list?.children||[])].find(li=>/\bis-focus\b/.test(li.className||''));
     return first||el('jarvis-today-title');
@@ -236,8 +240,9 @@
     const svgNode=el('jarvis-link'),path=el('jarvis-link-path'),ring=el('jarvis-ring'),target=linkTarget();
     if(!svgNode||!path||!focus||!desktop()||!measurable(ring)||!measurable(target)){svgNode?.setAttribute('hidden','');return false;}
     const r=ring.getBoundingClientRect(),t=target.getBoundingClientRect(),vh=window.innerHeight||0;
-    if(!r.width||!t.width||(vh&&(t.bottom<0||t.top>vh))||t.right>=r.left){svgNode.setAttribute('hidden','');return false;}
-    const cx=r.left+r.width/2,cy=r.top+r.height/2,ex=t.right+14,ey=t.top+t.height/2,angle=Math.atan2(ey-cy,ex-cx),radius=r.width*.316;
+    const right=t.left>=r.right;
+    if(!r.width||!t.width||(vh&&(t.bottom<0||t.top>vh))||!right&&t.right>=r.left){svgNode.setAttribute('hidden','');return false;}
+    const cx=r.left+r.width/2,cy=r.top+r.height/2,ex=right?t.left-14:t.right+14,ey=t.top+t.height/2,angle=Math.atan2(ey-cy,ex-cx),radius=r.width*.316;
     const sx=cx+Math.cos(angle)*radius,sy=cy+Math.sin(angle)*radius,dx=sx-ex;
     path.setAttribute('d','M'+sx.toFixed(1)+' '+sy.toFixed(1)+' C'+(sx-dx*.45).toFixed(1)+' '+sy.toFixed(1)+' '+(ex+dx*.35).toFixed(1)+' '+ey.toFixed(1)+' '+ex.toFixed(1)+' '+ey.toFixed(1));
     svgNode.removeAttribute('hidden');return true;
@@ -284,6 +289,7 @@
   function closeContext(){if(!root)return;el('jarvis-context').hidden=true;root.classList.remove('has-context');waEmbedded=false;setNav('overview');}
   function openWhatsApp(intent){
     pauseVoice('Paused while WhatsApp is open.');
+    closeRecords();
     waConversation?.cancel();
     if(!window.SV_JARVIS_WHATSAPP)return;
     if(!root){SV_JARVIS_WHATSAPP.open({intent});return;}
@@ -299,6 +305,41 @@
   function ensureWhatsAppConversation(){
     if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,onChange:renderVoiceReview});return waConversation;
   }
+  function ensureRecords(){if(!records&&window.SV_JARVIS_RECORDS)records=SV_JARVIS_RECORDS.create();return records;}
+  function closeRecords(){if(focus?.data.kind==='records')clearFocus();const node=el('jarvis-records');if(node)node.hidden=true;if(!waEmbedded)root?.classList.remove('has-context');}
+  function recordDestination(entity){return {bookings:'calendar',cleanings:'cleaning',tasks:'tasks',issues:'manage',properties:'properties'}[entity];}
+  function renderRecords(result){
+    if(!root)return;if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();
+    const host=el('jarvis-record-list');if(!host)return;host.replaceChildren();recordsView=result;
+    el('jarvis-records').hidden=false;root.classList.add('has-context');setNav(result.entity==='cleanings'?'cleaning':result.entity);
+    el('jarvis-record-title').textContent=result.title||'App records';
+    el('jarvis-record-scope').textContent=(DEV_MODE?'Fictional preview':'Current app data')+' · '+(result.total||0)+' matching record(s)'+(result.offset?' · page '+(Math.floor(result.offset/8)+1):'');
+    (result.rows||[]).forEach((r,index)=>{
+      const article=document.createElement('article');article.className='jarvis-record';
+      const title=document.createElement('button');title.type='button';title.dataset.j='records-option';title.dataset.option=String(index+1);title.textContent=(index+1)+'. '+r.title;article.appendChild(title);
+      const subtitle=document.createElement('p');subtitle.textContent=r.subtitle;article.appendChild(subtitle);
+      const facts=document.createElement('dl');for(const f of result.rows.length>1?(r.facts||[]).slice(0,2):r.facts||[]){const name=document.createElement('dt'),value=document.createElement('dd');name.textContent=f.label;value.textContent=f.value;facts.append(name,value);}article.appendChild(facts);host.appendChild(article);
+    });
+    if(!result.rows?.length){const empty=document.createElement('p');empty.className='jarvis-record-empty';empty.textContent=result.text;host.appendChild(empty);}
+    el('jarvis-record-more').hidden=!result.more;el('jarvis-record-workspace').textContent=result.rows?.length===1?'Open full record':'Open full page';
+  }
+  function recordsTurn(query){
+    const engine=ensureRecords();if(!engine){add('Jarvis','Please refresh Jarvis to load the app record tools.');replyDone();return;}
+    waConversation?.clearPending();clearFocus();const result=engine.run(query);renderRecords(result);
+    if(result.rows?.length){focus={id:++focusSeq,data:{kind:'records'},state:'active',hold:null};el('jarvis-records')?.classList.add('is-attention');root?.classList.add('has-focus');linkStart();}
+    add('Jarvis · app records',result.text);speak(result.text);
+  }
+  function recordClick(query){
+    cancelReply();clearFocus();voice?.holdForReply?.();recognizer?.cancel();recognizer=null;releaseMic();error('');setPhase('thinking');recordsTurn(query);
+  }
+  function openRecordWorkspace(){
+    const view=recordsView;if(!view)return;const row=view.rows?.length===1?view.rows[0]:null;
+    // Recheck the current record before handing off to its existing native detail screen.
+    const fresh=row?ensureRecords()?.run({entity:row.entity,recordId:row.id,view:'details',status:'all'}):null;
+    if(row&&!fresh?.rows?.length){recordClick({entity:row.entity,recordId:row.id,view:'details',status:'all'});return;}
+    const entity=row?.entity||view.entity;stop();closeJarvis();if(typeof workspaceNavigate==='function')workspaceNavigate(recordDestination(entity),entity==='issues'?'issues':undefined);
+    if(row){if(entity==='bookings'&&typeof openBookingDetail==='function')openBookingDetail(row.id);else if(entity==='cleanings'&&typeof openSess==='function')openSess(row.id);else if(entity==='tasks'&&typeof openTaskDetail==='function')openTaskDetail(row.id);else if(entity==='issues'&&typeof openIssue==='function')openIssue(row.id);}
+  }
   async function whatsappTurn(text,id,screenApproval=false,intent){
     if(!root)return false;
     const workflow=ensureWhatsAppConversation();if(!workflow)return false;
@@ -311,12 +352,18 @@
   async function conversationTurn(text,id){
     beginFocus(text);ensureWhatsAppConversation()?.suspendApproval();const controller=new AbortController();request=controller;const timeout=setTimeout(()=>controller.abort(),120000);
     try{
-      const context=SV_JARVIS_DATA.context();context.dialogue={schema:1,ownerTurns:lines.filter(l=>l.role==='You').slice(-6).map(l=>l.text),whatsapp:ensureWhatsAppConversation()?.context?.()||{}};
+      const engine=ensureRecords(),context=SV_JARVIS_DATA.context();context.dialogue={schema:1,ownerTurns:lines.filter(l=>l.role==='You').slice(-6).map(l=>l.text),whatsapp:ensureWhatsAppConversation()?.context?.()||{},records:{available:!!engine,coverage:engine?.coverage(),state:engine?.context()}};
       const res=await jarvisFetch('/api/jarvis/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:JSON.stringify({text,sessionId,context}),signal:controller.signal});
       const data=await res.json();if(id!==generation||!root)return;if(!res.ok)throw Error(data.error||'The agent could not respond.');
       const d=data.decision;if(!d||typeof d!=='object')throw Error('Jarvis could not interpret that reliably. Please try again.');
       if(d.kind==='whatsapp'){
+        closeRecords();
         if(!await whatsappTurn(text,id,false,d.intent))throw Error('The WhatsApp voice tools are unavailable. Please reopen Jarvis.');
+      }else if(d.kind==='records'){
+        recordsTurn(d.query);
+      }else if(d.kind==='navigate'){
+        const destination={bookings:'calendar',cleanings:'cleaning',tasks:'tasks',properties:'properties',reports:'booking-report',issues:'manage',overview:'home'}[d.destination];
+        if(!destination)throw Error('That app page is not available.');stop();closeJarvis();if(typeof workspaceNavigate==='function')workspaceNavigate(destination,d.destination==='issues'?'issues':undefined);
       }else if((d.kind==='reply'||d.kind==='clarify')&&typeof d.text==='string'&&d.text.trim()){
         if(d.kind==='reply'&&!d.retainTask)waConversation?.clearPending();else waConversation?.finishUnderstanding();add('Jarvis · Hermes',d.text);speak(d.text);
       }else if(d.kind==='app_request'&&typeof d.text==='string'){
@@ -444,8 +491,9 @@
     +'<div class="jarvis-controls"><button class="jarvis-icon" data-j="chat" aria-label="Type a message">'+svg('keyboard')+'</button><button class="jarvis-mic" id="jarvis-mic" data-j="mic" aria-label="Start conversation">'+svg('mic',24)+'</button><button class="jarvis-icon" data-j="settings" aria-label="Voice settings">'+svg('settings')+'</button></div>'
     +'<button class="jarvis-play" data-j="replay">'+svg('speaker',16)+'<span>Play reply</span></button></main>'
     +'<aside class="jarvis-side" aria-label="Conversation"><section class="jarvis-conversation" id="jarvis-chat-body"><h2 class="jarvis-kicker">Conversation</h2><div class="jarvis-transcript" id="jarvis-transcript"></div><section class="jarvis-voice-review" id="jarvis-voice-review" aria-label="WhatsApp message review" hidden><small>WhatsApp draft</small><p id="jarvis-review-recipient"></p><p class="jarvis-review-message" id="jarvis-review-text"></p><p id="jarvis-review-note"></p><div><button type="button" data-j="wa-voice-approve">Approve and send</button><button type="button" data-j="wa-voice-repeat">Read again</button><button type="button" data-j="wa-voice-cancel">Cancel</button></div></section><form class="jarvis-form" id="jarvis-form"><input id="jarvis-input" autocomplete="off" aria-label="Message Jarvis" placeholder="Message Jarvis…" maxlength="2000"><button aria-label="Send message">'+svg('send',18)+'</button></form><button class="jarvis-clear" data-j="new">New conversation</button></section>'
-    +'<section class="jarvis-context" id="jarvis-context" aria-label="WhatsApp" hidden><h2 class="jarvis-kicker">Message review</h2><div id="jarvis-wa-host"></div></section></aside>'
-    +'<nav class="jarvis-nav" aria-label="Jarvis"><button type="button" data-jarvis-nav="overview" data-j="nav-overview" aria-current="page">Overview</button><button type="button" data-jarvis-nav="whatsapp" data-j="nav-whatsapp">WhatsApp</button><button type="button" data-jarvis-nav="cleaning" data-j="nav-cleaning">Cleanings</button><button type="button" data-jarvis-nav="tasks" data-j="nav-tasks">Tasks</button></nav>'
+    +'<section class="jarvis-context" id="jarvis-context" aria-label="WhatsApp" hidden><h2 class="jarvis-kicker">Message review</h2><div id="jarvis-wa-host"></div></section>'
+    +'<section class="jarvis-records" id="jarvis-records" aria-label="App record results" hidden><div class="jarvis-record-head"><h2 class="jarvis-kicker" id="jarvis-record-title">App records</h2><button data-j="records-close" aria-label="Close record results">Close</button></div><p id="jarvis-record-scope"></p><div id="jarvis-record-list"></div><div class="jarvis-record-actions"><button id="jarvis-record-more" data-j="records-more" hidden>Show more</button><button id="jarvis-record-workspace" data-j="records-workspace">Open full page</button></div></section></aside>'
+    +'<nav class="jarvis-nav" aria-label="Jarvis"><button type="button" data-jarvis-nav="overview" data-j="nav-overview" aria-current="page">Overview</button><button type="button" data-jarvis-nav="bookings" data-j="nav-bookings">Bookings</button><button type="button" data-jarvis-nav="whatsapp" data-j="nav-whatsapp">WhatsApp</button><button type="button" data-jarvis-nav="cleaning" data-j="nav-cleaning">Cleanings</button><button type="button" data-jarvis-nav="tasks" data-j="nav-tasks">Tasks</button></nav>'
     +'<div class="jarvis-footnote jarvis-inbox-status"><button type="button" id="jarvis-whatsapp-status" data-j="nav-whatsapp">WhatsApp · checking</button><button type="button" id="jarvis-message-audio" data-j="message-audio">Enable message audio</button></div></div>'
     +'<svg class="jarvis-link" id="jarvis-link" aria-hidden="true" focusable="false" hidden><path id="jarvis-link-path" d=""/><circle class="jarvis-link-dot" id="jarvis-link-dot-0" r="1.6" opacity="0"/><circle class="jarvis-link-dot" id="jarvis-link-dot-1" r="1.3" opacity="0"/><circle class="jarvis-link-dot" id="jarvis-link-dot-2" r="1.1" opacity="0"/></svg>'
     +'<div class="jarvis-panel-backdrop" id="jarvis-panel" hidden><section class="jarvis-sheet" role="dialog" aria-modal="true" aria-labelledby="jarvis-panel-title"><div class="jarvis-sheet-head"><div><small>JARVIS</small><h2 id="jarvis-panel-title">Make it yours</h2></div><button class="jarvis-icon" data-j="close-panel" aria-label="Close settings">'+svg('close',20)+'</button></div>'
@@ -470,10 +518,15 @@
       if(action==='relay-status'||action==='relay-register'||action==='relay-revoke')void relayAction(action);
       if(action==='whatsapp'){closePanel();openWhatsApp(null);return;}
       if(action==='nav-whatsapp'){openWhatsApp(null);return;}
-      if(action==='nav-overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();clearFocus();renderDashboard();return;}
+      if(action==='nav-bookings'){recordClick({entity:'bookings',view:'list',start:today()});return;}
+      if(action==='records-close'){closeRecords();setNav('overview');return;}
+      if(action==='records-option'){const n=Number(e.target.closest('[data-j]').dataset.option);if(recordsView)recordClick({entity:recordsView.entity,view:recordsView.query?.view==='payment'?'payment':recordsView.query?.view==='price'?'price':'details',option:n});return;}
+      if(action==='records-more'){if(recordsView?.query)recordClick({...recordsView.query,offset:(recordsView.offset||0)+8});return;}
+      if(action==='records-workspace'){openRecordWorkspace();return;}
+      if(action==='nav-overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();renderDashboard();return;}
       if(action==='nav-cleaning'){goWorkspace('cleaning');return;}
       if(action==='nav-tasks'){goWorkspace('tasks');return;}
-      if(action==='new'){waConversation?.cancel();stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
+      if(action==='new'){waConversation?.cancel();records?.reset();recordsView=null;closeRecords();stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
       if(e.target===el('jarvis-panel'))closePanel();
     });
     root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(panel)closePanel();else closeJarvis();}if(e.key==='Tab'){const scope=panel?el('jarvis-panel'):root;const items=[...scope.querySelectorAll('button,input,select,textarea,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
@@ -490,6 +543,7 @@
     try{ringCleanup=createJarvisRing(el('jarvis-ring'),()=>phase,()=>motion);}catch{error('The ring animation could not start. Conversation is still available.');}setPhase('idle');updateConnection();el('jarvis-mic').focus();void checkConnection();startInbox();
   }
   function closeJarvis(){
+    records?.reset();records=null;recordsView=null;
     waConversation?.cancel();waConversation=null;
     inboxMonitor?.stop();inboxMonitor=null;announcements=[];inboxState=null;messageAudioArmed=false;
     stop();

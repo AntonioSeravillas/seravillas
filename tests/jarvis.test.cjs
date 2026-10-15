@@ -8,7 +8,7 @@ function runtime(){
   const timers=new Map();let next=0;const sandbox={console,Date,Math,performance:{now:()=>1},window:null,document:{addEventListener(){}},setTimeout(fn){timers.set(++next,fn);return next;},clearTimeout(id){timers.delete(id);},DEV_MODE:true,D:{props:[{id:'mar',name:'Villa Mar'},{id:'marjals',name:'Villa Marjals'}],cleaners:[{id:'a',name:'Ana'},{id:'b',name:'Bea'}],sessions:[],bookings:[],tasks:[],issues:[]}};
   sandbox.window=sandbox;const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
-  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-voice.js','src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root,file),'utf8'));
+  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-voice.js','src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root,file),'utf8'));
   return {context,run,timers};
 }
 test('Jarvis stays closed on startup and does not start microphone, timers or networking',()=>{
@@ -120,10 +120,10 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
-  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root_,file),'utf8'));
+  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root_,file),'utf8'));
   const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
-    click(j){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j}})}});}finally{inGesture=false;}},
+    click(j,extra={}){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j,...extra}})}});}finally{inGesture=false;}},
     submit(text){app.el('jarvis-input').value=text;inGesture=true;try{app.el('jarvis-form').listeners.submit({preventDefault(){}});}finally{inGesture=false;}},
     runDelay(ms){for(const [id,t] of [...timers])if(t.ms===ms){timers.delete(id);t.fn();}},
     hear(text,rec=recs.at(-1)){const row=[{transcript:text}];row.isFinal=true;rec.onresult({results:[row]});app.runDelay(550);},
@@ -315,6 +315,32 @@ test('AI-first overlay handles ordinary wording and follow-ups; literal approval
     app.finishSpeech();await ask(app,'Read the draft again');app.finishSpeech();await ask(app,'Approve and send');assert.equal(sends.length,1);assert.equal(calls.length,4);
     await ask(app,'Good morning');assert.match(app.utterances.at(-1).text,/Good morning/);await ask(app,'Approve and send');assert.equal(sends.length,1);app.click('close');
   }
+});
+test('AI app lookup speaks current booking facts, keeps context without amounts and opens the exact native record',async()=>{
+  for(const desktop of [true,false]){
+    const calls=[],opened=[],visited=[],decisions=[{kind:'records',query:{entity:'bookings',guest:'Example Guest',view:'payment'}},{kind:'records',query:{entity:'bookings',recordId:'selected',view:'details'}}];
+    const app=desktopRuntime({agent:true,desktop,understand:async body=>{calls.push(body);return decisions.shift();}});
+    app.context.workspaceNavigate=d=>visited.push(d);app.context.openBookingDetail=id=>opened.push(id);
+    app.run(`D.props=[{id:'p',name:'Villa Test'}];D.bookings=[{id:'b',propId:'p',guestName:'Example Guest',checkIn:'2024-01-01',checkOut:'2024-01-08',totalPrice:4433.22,guestPhone:'PRIVATE_PHONE',notes:'PRIVATE_NOTES'}];openJarvis()`);await flush();
+    await ask(app,'How much did Example Guest pay?');assert.equal(app.el('jarvis-records').hidden,false);assert.match(app.utterances.at(-1).text,/€4,433.22/);app.finishSpeech();assert.match(app.utterances.map(u=>u.text).join(' '),/cannot confirm/);assert.equal(calls[0].context.dialogue.records.coverage.bookings,1);
+    await ask(app,'When do they arrive?');assert.equal(calls[1].context.dialogue.records.state.selected.id,'b');for(const v of ['4433.22','443322','PRIVATE_PHONE','PRIVATE_NOTES'])assert.ok(!JSON.stringify(calls).includes(v),v);
+    app.click('records-workspace');assert.deepEqual(opened,['b']);assert.deepEqual(visited,['calendar']);assert.equal(app.root().removed,true);
+  }
+});
+test('Bookings navigation and numbered record choices work locally without a model call or mutation',async()=>{
+  const app=desktopRuntime(),visited=[];app.context.workspaceNavigate=d=>visited.push(d);
+  app.run(`D.bookings=[{id:'b1',guestName:'First Example',checkIn:addDays(today(),1),checkOut:addDays(today(),3),totalPrice:20},{id:'b2',guestName:'Second Example',checkIn:addDays(today(),5),checkOut:addDays(today(),8),totalPrice:30}];openJarvis()`);await flush();const before=app.run('JSON.stringify(D)');
+  app.click('nav-bookings');assert.equal(app.el('jarvis-records').hidden,false);assert.equal(app.el('jarvis-record-list').children.length,2);app.click('records-option',{option:'2'});assert.match(app.utterances.at(-1).text,/Second Example/);assert.equal(app.el('jarvis-record-list').children.length,1);assert.equal(app.run('JSON.stringify(D)'),before);assert.deepEqual(visited,[]);
+  app.click('nav-overview');assert.equal(app.el('jarvis-records').hidden,true);app.click('close');
+});
+test('explicit AI page navigation opens only a known app destination and stops the microphone',async()=>{
+  const app=desktopRuntime({agent:true,understand:async()=>({kind:'navigate',destination:'reports'})}),visited=[];app.context.workspaceNavigate=d=>visited.push(d);app.run('openJarvis()');await flush();app.click('mic');app.hear('Take me to reports please');await flush();assert.deepEqual(visited,['booking-report']);assert.equal(app.root().removed,true);assert.equal(app.recs[0].aborted,true);
+});
+test('record attention connects to the verified results on the right and closes without stale animation',async()=>{
+  const app=desktopRuntime({reduced:false,geometry:{left:60,top:200,width:300,height:40,right:360,bottom:240}});app.run(`D.bookings=[{id:'b',guestName:'Example Guest',checkIn:today(),checkOut:addDays(today(),3),totalPrice:20}];openJarvis()`);await flush();
+  app.el('jarvis-ring').getBoundingClientRect=()=>({left:600,top:100,width:400,height:400,right:1000,bottom:500});app.el('jarvis-record-title').getBoundingClientRect=()=>({left:1300,top:300,width:250,height:24,right:1550,bottom:324});
+  app.click('nav-bookings');assert.equal(app.el('jarvis-link').hasAttribute('hidden'),false);assert.match(app.el('jarvis-link-path').attrs.d,/ 1286\.0 312\.0$/);assert.equal(app.el('jarvis-records').classList.contains('is-attention'),true);
+  app.click('records-close');assert.equal(app.el('jarvis-link').hasAttribute('hidden'),true);assert.equal(app.el('jarvis-records').classList.contains('is-attention'),false);assert.deepEqual(app.winListeners.resize,[]);app.click('close');
 });
 test('single-reply mode, the spoken stop phrase and every explicit pause cancel the loop and any queued resume',()=>{
   const app=runtime();

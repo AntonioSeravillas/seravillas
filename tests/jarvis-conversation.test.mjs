@@ -23,6 +23,13 @@ test('AI proposals cannot grant send approval or introduce unsupported tools',()
   assert.throws(()=>parseDecision('{"kind":"whatsapp","intent":{"kind":"choose","option":6}}'),/interpret/);
   assert.deepEqual(parseDecision('```json\n{"kind":"whatsapp","intent":{"kind":"write","name":"Bex","text":"Hi","approve":true,"reviewToken":"secret"}}\n```'),{kind:'whatsapp',intent:{kind:'write',name:'Bex',group:false,text:'Hi'}});
 });
+test('record decisions share the read-only query contract and discard raw financial or secret context',()=>{
+  assert.deepEqual(parseDecision(JSON.stringify({kind:'records',query:{entity:'bookings',guest:'Example Guest',view:'payment',send:true,code:'RUN'}})),{kind:'records',query:{entity:'bookings',view:'payment',guest:'Example Guest'}});
+  assert.throws(()=>parseDecision('{"kind":"navigate","destination":"terminal"}'),/interpret/);assert.throws(()=>parseDecision('{"kind":"records","query":{"entity":"bookings","view":"delete"}}'),/interpret/);
+  const records={available:true,coverage:{bookings:300,paymentReceiptsTracked:true,apiKey:'PRIVATE_KEY'},state:{query:{entity:'bookings',guest:'Example Guest'},selected:{entity:'bookings',id:'b',label:'Example Guest',totalPrice:'FINANCIAL_SENTINEL',notes:'PRIVATE_NOTES'},bookings:['FULL_CATALOG']}};
+  const c=conversationContext({...context.dialogue,records},contacts);assert.equal(c.records.available,true);assert.equal(c.records.coverage.bookings,300);assert.equal(c.records.coverage.paymentReceiptsTracked,false);
+  for(const value of ['PRIVATE_KEY','FINANCIAL_SENTINEL','PRIVATE_NOTES','FULL_CATALOG'])assert.ok(!JSON.stringify(c).includes(value));
+});
 
 test('structured understanding travels through the existing authenticated n8n route; execution is still separate',async t=>{
   const calls=[];let modelAnswer=JSON.stringify({kind:'whatsapp',intent:{kind:'write',chat:key,text:'Hi, how are you?'}});
