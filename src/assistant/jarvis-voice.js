@@ -4,7 +4,7 @@
 (function(){
   const STOP=/^\s*(?:(?:hey\s+)?jarvis[,\s]+)?(?:please\s+)?(?:stop|pause)\s+listening[.!\s]*$/i;
   const SILENT=new Set(['no-speech','timeout']);
-  const MESSAGES={'not-allowed':'Microphone or speech recognition is blocked. Allow it in the browser, or type below.','service-not-allowed':'Speech recognition is unavailable here. Type below instead.','audio-capture':'The microphone could not start. Close other recording apps, then tap the microphone.','network':'Speech recognition needs an internet connection. Type below, or try again later.'};
+  const MESSAGES={'not-allowed':'Microphone or speech recognition is blocked. Allow it in the browser, or type below.','service-not-allowed':'Speech recognition is unavailable here. Type below instead.','audio-capture':'The microphone could not start. Close other recording apps, then tap the microphone.','capture-timeout':'Microphone setup timed out. Check this site’s microphone permission, then tap the microphone again or type below.','recognition-start-timeout':'Speech recognition did not start. Tap the microphone to try again, or type below.','network':'Speech recognition needs an internet connection. Type below, or try again later.'};
   /* startRecognition(callbacks,kind) must return {cancel()}; kind is 'start', 'resume', 'retry' or 'interrupt'. */
   function createConversation({startRecognition,onTranscript,onStatus=()=>{},schedule=(fn,ms)=>setTimeout(fn,ms),cancel=id=>clearTimeout(id),gap=450,silenceDelays=[900,1800,3600],keepAlive=false,recoverCapture=false}={}){
     let continuous=true,active=false,phase='idle',note='',rec=null,timer=null,turn=0,silent=0,captureFailures=0;

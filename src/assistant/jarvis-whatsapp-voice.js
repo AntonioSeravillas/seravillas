@@ -72,7 +72,7 @@
     async function handle(text,{screenApproval=false,intent:resolved}={}){
       const literal=parse(text);
       // Approval, vague consent and cancellation always come from the owner's literal utterance.
-      const control=['approve','ambiguousApproval','cancel'].includes(literal?.kind);
+      const control=['approve','cancel'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&pending?.stage==='review';
       const intent=control?literal:resolved||literal;
       if(resolved&&!control&&!['write','read','recent','unread','body','edit','choose','review','cancel'].includes(resolved.kind))return reply('I could not interpret that action safely. What would you like to do?');
       if(!intent&&!pending)return {handled:false};

@@ -8,18 +8,21 @@
     return out;
   }
   function createPlayer({request,onStart=()=>{},onDone=()=>{},onError=()=>{},makeAudio=()=>new Audio(),urlApi=URL,makeBlob=(bytes)=>new Blob([bytes],{type:'audio/mpeg'}),decode=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0)),schedule=setTimeout,clear=clearTimeout}={}){
-    let audio=null,turn=0,controller=null,objectUrl='',timer=null,playing=false;const cache=new Map();
+    let audio=null,turn=0,controller=null,objectUrl='',timer=null,playing=false,preparation=null;const cache=new Map();
     function media(){if(!audio){audio=makeAudio();audio.preload='auto';audio.setAttribute?.('playsinline','');}return audio;}
     function clearTimer(){if(timer!==null){clear(timer);timer=null;}}
-    function stop(){turn++;controller?.abort();controller=null;clearTimer();playing=false;
+    function stop(){turn++;preparation?.finish();controller?.abort();controller=null;clearTimer();playing=false;
       if(audio){audio.onplaying=audio.onended=audio.onerror=null;audio.pause();audio.removeAttribute('src');audio.load?.();}
       if(objectUrl){urlApi.revokeObjectURL(objectUrl);objectUrl='';}
     }
     function prepare(){
       if(playing)return Promise.resolve();
+      if(preparation)return preparation.promise;
       try{const a=media();if(a.src&&!a.src.startsWith('data:'))return Promise.resolve();const id=turn;
-        a.src=SILENCE;a.volume=1;const started=a.play();
-        return Promise.resolve(started).then(()=>{if(id===turn&&!playing&&a.src===SILENCE)a.pause();}).catch(()=>{});
+        let resolve;const p={promise:new Promise(r=>{resolve=r;}),timer:null,done:false};
+        p.finish=()=>{if(p.done)return;p.done=true;clear(p.timer);if(preparation===p)preparation=null;if(id===turn&&!playing&&a.src===SILENCE)a.pause();resolve();};
+        preparation=p;a.src=SILENCE;a.volume=1;p.timer=schedule(p.finish,1200);
+        try{Promise.resolve(a.play()).then(p.finish,p.finish);}catch{p.finish();}return p.promise;
       }catch{return Promise.resolve();}
     }
     async function play(text){

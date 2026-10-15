@@ -30,6 +30,11 @@ test('provider failure, redirect, empty/oversized audio and invalid input never 
   for(const input of ['',{},'x'.repeat(601)])await assert.rejects(voice.generate(input),/1–600/);
   assert.equal(calls,0);assert.equal(createElevenLabsVoice({config:null}),null);
 });
+test('ElevenLabs quota_exceeded on HTTP 401 is a usage limit, not a credential error; raw details are never exposed',async()=>{
+  let calls=0;const voice=createElevenLabsVoice({config,store:store(),fetchImpl:async()=>{calls++;return new Response(JSON.stringify({detail:{status:'quota_exceeded',message:'PRIVATE_KEY_OR_INPUT'}}),{status:401});}});
+  await assert.rejects(voice.generate('Hello.'),e=>e.status===429&&/credits or the API key usage limit/.test(e.message)&&!e.message.includes('PRIVATE_KEY_OR_INPUT'));
+  assert.equal(calls,1);
+});
 
 function playerHarness(){
   const timers=new Map(),events=[],requests=[],revoked=[],pending=[];let seq=0,audio;
@@ -66,4 +71,14 @@ test('cancel/close aborts generation and drops late audio; playback errors never
   const next=h.player.play('New reply');h.pending[1](audioResult);await flush();const oldEnd=h.audio().onended;h.player.stop();oldEnd();await next;assert.equal(h.events.includes('done'),false);
   const failed=h.player.play('Will not play');h.pending[2](audioResult);await flush();h.audio().onerror();await failed;
   assert.equal(h.requests.length,3);assert.equal(h.events.includes('done'),false);assert.ok(h.events.some(e=>/Tap Play reply/.test(e)));assert.equal(h.timers.size,0);
+});
+test('a pending media unlock is bounded and stop settles it; a late unlock cannot pause a newer reply',async()=>{
+  const h=playerHarness();let release;h.audio();
+  // First create the media, then simulate Safari leaving play() pending.
+  await h.player.prepare();h.audio().play=()=>new Promise(r=>{release=r;});
+  let prepared=false;const pending=h.player.prepare().then(()=>{prepared=true;});await flush();assert.equal(prepared,false);
+  const timeout=[...h.timers.values()].find(t=>t.ms===1200);assert.ok(timeout);timeout.fn();await pending;assert.equal(prepared,true);
+  h.audio().play=()=>Promise.resolve();const playing=h.player.play('A newer reply');h.pending[0](audioResult);await flush();h.audio().onplaying();const before=h.events.filter(x=>x==='pause').length;
+  release();await flush();assert.equal(h.events.filter(x=>x==='pause').length,before);h.audio().onended();await playing;
+  h.audio().play=()=>new Promise(()=>{});let settled=false;const closing=h.player.prepare().then(()=>{settled=true;});h.player.stop();await closing;assert.equal(settled,true);
 });

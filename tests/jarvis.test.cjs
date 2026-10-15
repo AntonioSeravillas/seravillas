@@ -89,7 +89,7 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null}={}){
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true}={}){
   const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
   /* Setting innerHTML registers every element that has an id, with its initial text and hidden state from the real markup. */
@@ -102,7 +102,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
     querySelector(sel){if(!els.has(sel))els.set(sel,fakeEl());return els.get(sel);},querySelectorAll(){return [];},getClientRects(){return [];}};
     if(geometry)e.getBoundingClientRect=()=>({...geometry});return e;};
   const background=fakeEl();
-  class FakeSR{constructor(){recs.push(this);this.aborted=false;}start(){audioEvents.push('record');this.onstart?.();}stop(){this.onend?.();}abort(){this.aborted=true;}}
+  class FakeSR{constructor(){recs.push(this);this.aborted=false;}start(){audioEvents.push('record');if(recognitionStarts)this.onstart?.();}stop(){this.onend?.();}abort(){this.aborted=true;}}
   class FakeUtterance{constructor(text){this.text=text;(text.trim()?utterances:primes).push(this);}}
   class FakeAudio{constructor(){this.src='';audios.push(this);}setAttribute(){}removeAttribute(){this.src='';}play(){return this.src.startsWith('data:')&&unlock?unlock:Promise.resolve();}pause(){}load(){}}
   const sandbox={console,Date,Math,AbortController,Audio:FakeAudio,Blob,atob,Uint8Array,URL:{createObjectURL:()=>'blob:test',revokeObjectURL(){}},performance:{now:()=>1},navigator:{userAgent:iosDevice?'iPhone AppleWebKit Safari':'test',...(capture?{mediaDevices:{getUserMedia:capture}}:{})},DEV_MODE:true,
@@ -111,7 +111,11 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
     addEventListener(t,f){(winListeners[t]=winListeners[t]||[]).push(f);},removeEventListener(t,f){winListeners[t]=(winListeners[t]||[]).filter(x=>x!==f);},
     matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(u){if(inGesture)speechUnlocked=true;if(speechGate&&!speechUnlocked)return;spoken.push(u);audioEvents.push(u.text.trim()?'reply':'prime');},cancel(){audioEvents.push('cancel');},getVoices:()=>[]},
     D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>agent?{kind:'chat'}:{kind:'reply',message:reply})}};
-  if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async(url,init)=>{await Promise.resolve();if(whatsappFetch&&String(url).includes('/whatsapp/'))return whatsappFetch(String(url),init);if(String(url).endsWith('/speech')){speechRequests.push(JSON.parse(init.body));return {ok:true,json:async()=>({contentType:'audio/mpeg',audio:Buffer.alloc(100,7).toString('base64')})};}return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n',...(understand?{conversation:1}:{}),...(customSpeech?{speech:{available:true,provider:'elevenlabs',name:'Jarvis Seravillas'}}:{})}:understand?{decision:await understand(JSON.parse(init.body))}:{reply}};};}
+  if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async(url,init)=>{
+    await Promise.resolve();if(whatsappFetch&&String(url).includes('/whatsapp/'))return whatsappFetch(String(url),init);
+    if(String(url).endsWith('/speech')){speechRequests.push(JSON.parse(init.body));return {ok:!speechError,json:async()=>speechError?{error:speechError}:{contentType:'audio/mpeg',audio:Buffer.alloc(100,7).toString('base64')}};}
+    return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n',...(understand?{conversation:1}:{}),...(customSpeech?{speech:{available:true,provider:'elevenlabs',name:'Jarvis Seravillas'}}:{})}:understand?{decision:await understand(JSON.parse(init.body))}:{reply}};
+  };}
   sandbox.window=sandbox;
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
@@ -167,7 +171,9 @@ test('custom voice: actual overlay uses ElevenLabs audio, waits for playback bef
   app.click('settings');app.el('jarvis-voice-choice').listeners.change({target:{value:'device'}});assert.equal(app.el('jarvis-voice-choice').value,'device');
   app.click('test-speaker');assert.equal(app.utterances.length,1);assert.equal(app.speechRequests.length,1);
   app.el('jarvis-voice-choice').listeners.change({target:{value:'elevenlabs'}});app.click('test-speaker');await flush();app.audios[0].onerror();await flush();
-  assert.equal(app.phase(),'paused');assert.equal(app.el('jarvis-caption-text').textContent,'');assert.match(app.el('jarvis-error').textContent,/Play reply/);app.runDelay(450);assert.equal(app.recs.length,2);app.click('close');
+  assert.equal(app.el('jarvis-caption-text').textContent,'');assert.match(app.el('jarvis-error').textContent,/Using Device voice/);app.finishSpeech();assert.equal(app.phase(),'idle');app.runDelay(450);assert.equal(app.recs.length,2);
+  // Once custom audio has actually started, an error pauses instead of repeating a partly heard reply.
+  app.el('jarvis-voice-choice').listeners.change({target:{value:'elevenlabs'}});app.click('test-speaker');await flush();app.audios[0].onplaying();app.audios[0].onerror();await flush();assert.equal(app.phase(),'paused');assert.match(app.el('jarvis-error').textContent,/Play reply/);app.click('close');
 });
 
 test('iPhone gesture gate: a microphone tap enables a later spoken reply before recording, including when listening sounds are off',async()=>{
@@ -245,6 +251,27 @@ test('iPhone: closing while the microphone permission is pending stops the late 
   app.run('openJarvis()');await flush();app.click('mic');await flush();assert.equal(app.phase(),'connecting');const rec=app.recs[0];
   app.click('close');release({getTracks:()=>[{stop(){stopped++;}}]});await flush();assert.equal(stopped,1);assert.equal(rec.aborted,true);assert.equal(app.root().removed,true);
 });
+test('iPhone: a stalled silent audio unlock cannot leave Connecting forever',async()=>{
+  let capture=0;const app=desktopRuntime({agent:true,iosDevice:true,unlock:new Promise(()=>{}),capture:async()=>{capture++;return {getTracks:()=>[{stop(){}}]};}});
+  app.run('openJarvis()');await flush();app.click('mic');assert.equal(app.phase(),'connecting');assert.equal(capture,0);
+  app.runDelay(1200);await flush();assert.equal(capture,1);assert.equal(app.phase(),'listening');app.click('close');
+});
+test('iPhone: microphone setup times out safely, late capture is stopped and a new tap can recover',async()=>{
+  let release,stopped=0,attempts=0;const app=desktopRuntime({agent:true,iosDevice:true,capture:()=>++attempts===1?new Promise(r=>{release=r;}):Promise.resolve({getTracks:()=>[{stop(){stopped++;}}]})});
+  app.run('openJarvis()');await flush();app.click('mic');await flush();app.runDelay(15000);assert.equal(app.phase(),'error');assert.match(app.el('jarvis-error').textContent,/setup timed out/);assert.equal(app.recs[0].aborted,true);
+  app.click('mic');await flush();assert.equal(app.phase(),'listening');release({getTracks:()=>[{stop(){stopped++;}}]});await flush();assert.equal(stopped,1);assert.equal(app.phase(),'listening');app.click('close');assert.equal(stopped,2);
+});
+test('iPhone: a speech service that never starts releases capture and shows a useful error',async()=>{
+  let stopped=0;const app=desktopRuntime({agent:true,iosDevice:true,recognitionStarts:false,capture:async()=>({getTracks:()=>[{stop(){stopped++;}}]})});
+  app.run('openJarvis()');await flush();app.click('mic');await flush();app.runDelay(8000);assert.equal(stopped,1);assert.equal(app.phase(),'error');assert.match(app.el('jarvis-error').textContent,/recognition did not start/);assert.equal(app.recs[0].aborted,true);app.click('close');
+});
+test('custom voice quota failure falls back once to unlocked device speech and resumes only after complete playback',async()=>{
+  const app=desktopRuntime({agent:true,customSpeech:true,iosDevice:true,speechGate:true,speechError:'ElevenLabs credits or the API key usage limit are reached.'});
+  app.run('openJarvis()');await flush();app.click('mic');await flush();app.hear('Hello Jarvis');await flush();
+  assert.equal(app.speechRequests.length,1);assert.match(app.el('jarvis-error').textContent,/Using Device voice/);assert.equal(app.el('jarvis-voice-choice').value,'device');assert.equal(app.spoken.filter(u=>u.text.trim()).length,1);
+  app.runDelay(1000);assert.equal(app.recs.length,1);app.finishSpeech();app.runDelay(1000);await flush();assert.equal(app.recs.length,2);
+  app.hear('And now?');await flush();assert.equal(app.speechRequests.length,1);assert.equal(app.utterances.filter(u=>u.text.trim()).length,3);app.finishSpeech();app.click('close');
+});
 test('conversation mode survives long silence with capped retry delays; explicit pause still cancels everything',()=>{
   const app=runtime(),v=conversation(app,{keepAlive:true,recoverCapture:true});v.c.start();
   for(let i=0;i<8;i++){v.fail('no-speech');assert.equal(v.c.active,true);assert.ok([...v.timers.values()][0].ms<=3600);v.run();}
@@ -270,7 +297,7 @@ test('real overlay: read chat, dictate body, hear recipient and draft, then spok
 test('AI-first overlay handles ordinary wording and follow-ups; literal approval bypasses AI and unrelated conversation clears the draft',async()=>{
   for(const desktop of [true,false]){
     const calls=[],sends=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat',version:1};
-    const decisions=[{kind:'whatsapp',intent:{kind:'write',chat:key,text:''}},{kind:'whatsapp',intent:{kind:'body',text:'How are you?'}},{kind:'whatsapp',intent:{kind:'edit',text:'Hi Bex, how are you doing?'}},{kind:'reply',text:'Good morning!',retainTask:false}];
+    const decisions=[{kind:'clarify',text:'Do you mean Bex?'},{kind:'whatsapp',intent:{kind:'write',chat:key,text:''}},{kind:'whatsapp',intent:{kind:'body',text:'How are you?'}},{kind:'whatsapp',intent:{kind:'edit',text:'Hi Bex, how are you doing?'}},{kind:'reply',text:'Good morning!',retainTask:false}];
     const app=desktopRuntime({agent:true,desktop,understand:async body=>{calls.push(body);return decisions.shift();},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
       if(url.endsWith('/status'))return {available:true,requestToken:'fictional'};
       if(url.includes('/inbox'))return {connection:{state:'open'},chats:[chat],chat};
@@ -278,12 +305,14 @@ test('AI-first overlay handles ordinary wording and follow-ups; literal approval
       if(url.endsWith('/send')){sends.push(body);return {status:'sent'};}throw Error('Unexpected operation');
     }})});
     app.run('openJarvis()');await flush();
-    await ask(app,'Hi, could you message Bex for me?');assert.match(app.utterances.at(-1).text,/What should I say/);
-    await ask(app,'How are you?');assert.equal(calls[1].context.dialogue.whatsapp.stage,'body');assert.equal(app.el('jarvis-review-text').textContent,'How are you?');
+    await ask(app,'Hi, could you message Bex for me?');assert.match(app.utterances.at(-1).text,/Do you mean Bex/);
+    await ask(app,'Yes');assert.match(app.utterances.at(-1).text,/What should I say/);
+    await ask(app,'How are you?');assert.equal(calls[2].context.dialogue.whatsapp.stage,'body');assert.equal(app.el('jarvis-review-text').textContent,'How are you?');
     await ask(app,'Actually make it friendlier');assert.equal(app.el('jarvis-review-text').textContent,'Hi Bex, how are you doing?');
     assert.ok(!JSON.stringify(calls).includes('PRIVATE_REVIEW_TOKEN'));
-    await ask(app,'Approve and send');assert.equal(calls.length,3);assert.equal(sends.length,0);
-    app.finishSpeech();await ask(app,'Read the draft again');app.finishSpeech();await ask(app,'Approve and send');assert.equal(sends.length,1);assert.equal(calls.length,3);
+    await ask(app,'Yes');assert.equal(calls.length,4);assert.equal(sends.length,0);
+    await ask(app,'Approve and send');assert.equal(calls.length,4);assert.equal(sends.length,0);
+    app.finishSpeech();await ask(app,'Read the draft again');app.finishSpeech();await ask(app,'Approve and send');assert.equal(sends.length,1);assert.equal(calls.length,4);
     await ask(app,'Good morning');assert.match(app.utterances.at(-1).text,/Good morning/);await ask(app,'Approve and send');assert.equal(sends.length,1);app.click('close');
   }
 });

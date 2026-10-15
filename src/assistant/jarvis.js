@@ -8,7 +8,7 @@
   let speechTimer=null,speechUtterance=null,speechChunks=[],customAudio=null,manualAudio=false,settings={language:'en-GB',muted:false,sounds:true,continuous:true,customVoice:true};
   let health={ready:false,message:'Open the local Jarvis server to connect Hermes.'},requestToken='',sessionId='',returnFocus=null,background=null,wasInert=false;
   let inboxMonitor=null,inboxState=null,announcements=[],messageAudioArmed=false,speechCompletion=null;
-  let waConversation=null,audioReady=Promise.resolve();
+  let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null;
   const ios=()=>/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   settings.messageAnnouncements=true;
   const motion={input:0,output:0,speech:false,inputPulse:-Infinity,outputPulse:-Infinity,measuredOutput:false};
@@ -39,7 +39,7 @@
   function caption(text){const node=el('jarvis-caption-text');if(node){node.textContent=text;node.hidden=!text;}}
   function releaseMic(){micToken++;cancelAnimationFrame(meterFrame);micStream?.getTracks().forEach(t=>t.stop());micStream=null;motion.input=0;motion.speech=false;}
   /* Stops speech and any pending reply, without touching the conversation opt-in. */
-  function cancelReply(){generation++;speechCompletion=null;request?.abort();request=null;customAudio?.stop();caption('');clearTimeout(speechTimer);if(speechUtterance){speechUtterance.onstart=speechUtterance.onend=speechUtterance.onerror=speechUtterance.onboundary=null;}speechUtterance=null;speechChunks=[];try{window.speechSynthesis?.cancel();}catch{}}
+  function cancelReply(){generation++;speechCompletion=null;customTurn=null;request?.abort();request=null;customAudio?.stop();caption('');clearTimeout(speechTimer);if(speechUtterance){speechUtterance.onstart=speechUtterance.onend=speechUtterance.onerror=speechUtterance.onboundary=null;}speechUtterance=null;speechChunks=[];try{window.speechSynthesis?.cancel();}catch{}}
   /* Full stop: reply, loop, recognizer and microphone. Used by close, hide, settings, reviews and navigation. */
   function stop(){cancelReply();clearFocus();voice?.stop();recognizer?.cancel();recognizer=null;releaseMic();setPhase('idle');}
   /* Explicit pause: always shows Paused, whether or not a voice loop was running. */
@@ -51,7 +51,7 @@
   function prepareSpeech(){
     messageAudioArmed=true;updateInboxStatus();
     audioReady=Promise.resolve(ensureCustomAudio()?.prepare());
-    if(settings.customVoice&&health.speech?.available)return;
+    // Unlock the device voice too, so provider failure can fall back after an async request on iPhone.
     try{const synth=window.speechSynthesis;if(!synth||!window.SpeechSynthesisUtterance)return;
       synth.getVoices();const prime=new SpeechSynthesisUtterance(' ');prime.volume=0;prime.lang=settings.language;
       synth.speak(prime);synth.cancel();if(synth.paused)synth.resume();
@@ -64,16 +64,21 @@
     if(customAudio||!window.SV_JARVIS_AUDIO)return customAudio;
     customAudio=SV_JARVIS_AUDIO.createPlayer({
       request:async(text,signal)=>{const res=await jarvisFetch('/api/jarvis/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text}),signal});const data=await res.json();if(!res.ok)throw Error(data.error||'The custom voice is unavailable. Choose Device voice in settings.');return data;},
-      onStart:()=>{caption('');voice?.speaking();setPhase('speaking');motion.outputPulse=performance.now();},
-      onDone:()=>{if(manualAudio)setPhase('idle');else replyDone();},
-      onError:message=>{pauseVoice(message);error(message);}
+      onStart:()=>{if(customTurn)customTurn.started=true;caption('');voice?.speaking();setPhase('speaking');motion.outputPulse=performance.now();},
+      onDone:()=>{customTurn=null;if(manualAudio)setPhase('idle');else replyDone();},
+      onError:message=>{
+        const fallback=customTurn;customTurn=null;
+        if(fallback&&fallback.id===generation&&!fallback.started&&window.speechSynthesis&&window.SpeechSynthesisUtterance){
+          customFallback=true;updateConnection();caption('');error(message+' Using Device voice for this conversation.');speak(fallback.text,fallback.manual,fallback.onDone,true);
+        }else{pauseVoice(message);error(message);}
+      }
     });return customAudio;
   }
-  function speak(text,manual=false,onDone=null){
+  function speak(text,manual=false,onDone=null,device=false){
     speechCompletion=onDone;
     lastReply=text;if(!manual&&settings.muted){speechCompletion=null;replyDone();return;}
-    if(settings.customVoice&&health.speech?.available&&ensureCustomAudio()){
-      manualAudio=manual;const id=generation;setPhase('thinking');caption('Preparing voice…');void customAudio.play(text).finally(()=>{if(id===generation)caption('');});return;
+    if(!device&&!customFallback&&settings.customVoice&&health.speech?.available&&ensureCustomAudio()){
+      manualAudio=manual;const id=generation;customTurn={id,text,manual,onDone,started:false};setPhase('thinking');caption('Preparing voice…');void customAudio.play(text).finally(()=>{if(id===generation)caption('');});return;
     }
     if(!window.speechSynthesis||!window.SpeechSynthesisUtterance){speechCompletion=null;error('Spoken replies are unavailable in this browser. Your reply is in Conversation.');replyDone();return;}
     try{window.speechSynthesis.cancel();if(speechSynthesis.paused)speechSynthesis.resume();clearTimeout(speechTimer);const id=generation;const chunks=text.replace(/\n/g,'. ').match(/[^.!?]{1,180}(?:[.!?]|\s|$)|.{1,180}/g)||[text];speechChunks=chunks;
@@ -91,7 +96,7 @@
   }
   function add(role,text){lines.push({role,text});lines=lines.slice(-40);renderTranscript();}
   function renderTranscript(){const host=el('jarvis-transcript');if(!host)return;host.replaceChildren();if(!lines.length){const empty=document.createElement('p');empty.className='jarvis-empty';empty.textContent='Ask about today’s cleanings, arrivals or tasks.';host.appendChild(empty);}lines.forEach(line=>{const node=document.createElement('div');node.className='jarvis-line'+(line.role==='You'?' you':'');const label=document.createElement('small');label.textContent=line.role;const text=document.createElement('p');text.textContent=line.text;node.append(label,text);host.appendChild(node);});host.scrollTop=host.scrollHeight;}
-  function updateConnection(){if(!root)return;el('jarvis-mode-text').textContent=mode==='hermes'?(health.route==='n8n'?'Hermes · n8n':'Hermes'):'App tools';el('jarvis-mode-dot').classList.toggle('live',mode==='hermes'&&health.ready);el('jarvis-agent-option').disabled=!health.ready;el('jarvis-mode-select').value=mode;el('jarvis-connection-detail').textContent=health.message||'Local Hermes connection ready.';const option=el('jarvis-custom-voice-option');if(option)option.disabled=!health.speech?.available;const choice=el('jarvis-voice-choice');if(choice)choice.value=settings.customVoice&&health.speech?.available?'elevenlabs':'device';}
+  function updateConnection(){if(!root)return;el('jarvis-mode-text').textContent=mode==='hermes'?(health.route==='n8n'?'Hermes · n8n':'Hermes'):'App tools';el('jarvis-mode-dot').classList.toggle('live',mode==='hermes'&&health.ready);el('jarvis-agent-option').disabled=!health.ready;el('jarvis-mode-select').value=mode;el('jarvis-connection-detail').textContent=health.message||'Local Hermes connection ready.';const option=el('jarvis-custom-voice-option');if(option)option.disabled=!health.speech?.available;const choice=el('jarvis-voice-choice');if(choice)choice.value=settings.customVoice&&!customFallback&&health.speech?.available?'elevenlabs':'device';}
   /* Live app: Jarvis's own calls go through the relay to the Jarvis PC (jarvis-transport.js); preview: same origin. */
   const transport=()=>window.SV_JARVIS_TRANSPORT||null;
   const viaRelay=()=>!!transport()?.remote?.();
@@ -333,7 +338,7 @@
     // Always recognise owner approval locally. The AI cannot propose or grant approval.
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
     if(root&&mode==='hermes'&&health.ready&&requestToken&&health.conversation===1){
-      if(['approve','ambiguousApproval','cancel','review'].includes(literal?.kind)){if(await whatsappTurn(text,id,screenApproval))return;}
+      if(['approve','cancel','review'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&waConversation?.snapshot()?.stage==='review'){if(await whatsappTurn(text,id,screenApproval))return;}
       await conversationTurn(text,id);return;
     }
     // The owner’s words go to bounded inbox tools; contact text is never routed back as commands.
@@ -377,27 +382,28 @@
   function beginRecognition(callbacks,kind){
     const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SR){Promise.resolve().then(()=>callbacks.error('service-not-allowed'));return {cancel(){}};}
-    releaseMic();const token=micToken;
+    releaseMic();const token=micToken;let setupTimer=null;
     if(kind!=='retry')cue('ready');
     const controller=createRecognizer(SR,settings.language,{
-      ready(){if(token!==micToken)return;setPhase('listening');const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(Chrome|Chromium|Edg)\//.test(navigator.userAgent);if(!ios()&&!safari&&navigator.mediaDevices?.getUserMedia)void navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(stream=>{if(token!==micToken||phase!=='listening'){stream.getTracks().forEach(t=>t.stop());return;}micStream=stream;try{const analyser=audioContext.createAnalyser();analyser.fftSize=512;audioContext.createMediaStreamSource(stream).connect(analyser);const values=new Float32Array(analyser.fftSize);const tick=()=>{if(token!==micToken)return;analyser.getFloatTimeDomainData(values);let sum=0;for(const v of values)sum+=v*v;motion.input=Math.min(1,Math.max(0,Math.sqrt(sum/values.length)-.008)*10);meterFrame=requestAnimationFrame(tick);};tick();}catch{}}).catch(()=>{});},
+      ready(){clearTimeout(setupTimer);if(token!==micToken)return;setPhase('listening');const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(Chrome|Chromium|Edg)\//.test(navigator.userAgent);if(!ios()&&!safari&&navigator.mediaDevices?.getUserMedia)void navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(stream=>{if(token!==micToken||phase!=='listening'){stream.getTracks().forEach(t=>t.stop());return;}micStream=stream;try{const analyser=audioContext.createAnalyser();analyser.fftSize=512;audioContext.createMediaStreamSource(stream).connect(analyser);const values=new Float32Array(analyser.fftSize);const tick=()=>{if(token!==micToken)return;analyser.getFloatTimeDomainData(values);let sum=0;for(const v of values)sum+=v*v;motion.input=Math.min(1,Math.max(0,Math.sqrt(sum/values.length)-.008)*10);meterFrame=requestAnimationFrame(tick);};tick();}catch{}}).catch(()=>{});},
       activity(active){if(token!==micToken)return;motion.speech=active;if(active)motion.inputPulse=performance.now();},
       draft(text){if(token!==micToken)return;caption(text);},
-      done(text){if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.done(text);},
-      error(code){if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.error(code);}
+      done(text){clearTimeout(setupTimer);if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.done(text);},
+      error(code){clearTimeout(setupTimer);if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.error(code);}
     });
     recognizer=controller;
     if(ios()){
       /* Keep a real capture source active while WebKit recognises speech. Wait for silent playback to
          release the audio session first; stop the source on every result, error, pause and close. */
       setPhase('connecting');
+      setupTimer=setTimeout(()=>{if(token===micToken){controller.cancel();recognizer=null;releaseMic();callbacks.error('capture-timeout');}},15000);
       void (async()=>{try{
         await audioReady;if(token!==micToken||document.hidden)return;
         if(navigator.mediaDevices?.getUserMedia){const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});if(token!==micToken||document.hidden){stream.getTracks().forEach(t=>t.stop());return;}micStream=stream;}
-        if(token===micToken)controller.start();
-      }catch(e){if(token===micToken){controller.cancel();releaseMic();callbacks.error(e.name==='NotAllowedError'?'not-allowed':'audio-capture');}}})();
+        if(token===micToken){clearTimeout(setupTimer);controller.start();}
+      }catch(e){clearTimeout(setupTimer);if(token===micToken){controller.cancel();releaseMic();callbacks.error(e.name==='NotAllowedError'?'not-allowed':'audio-capture');}}})();
     }else controller.start();
-    return {cancel(){const ownsCapture=token===micToken;if(recognizer===controller)recognizer=null;controller.cancel();if(ownsCapture)releaseMic();}};
+    return {cancel(){clearTimeout(setupTimer);const ownsCapture=token===micToken;if(recognizer===controller)recognizer=null;controller.cancel();if(ownsCapture)releaseMic();}};
   }
   /* Browsing WhatsApp no longer disables conversation; editing its text box pauses dictation. */
   function startVoice(){
@@ -414,13 +420,13 @@
   }
   function setContinuous(on){settings.continuous=on;voice?.setContinuous(on);el('jarvis-keep')?.setAttribute('aria-pressed',String(on));if(phase==='idle')setPhase('idle');}
   function createRecognizer(Recognition,language,callbacks){
-    const rec=new Recognition();rec.lang=language;rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;let closed=false,latest='',settling=null,watchdog=null;
-    const cleanup=()=>{clearTimeout(settling);clearTimeout(watchdog);rec.onstart=rec.onresult=rec.onerror=rec.onend=rec.onspeechstart=rec.onspeechend=rec.onsoundstart=rec.onsoundend=null;callbacks.activity(false);};
+    const rec=new Recognition();rec.lang=language;rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;let closed=false,latest='',settling=null,watchdog=null,starting=null;
+    const cleanup=()=>{clearTimeout(settling);clearTimeout(watchdog);clearTimeout(starting);rec.onstart=rec.onresult=rec.onerror=rec.onend=rec.onspeechstart=rec.onspeechend=rec.onsoundstart=rec.onsoundend=null;callbacks.activity(false);};
     const complete=code=>{if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}if(code)callbacks.error(code);else if(latest.trim())callbacks.done(latest.trim());else callbacks.error('no-speech');};
     const finish=()=>{if(closed)return;clearTimeout(settling);try{rec.stop();}catch{complete();return;}if(!closed)settling=setTimeout(()=>complete(),1200);};
-    rec.onstart=()=>{if(!closed)callbacks.ready();};rec.onspeechstart=rec.onsoundstart=()=>{if(!closed)callbacks.activity(true);};rec.onspeechend=rec.onsoundend=()=>{if(!closed)callbacks.activity(false);};
+    rec.onstart=()=>{clearTimeout(starting);if(!closed)callbacks.ready();};rec.onspeechstart=rec.onsoundstart=()=>{if(!closed)callbacks.activity(true);};rec.onspeechend=rec.onsoundend=()=>{if(!closed)callbacks.activity(false);};
     rec.onresult=e=>{if(closed)return;const drafts=[],finals=[];for(let i=0;i<e.results.length;i++){drafts.push(e.results[i][0].transcript);if(e.results[i].isFinal)finals.push(e.results[i][0].transcript);}latest=drafts.join(' ').trim();callbacks.draft(latest);callbacks.activity(true);clearTimeout(settling);settling=setTimeout(finish,finals.join(' ').trim()===latest?550:1800);};
-    rec.onerror=e=>complete(e.error);rec.onend=()=>complete();return {start(){if(closed)return;watchdog=setTimeout(()=>complete(latest?undefined:'timeout'),30000);try{rec.start();}catch{complete('audio-capture');}},finish,cancel(){if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}}};
+    rec.onerror=e=>complete(e.error);rec.onend=()=>complete();return {start(){if(closed)return;starting=setTimeout(()=>complete('recognition-start-timeout'),8000);watchdog=setTimeout(()=>complete(latest?undefined:'timeout'),30000);try{rec.start();}catch{complete('audio-capture');}},finish,cancel(){if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}}};
   }
 
   function closePanel(){panel=null;el('jarvis-panel').hidden=true;el('jarvis-mic')?.focus();}
@@ -475,7 +481,7 @@
     el('jarvis-input').addEventListener('focus',()=>{if(voice?.active)pauseVoice('Paused while you type.');});
     root.addEventListener('focusin',event=>{if(event.target?.id==='wa-editor'&&voice?.active)pauseVoice('Paused while you edit the WhatsApp reply.');});
     el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();cancelReply();prepareAudio();prepareSpeech();const text=el('jarvis-input').value;void send(text);});
-    el('jarvis-voice-choice').addEventListener('change',e=>{stop();settings.customVoice=e.target.value==='elevenlabs';updateConnection();});
+    el('jarvis-voice-choice').addEventListener('change',e=>{stop();customFallback=false;settings.customVoice=e.target.value==='elevenlabs';updateConnection();});
     el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&(phase==='speaking'||customAudio?.active)){cancelReply();replyDone();}});
     el('jarvis-data-note').textContent=DEV_MODE?'This local preview uses fictional data until you restore your private app backup in Settings. Hermes receives a limited operations summary when you send an agent message.':'App tools read your current app data. Hermes runs on the Jarvis PC; other devices reach it through the live relay.';
     el('jarvis-message-alerts').checked=settings.messageAnnouncements;el('jarvis-message-alerts').addEventListener('change',e=>{settings.messageAnnouncements=e.target.checked;if(!settings.messageAnnouncements)announcements=[];});

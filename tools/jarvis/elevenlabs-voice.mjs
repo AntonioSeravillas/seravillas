@@ -10,6 +10,13 @@ export function loadVoiceConfig(file=defaultVoicePath()){
   try{return JSON.parse(readFileSync(file,'utf8'));}catch{throw Error('The private voice configuration could not be read.');}
 }
 const problem=(message,status=503)=>Object.assign(Error(message),{status});
+async function providerCode(res){
+  // Read only a bounded error and extract a code, never echo provider text or input.
+  const reader=res.body?.getReader();if(!reader)return '';let size=0;const parts=[];
+  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>4096){await reader.cancel();return '';}parts.push(Buffer.from(value));}
+    const value=JSON.parse(Buffer.concat(parts).toString('utf8'));return typeof value?.detail?.status==='string'?value.detail.status:'';
+  }catch{return '';}finally{reader.releaseLock();}
+}
 export function createElevenLabsVoice({config,store,fetchImpl=fetch,now=()=>new Date()}={}){
   if(!config||config.enabled!==true)return null;
   if(typeof config.apiKey!=='string'||!/^sk_[A-Za-z0-9_-]{20,200}$/.test(config.apiKey)||!/^\w{15,64}$/.test(config.voiceId||''))throw Error('The private ElevenLabs key or voice ID is missing or invalid.');
@@ -34,9 +41,10 @@ export function createElevenLabsVoice({config,store,fetchImpl=fetch,now=()=>new 
         body:JSON.stringify({text,model_id:'eleven_flash_v2_5',voice_settings:{stability:0.5,similarity_boost:0.75,speed:1}}),signal:AbortSignal.timeout(45000)
       });}catch{throw problem('ElevenLabs did not answer. Tap Play reply to try again, or choose Device voice.');}
       if(!res.ok){
-        /* Provider bodies can contain echoed input; return only our own safe text. */
+        const code=await providerCode(res);
+        // ElevenLabs can report quota_exceeded with HTTP 401, not just 402/429.
+        if(code==='quota_exceeded'||res.status===402||res.status===429)throw problem('ElevenLabs credits or the API key usage limit are reached. Device voice is available for free.',429);
         if(res.status===401||res.status===403)throw problem('ElevenLabs did not accept the private key or voice access. Check the PC voice configuration.');
-        if(res.status===402||res.status===429)throw problem('ElevenLabs credits or usage limits are reached. Choose Device voice to continue for free.',429);
         throw problem('ElevenLabs could not generate the voice. Choose Device voice or try again later.');
       }
       if(!String(res.headers.get('content-type')||'').startsWith('audio/mpeg'))throw problem('The voice service returned an unexpected audio format.');
