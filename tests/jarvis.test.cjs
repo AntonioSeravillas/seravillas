@@ -89,8 +89,8 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null}={}){
-  const timers=new Map(),els=new Map(),recs=[],utterances=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop;
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false}={}){
+  const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
   /* Setting innerHTML registers every element that has an id, with its initial text and hidden state from the real markup. */
   const register=html=>{for(const m of String(html).matchAll(/<(\w+)([^>]*?)\sid="([^"]+)"([^>]*)>([^<]*)/g)){const sel='#'+m[3];if(!els.has(sel))els.set(sel,fakeEl());const node=els.get(sel),tagAttrs=m[2]+' '+m[4];node.textContent=m[5].trim();if(/(?:^|\s)hidden(?:\s|$|=)/.test(tagAttrs)){node.hidden=true;node.attrs.hidden='';}}};
@@ -102,22 +102,24 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
     querySelector(sel){if(!els.has(sel))els.set(sel,fakeEl());return els.get(sel);},querySelectorAll(){return [];},getClientRects(){return [];}};
     if(geometry)e.getBoundingClientRect=()=>({...geometry});return e;};
   const background=fakeEl();
-  class FakeSR{constructor(){recs.push(this);this.aborted=false;}start(){this.onstart?.();}stop(){this.onend?.();}abort(){this.aborted=true;}}
-  class FakeUtterance{constructor(text){this.text=text;utterances.push(this);}}
-  const sandbox={console,Date,Math,performance:{now:()=>1},navigator:{userAgent:'test'},DEV_MODE:true,
+  class FakeSR{constructor(){recs.push(this);this.aborted=false;}start(){audioEvents.push('record');this.onstart?.();}stop(){this.onend?.();}abort(){this.aborted=true;}}
+  class FakeUtterance{constructor(text){this.text=text;(text.trim()?utterances:primes).push(this);}}
+  const sandbox={console,Date,Math,AbortController,performance:{now:()=>1},navigator:{userAgent:'test'},DEV_MODE:true,
     document:{addEventListener(){},createElement:()=>fakeEl(),body:{appendChild(c){if(!root)root=c;}},querySelector:s=>s==='.app-wrapper'?background:null,getElementById:()=>null,activeElement:null,hidden:false},
     setTimeout(fn,ms){timers.set(++n,{fn,ms});return n;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(fn){rafs.push(fn);return rafs.length;},cancelAnimationFrame(){},
     addEventListener(t,f){(winListeners[t]=winListeners[t]||[]).push(f);},removeEventListener(t,f){winListeners[t]=(winListeners[t]||[]).filter(x=>x!==f);},
-    matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(){},cancel(){},getVoices:()=>[]},
-    D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>({kind:'reply',message:reply}))}};
+    matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(u){if(inGesture)speechUnlocked=true;if(speechGate&&!speechUnlocked)return;spoken.push(u);audioEvents.push(u.text.trim()?'reply':'prime');},cancel(){audioEvents.push('cancel');},getVoices:()=>[]},
+    D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>agent?{kind:'chat'}:{kind:'reply',message:reply})}};
+  if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async url=>{await Promise.resolve();return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n'}:{reply}};};}
   sandbox.window=sandbox;
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
   for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-voice.js','src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root_,file),'utf8'));
-  const app={run,context,recs,utterances,wa,timers,background,winListeners,rafs,
+  const app={run,context,recs,utterances,primes,spoken,audioEvents,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
-    click(j){root.listeners.click({target:{closest:()=>({dataset:{j}})}});},
+    click(j){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j}})}});}finally{inGesture=false;}},
+    submit(text){app.el('jarvis-input').value=text;inGesture=true;try{app.el('jarvis-form').listeners.submit({preventDefault(){}});}finally{inGesture=false;}},
     runDelay(ms){for(const [id,t] of [...timers])if(t.ms===ms){timers.delete(id);t.fn();}},
     hear(text,rec=recs.at(-1)){const row=[{transcript:text}];row.isFinal=true;rec.onresult({results:[row]});app.runDelay(550);},
     /* Plays every queued reply chunk to its end, as the browser would. */
@@ -128,6 +130,38 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 }
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('iPhone gesture gate: a microphone tap enables a later spoken reply before recording, including when listening sounds are off',async()=>{
+  const app=desktopRuntime({speechGate:true,desktop:false,reply:'Your connection is working.'});app.run('openJarvis()');await flush();
+  assert.equal(app.spoken.length,0);assert.equal(app.primes.length,0);
+  app.el('jarvis-sounds').listeners.change({target:{checked:false}});
+  app.click('mic');assert.equal(app.phase(),'listening');assert.equal(app.primes.length,1);assert.equal(app.primes[0].volume,0);
+  const primeAt=app.audioEvents.indexOf('prime'),recordAt=app.audioEvents.indexOf('record');
+  assert.ok(primeAt>=0&&primeAt<recordAt);assert.ok(app.audioEvents.slice(primeAt+1,recordAt).includes('cancel'));
+  app.hear('Hello');await flush();assert.equal(app.spoken.filter(u=>u.text.trim()).length,1);
+  app.finishSpeech();app.runDelay(450);assert.equal(app.recs.length,2);
+  app.hear('Hello again');await flush();assert.equal(app.spoken.filter(u=>u.text.trim()).length,2);
+  app.click('close');
+});
+
+test('iPhone gesture gate: typed submit enables an asynchronous reply and direct Play reply works after audio is blocked',async()=>{
+  const app=desktopRuntime({speechGate:true,agent:true,reply:'I can speak.'});app.run('openJarvis()');await flush();
+  app.submit('Hello');await flush();assert.equal(app.spoken.filter(u=>u.text.trim()).length,1);assert.equal(app.recs.length,0);
+  const blocked=app.utterances.at(-1);blocked.onerror({error:'not-allowed'});
+  assert.equal(app.phase(),'paused');assert.match(app.el('jarvis-error').textContent,/Tap Play reply once/);
+  app.click('replay');assert.equal(app.spoken.filter(u=>u.text.trim()).length,2);assert.equal(app.utterances.at(-1).text,'I can speak.');app.finishSpeech();
+  assert.equal(app.phase(),'idle');assert.equal(app.recs.length,0);app.click('close');
+});
+
+test('failed or stalled speech pauses the conversation instead of silently recording the next turn',async()=>{
+  for(const failure of ['not-allowed','audio-busy','timeout']){
+    const app=desktopRuntime({reply:'Hello.'});app.run('openJarvis()');await flush();app.click('mic');app.hear('Hello');await flush();
+    const u=app.utterances.at(-1);
+    if(failure==='timeout')app.runDelay(6000);else u.onerror({error:failure});
+    assert.equal(app.phase(),'paused',failure);assert.match(app.el('jarvis-error').textContent,/Play reply/);
+    u.onend?.();app.runDelay(450);assert.equal(app.recs.length,1,failure);app.click('close');
+  }
+});
 test('desktop: one tap gives a voice turn; the microphone stays off through every reply chunk and returns only after the final one',async()=>{
   const app=desktopRuntime();app.run('openJarvis()');await flush();
   assert.equal(app.recs.length,0);assert.equal(app.phase(),'idle');assert.equal(app.el('jarvis-keep').attrs['aria-pressed'],'true');

@@ -41,24 +41,33 @@
   /* Explicit pause: always shows Paused, whether or not a voice loop was running. */
   function pauseVoice(text){cancelReply();clearFocus();voice?.pause(text);recognizer?.cancel();recognizer=null;releaseMic();setPhase('paused');}
   function prepareAudio(){try{const AC=window.AudioContext||window.webkitAudioContext;if(AC&&(!audioContext||audioContext.state==='closed'))audioContext=new AC();void audioContext?.resume().catch(()=>{});}catch{}}
+  /* iPhone speech has its own user-gesture gate, independent of Web Audio. Unlock it synchronously
+     on the microphone/send tap, before recognition or a network round trip loses that gesture.
+     The silent utterance is cancelled before recording starts, so it never becomes a reply or echo. */
+  function prepareSpeech(){
+    try{const synth=window.speechSynthesis;if(!synth||!window.SpeechSynthesisUtterance)return;
+      synth.getVoices();const prime=new SpeechSynthesisUtterance(' ');prime.volume=0;prime.lang=settings.language;
+      synth.speak(prime);synth.cancel();if(synth.paused)synth.resume();
+    }catch{}
+  }
   function cue(kind){if(!settings.sounds)return;try{prepareAudio();if(!audioContext)return;const osc=audioContext.createOscillator(),gain=audioContext.createGain(),now=audioContext.currentTime;osc.frequency.setValueAtTime(kind==='ready'?460:680,now);osc.frequency.exponentialRampToValueAtTime(kind==='ready'?690:850,now+.09);gain.gain.setValueAtTime(.025,now);gain.gain.exponentialRampToValueAtTime(.0001,now+.12);osc.connect(gain);gain.connect(audioContext.destination);osc.start();osc.stop(now+.13);osc.onended=()=>{osc.disconnect();gain.disconnect();};}catch{}}
   /* After the last spoken chunk (or a muted/text reply) the loop may listen again; otherwise Jarvis rests. */
   function replyDone(){focusReplyDone();if(!voice?.replyFinished())setPhase(phase==='paused'||phase==='error'?phase:'idle');}
   function speak(text,manual=false){
     lastReply=text;if(!manual&&settings.muted){replyDone();return;}
     if(!window.speechSynthesis||!window.SpeechSynthesisUtterance){error('Spoken replies are unavailable in this browser. Your reply is in Conversation.');replyDone();return;}
-    try{window.speechSynthesis.cancel();clearTimeout(speechTimer);const id=generation;const chunks=text.replace(/\n/g,'. ').match(/[^.!?]{1,180}(?:[.!?]|\s|$)|.{1,180}/g)||[text];speechChunks=chunks;
+    try{window.speechSynthesis.cancel();if(speechSynthesis.paused)speechSynthesis.resume();clearTimeout(speechTimer);const id=generation;const chunks=text.replace(/\n/g,'. ').match(/[^.!?]{1,180}(?:[.!?]|\s|$)|.{1,180}/g)||[text];speechChunks=chunks;
       /* Once-only: the reply finishes exactly once, and only callbacks from the chunk now playing count. */
       let finished=false;
-      const finish=message=>{if(finished||id!==generation)return;finished=true;clearTimeout(speechTimer);speechChunks=[];speechUtterance=null;if(message)error(message);if(manual)setPhase('idle');else replyDone();};
+      const finish=message=>{if(finished||id!==generation)return;finished=true;clearTimeout(speechTimer);speechChunks=[];speechUtterance=null;if(message){pauseVoice(message);error(message);return;}if(manual)setPhase('idle');else replyDone();};
       const next=()=>{if(finished||id!==generation||!root)return;const chunk=speechChunks.shift();if(!chunk){finish('');return;}const u=new SpeechSynthesisUtterance(chunk);speechUtterance=u;u.lang=settings.language;u.rate=.92;const voices=speechSynthesis.getVoices();const v=voices.find(x=>x.lang===settings.language&&/Daniel|George|Microsoft Ryan|Microsoft David/i.test(x.name))||voices.find(x=>x.lang===settings.language);if(v)u.voice=v;
         let ended=false;const current=()=>!finished&&!ended&&id===generation&&speechUtterance===u;
         u.onstart=()=>{if(!current())return;clearTimeout(speechTimer);voice?.speaking();setPhase('speaking');motion.outputPulse=performance.now();speechTimer=setTimeout(()=>{if(current()){ended=true;speechSynthesis.cancel();finish('Voice playback stopped. Tap Play reply to try again.');}},30000);};
         u.onboundary=()=>{if(current())motion.outputPulse=performance.now();};
         u.onend=()=>{if(!current())return;ended=true;clearTimeout(speechTimer);next();};
-        u.onerror=()=>{if(!current())return;ended=true;finish('Audio could not play. Tap Play reply to enable it.');};
+        u.onerror=e=>{if(!current())return;ended=true;finish(e?.error==='not-allowed'?'Tap Play reply once to enable voice on this device.':'Audio could not play. Tap Play reply to try again.');};
         speechTimer=setTimeout(()=>{if(current()){ended=true;speechSynthesis.cancel();finish('Tap Play reply to enable spoken audio.');}},6000);speechSynthesis.speak(u);};next();
-    }catch{error('Audio could not start. Your reply is in Conversation.');replyDone();}
+    }catch{pauseVoice('Audio could not start. Tap Play reply to try again.');error('Audio could not start. Tap Play reply to try again.');}
   }
   function add(role,text){lines.push({role,text});lines=lines.slice(-40);renderTranscript();}
   function renderTranscript(){const host=el('jarvis-transcript');if(!host)return;host.replaceChildren();if(!lines.length){const empty=document.createElement('p');empty.className='jarvis-empty';empty.textContent='Ask about today’s cleanings, arrivals or tasks.';host.appendChild(empty);}lines.forEach(line=>{const node=document.createElement('div');node.className='jarvis-line'+(line.role==='You'?' you':'');const label=document.createElement('small');label.textContent=line.role;const text=document.createElement('p');text.textContent=line.text;node.append(label,text);host.appendChild(node);});host.scrollTop=host.scrollHeight;}
@@ -283,7 +292,7 @@
     if(whatsappOpen()){error('The microphone stays off while WhatsApp is open. Close WhatsApp first, then tap the microphone.');setPhase('paused');return;}
     error('');const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SR||!window.SV_JARVIS_VOICE){error('Speech recognition is unavailable here. Type in Conversation instead.');el('jarvis-input')?.focus();return;}
-    cancelReply();prepareAudio();ensureVoice().start();
+    cancelReply();prepareAudio();prepareSpeech();ensureVoice().start();
   }
   function micPressed(){
     if(whatsappOpen()){pauseVoice('');startVoice();return;}
@@ -351,7 +360,7 @@
     root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(panel)closePanel();else closeJarvis();}if(e.key==='Tab'){const scope=panel?el('jarvis-panel'):root;const items=[...scope.querySelectorAll('button,input,select,textarea,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
     /* Typing a message ends voice listening so the microphone never records in the background. */
     el('jarvis-input').addEventListener('focus',()=>{if(voice?.active)pauseVoice('Paused while you type.');});
-    el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();prepareAudio();const text=el('jarvis-input').value;void send(text);});
+    el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();cancelReply();prepareAudio();prepareSpeech();const text=el('jarvis-input').value;void send(text);});
     el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&phase==='speaking'){cancelReply();replyDone();}});
     el('jarvis-data-note').textContent=DEV_MODE?'This local preview uses fictional data until you restore your private app backup in Settings. Hermes receives a limited operations summary when you send an agent message.':'App tools read your current app data. Hermes runs on the Jarvis PC; other devices reach it through the live relay.';
     if(viaRelay())el('jarvis-relay').hidden=false;
