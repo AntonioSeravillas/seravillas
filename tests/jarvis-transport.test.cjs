@@ -25,6 +25,10 @@ function runtime({dev=false,results=[],postStatus=202,extra={}}={}){
   return {t:sandbox.SV_JARVIS_TRANSPORT,calls,context,sandbox,advance:ms=>{clock+=ms;},jobPosts:()=>calls.filter(c=>c.url.endsWith('/api/relay/jobs'))};
 }
 const done=body=>({body:{status:'done',result:{status:200,body}}});
+test('live voice obtains a short-lived credential through one authenticated relay job, without a key or agent override',async()=>{
+  const app=runtime({results:[done({conversationToken:'EPHEMERAL_ONLY',maxDurationSeconds:600})]});const r=await app.t.fetch('/api/jarvis/live-session',{method:'POST',body:'{}'});assert.equal((await r.json()).conversationToken,'EPHEMERAL_ONLY');assert.deepEqual(JSON.parse(app.jobPosts()[0].init.body),{op:'live-session',params:{}});
+  const rejected=runtime();assert.equal((await rejected.t.fetch('/api/jarvis/live-session',{method:'POST',body:'{"agentId":"OTHER"}'})).status,404);assert.equal(rejected.calls.length,0);
+});
 
 test('health travels as one manager-authenticated relay job; the PC token is replaced by a placeholder',async()=>{
   const app=runtime({results:[{body:{status:'queued'}},done({ready:true,route:'hermes',message:'Hermes is reachable.',requestToken:'LEAKED_LOCAL_TOKEN'})]});

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@elevenlabs/client": "1.28.0",
+    "esbuild": "0.25.12"
+  }
+}

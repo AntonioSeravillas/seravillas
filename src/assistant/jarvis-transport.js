@@ -5,7 +5,7 @@
    - The PC's local session token never reaches the browser: a "relay" placeholder keeps the existing UI gating.
    Only Jarvis's own calls use this; nothing global is patched. */
 (function(){
-  const TIMEOUT={health:20000,chat:110000,speech:60000,'wa-status':20000,'wa-inbox':25000,'wa-read':25000,'wa-review':40000,'wa-send':60000,'wa-discard':25000};
+  const TIMEOUT={health:20000,chat:110000,speech:60000,'live-session':50000,'wa-status':20000,'wa-inbox':25000,'wa-read':25000,'wa-review':40000,'wa-send':60000,'wa-discard':25000};
   const SENTINEL='relay';
   const remote=()=>typeof DEV_MODE!=='undefined'&&!DEV_MODE;
   const relayUrl=()=>typeof SYNC_URL==='string'?SYNC_URL:'';
@@ -17,6 +17,7 @@
     const u=new URL(String(url),'https://jarvis.invalid'),method=String(init.method||'GET').toUpperCase();
     let body={};if(init.body){try{body=JSON.parse(init.body);}catch{return {refuse:400,error:'Invalid request.'};}}
     if(u.pathname==='/api/jarvis/health'&&method==='GET')return {op:'health',params:{}};
+    if(u.pathname==='/api/jarvis/live-session'&&method==='POST'&&Object.keys(body).length===0)return {op:'live-session',params:{}};
     if(u.pathname==='/api/jarvis/speech'&&method==='POST')return {op:'speech',params:{text:body.text}};
     if(u.pathname==='/api/jarvis/chat'&&method==='POST')return {op:'chat',params:{text:body.text,sessionId:body.sessionId,context:body.context}};
     const wa=u.pathname.match(/^\/api\/jarvis\/whatsapp\/([a-z-]+)$/);

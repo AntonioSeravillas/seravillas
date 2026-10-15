@@ -27,6 +27,13 @@ function setup(){
   return {env,sql,call,manager,device,tables,register,job,tick:ms=>{now+=ms;}};
 }
 test.after(()=>worker.setRelayClockForTests(null));
+test('live voice connection requires the signed-in manager and accepts no client key, URL or agent ID',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  assert.equal((await h.call('/api/relay/jobs','POST',{op:'live-session',params:{}})).status,401);
+  for(const params of [{agentId:'OTHER'},{apiKey:'SECRET'},{url:'https://evil.invalid'}])assert.equal((await h.job('live-session',params)).status,400);
+  assert.equal((await h.job('live-session',{})).status,202);const {job}=await(await h.device('/api/relay/device/claim',code)).json();assert.equal(job.op,'live-session');assert.deepEqual(job.params,{});
+  assert.equal(h.sql.sqlite.prepare('SELECT COUNT(*) AS n FROM app_state').get().n,0);
+});
 test('read acknowledgements require manager authentication and accept only up to ten message keys',async()=>{
   const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
   assert.equal((await h.call('/api/relay/jobs','POST',{op:'wa-read',params:{messages:['a'.repeat(20)]}})).status,401);

@@ -1,5 +1,6 @@
 /* Read-only app tools. AI chooses a query; current records supply every fact and calculation.
-   The catalog, booking amounts, notes, receipts, keys and photos are never model context. */
+   The full catalog, notes, receipts, keys and photos are never model context.
+   Live voice receives only the projected facts returned for the owner's requested query. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.SV_JARVIS_RECORDS=api;})(typeof window!=='undefined'?window:globalThis,function(){
   const ENTITIES=['bookings','cleanings','tasks','issues','properties'];
   const VIEWS=['list','details','price','payment','summary','availability','count'];
@@ -98,8 +99,22 @@
         if(r.status==='cancelled')text+=' This booking is cancelled. '+r.facts.find(f=>f.label==='Cancellation money retained').label+': '+r.facts.find(f=>f.label==='Cancellation money retained').value+'.';
       }else if(q.view==='details'){
         const label={arrival:'Arrival',departure:'Departure',guests:'Guests',crew:q.entity==='bookings'?'Linked cleaning':'Team',status:'Status',due:'Due',priority:'Priority'}[q.field];
-        const facts=q.field?rows[0].facts.filter(f=>f.label===label):rows[0].facts;
-        text=rows[0].title+', '+(q.field?rows[0].property:rows[0].subtitle)+'. '+(facts.length?facts.map(f=>f.label+': '+f.value).join('. ')+'.':'That detail is not recorded for this type of record.');
+        const r=rows[0],fact=name=>r.facts.find(f=>f.label===name)?.value;
+        const clock=value=>String(value||'').replace(' · ',' at ');
+        const tomorrow=new Date(Date.parse(td+'T12:00:00Z')+86400000).toISOString().slice(0,10);
+        const when=r.date===td?'today':r.date===tomorrow?'tomorrow':'on '+dated(r.date);
+        if(q.entity==='cleanings'&&(!q.field||q.field==='crew')){
+          const team=r.team,needed=team.missing?' We still need '+team.missing+' confirmed cleaner'+(team.missing===1?'':'s')+'.':'';
+          text=team.assigned?team.names.join(', ')+' '+(team.assigned===1?'is':'are')+' assigned to '+r.title+' '+when+'.'+needed:'No one is assigned to '+r.title+' '+when+(r.status==='done'?'.':' yet.')+needed;
+        }else if(q.entity==='bookings'&&q.field==='arrival')text=r.title+' arrives at '+r.property+' on '+clock(fact('Arrival'))+'.';
+        else if(q.entity==='bookings'&&q.field==='departure')text=r.title+' leaves '+r.property+' on '+clock(fact('Departure'))+'.';
+        else if(q.entity==='bookings'&&q.field==='guests')text=fact('Guests')==='Not recorded'?'The guest count for '+r.title+' is not recorded.':r.title+' has '+fact('Guests')+' guests booked at '+r.property+'.';
+        else if(q.entity==='bookings'&&q.field==='crew')text='The linked cleaning for '+r.title+' at '+r.property+': '+clock(fact('Linked cleaning'))+'.';
+        else if(q.field&&fact(label))text=q.field==='due'?(fact(label)==='Not set'?'There is no due date set for '+r.title+'.':r.title+' is due on '+fact(label)+'.'):q.field==='priority'?r.title+' has '+fact(label)+' priority.':q.field==='status'?r.title+' is marked '+fact(label)+'.':r.title+': '+fact(label)+'.';
+        else if(q.field)text='That detail is not recorded for this type of record.';
+        else if(q.entity==='bookings')text=r.title+' is booked at '+r.property+' from '+dated(r.date)+' to '+dated(r.end)+'. '+(fact('Guests')==='Not recorded'?'The guest count is not recorded.':fact('Guests')+' guests are booked.')+(r.status==='cancelled'?' This booking is cancelled.':'');
+        else if(q.entity==='tasks')text=r.title+(r.property==='General'?'':' at '+r.property)+'. '+(fact('Due')==='Not set'?'There is no due date set.':'It is due on '+fact('Due')+'.')+' It is marked '+fact('Status')+' with '+fact('Priority')+' priority.';
+        else text=r.title+(r.title===r.property||r.property==='General'?'':' at '+r.property)+'. '+r.facts.map(f=>f.label+': '+f.value).join('. ')+'.';
       }
       else if(q.entity==='bookings'&&q.view==='summary'){
         const projected=all.map(b=>({status:b.status,priceCents:b._excel?.priceUnknown?null:cents(b.totalPrice)})),priced=projected.filter(r=>r.status!=='cancelled'&&r.priceCents!==null),total=priced.reduce((n,r)=>n+r.priceCents,0),unknown=projected.filter(r=>r.status!=='cancelled'&&r.priceCents===null).length;

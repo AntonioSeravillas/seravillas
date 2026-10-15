@@ -5,6 +5,8 @@ import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {CONVERSATION_SYSTEM,conversationContext,parseDecision} from './conversation.mjs';
+import {createElevenLabsAgent} from './elevenlabs-agent.mjs';
+import {loadVoiceConfig} from './elevenlabs-voice.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const MAX_BODY=90000;
@@ -103,7 +105,7 @@ export async function createDefaultWhatsApp({hermesUrl,apiKey,runtimeDir=process
 }
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.woff2':'font/woff2','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.wav':'audio/wav'};
 
-export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl='http://127.0.0.1:8642/p/seravillas/',n8nUrl='http://127.0.0.1:5678/webhook/seravillas-jarvis',n8nKey='',fetchImpl=fetch,appRoot=root,whatsapp=null}={}){
+export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl='http://127.0.0.1:8642/p/seravillas/',n8nUrl='http://127.0.0.1:5678/webhook/seravillas-jarvis',n8nKey='',fetchImpl=fetch,appRoot=root,whatsapp=null,liveVoice=null}={}){
   const hermes=hermesBase(hermesUrl),workflow=localUrl(n8nUrl),token=randomBytes(32).toString('hex');let busy=false,waService=null,waLoading=null;
   /* whatsapp is a factory. It runs only after a token-checked inbox request, so constructing the server reads no WhatsApp files. */
   async function getWhatsApp(){
@@ -159,7 +161,13 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
       if(!currentHosts().has(req.headers.host)){send(res,403,{error:'Invalid local host.'});return;}
       if(!validOrigin(req)){send(res,403,{error:'Cross-origin requests are not allowed.'});return;}
       const url=new URL(req.url,'http://127.0.0.1:'+port);
-      if(url.pathname==='/api/jarvis/health'&&req.method==='GET'){send(res,200,{...await readiness(),route,conversation:1,requestToken:token});return;}
+      if(url.pathname==='/api/jarvis/health'&&req.method==='GET'){send(res,200,{...await readiness(),route,conversation:1,...(liveVoice?{liveVoice:liveVoice.status()}:{}),requestToken:token});return;}
+      if(url.pathname==='/api/jarvis/live-session'&&req.method==='POST'){
+        if(!sameToken(req.headers['x-jarvis-session-token'],token)){send(res,403,{error:'Reopen Jarvis to refresh its local connection.'});return;}
+        const input=await parseBody(req);if(!input||Object.keys(input).length){send(res,400,{error:'This voice connection takes no parameters.'});return;}
+        if(!liveVoice){send(res,503,{error:'The private live voice agent is not configured.'});return;}
+        try{send(res,200,await liveVoice.session());}catch(e){send(res,e.status||503,{error:e.message});}return;
+      }
       if(url.pathname.startsWith('/api/jarvis/whatsapp/')){await handleWhatsApp(req,res,url);return;}
       if(url.pathname==='/api/jarvis/chat'&&req.method==='POST'){
         if(!sameToken(req.headers['x-jarvis-session-token'],token)){send(res,403,{error:'Reopen Jarvis to refresh its local connection.'});return;}
@@ -195,5 +203,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
   const route=process.env.JARVIS_ROUTE==='n8n'?'n8n':'hermes';
   const apiKey=process.env.HERMES_API_KEY||'';
   const whatsapp=process.env.JARVIS_WHATSAPP==='off'?null:()=>createDefaultWhatsApp({hermesUrl:'http://127.0.0.1:8642/p/seravillas/',apiKey});
-  createJarvisServer({port,route,apiKey,n8nKey:process.env.JARVIS_N8N_KEY||'',whatsapp}).listen(port,'127.0.0.1',()=>console.log('Jarvis pilot: http://127.0.0.1:'+port+' · '+route+' · cloud sync disabled in this preview'));
+  const liveVoice=createElevenLabsAgent({config:loadVoiceConfig()});
+  createJarvisServer({port,route,apiKey,n8nKey:process.env.JARVIS_N8N_KEY||'',whatsapp,liveVoice}).listen(port,'127.0.0.1',()=>console.log('Jarvis pilot: http://127.0.0.1:'+port+' · '+route+' · cloud sync disabled in this preview'));
 }

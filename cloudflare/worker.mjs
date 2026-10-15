@@ -135,6 +135,7 @@ const HEX20 = /^[a-f0-9]{20}$/, HEX64 = /^[a-f0-9]{64}$/;
 const relayText = (value, max) => { if (typeof value !== 'string' || value.length > max) fail(400, 'Invalid relay request'); return value; };
 /* Exactly the operations the PC agent will run. AI drafting, model consent and WhatsApp connect/pairing are not here. */
 const RELAY_OPS = {
+  'live-session': p => { assertKeys(p, []); return {}; },
   'health': p => { assertKeys(p, []); return {}; },
   'speech': p => { assertKeys(p, ['text']); if(!relayText(p.text,600).trim())fail(400,'Invalid speech request'); return {text:p.text}; },
   'wa-status': p => { assertKeys(p, []); return {}; },

@@ -8,6 +8,10 @@ function fixture(){
   ],sessions:[],tasks:[],issues:[],secret:'SECRET_SENTINEL'};
   const engine=create({getData:()=>data,reference:()=> '2026-10-15',required:()=>2});return {data,engine,run:q=>engine.run(q)};
 }
+test('cleaning answers speak naturally, do not repeat the villa name and distinguish offered staff from missing confirmations',()=>{
+  const f=fixture();f.data.sessions=[{id:'s',propId:'mar',date:'2026-10-16'}];let r=f.run({entity:'cleanings',property:'Villa Mar',view:'details',field:'crew'});assert.equal(r.text,'No one is assigned to Villa Mar tomorrow yet. We still need 2 confirmed cleaners.');
+  f.data.sessions[0].crew={main:[{cleanerId:'a',status:'offered'}]};r=f.run({entity:'cleanings',property:'Villa Mar',view:'details',field:'crew'});assert.match(r.text,/Ana \(awaiting confirmation\)/);assert.match(r.text,/2 confirmed cleaners/);assert.equal(r.text.match(/Villa Mar/g).length,1);
+});
 test('payment lookup searches all loaded years and never calls a booking price money paid',()=>{
   const f=fixture(),before=JSON.stringify(f.data),r=f.run({entity:'bookings',view:'payment',guest:'Sample Guest One'});
   assert.equal(r.total,1);assert.match(r.text,/€1,234.56/);assert.match(r.text,/recorded booking price/);assert.match(r.text,/cannot confirm how much was actually paid/);assert.match(r.text,/2024/);
@@ -71,7 +75,7 @@ test('record context contains selectors and queries, never financial values, sec
   assert.equal(f.run({entity:'bookings',recordId:'selected',view:'details'}).rows[0].id,'old');f.engine.reset();assert.equal(f.engine.context(),null);
 });
 test('specific follow-up fields give a short answer while leaving the full verified record on screen',()=>{
-  const f=fixture();f.run({entity:'bookings',guest:'Sample Guest One',view:'payment'});const r=f.run({entity:'bookings',recordId:'selected',view:'details',field:'arrival'});assert.match(r.text,/Arrival: 1 Jun 2024/);assert.ok(!r.text.includes('€'));assert.ok(!r.text.includes('Payment received'));assert.ok(r.rows[0].facts.some(f=>f.label==='Booking price'));
+  const f=fixture();f.run({entity:'bookings',guest:'Sample Guest One',view:'payment'});const r=f.run({entity:'bookings',recordId:'selected',view:'details',field:'arrival'});assert.match(r.text,/arrives at Villa Mar on 1 Jun 2024 at 16:00/);assert.ok(!r.text.includes('€'));assert.ok(!r.text.includes('Payment received'));assert.ok(r.rows[0].facts.some(f=>f.label==='Booking price'));
   assert.throws(()=>sanitizeQuery({entity:'bookings',field:'apiKey'}));
 });
 test('bounded pagination preserves every record, uses page-relative choices and detects removed records',()=>{

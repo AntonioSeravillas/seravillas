@@ -14,8 +14,13 @@ test('read acknowledgements map only bounded exact message identifiers to the lo
   assert.throws(()=>mapJob({op:'wa-read',params:{messages:['a'.repeat(20)],send:true}}));
 });
 const job=(op,params={})=>({jobId:(op.length.toString(16)+'f'.repeat(64)).slice(0,64),op,params});
+test('live voice mints a fixed private-agent credential once per job, advertises availability and rejects client parameters',async()=>{
+  let calls=0;const liveVoice={status:()=>({available:true,provider:'elevenlabs-agents'}),session:async()=>{calls++;return {conversationToken:'EPHEMERAL_ONLY',maxDurationSeconds:600};}};
+  const tokenJob={...job('live-session'),jobId:'d'.repeat(64)},h=harness({jobs:[job('health'),tokenJob,tokenJob],liveVoice});await h.agent.run();assert.equal(calls,1);assert.equal(h.completed[0].result.body.liveVoice.available,true);assert.equal(h.completed[1].result.body.conversationToken,'EPHEMERAL_ONLY');
+  for(const params of [{agentId:'OTHER'},{apiKey:'SECRET'},{url:'https://evil.invalid'}])assert.throws(()=>mapJob(job('live-session',params)),/not allowed/);
+});
 function memoryStore(initial={...config}){let data=JSON.parse(JSON.stringify(initial));return {load:()=>JSON.parse(JSON.stringify(data)),save(v){data=JSON.parse(JSON.stringify(v));},peek:()=>data};}
-function harness({jobs=[],local=async()=>json(200,{}),cloud=null,store=memoryStore(),every,speechProvider=null}={}){
+function harness({jobs=[],local=async()=>json(200,{}),cloud=null,store=memoryStore(),every,speechProvider=null,liveVoice=null}={}){
   const queue=[...jobs],completed=[],localCalls=[],cloudCalls=[];let agent;
   const fetchImpl=async(url,init)=>{
     assert.equal(init.redirect,'error');
@@ -34,7 +39,7 @@ function harness({jobs=[],local=async()=>json(200,{}),cloud=null,store=memorySto
     return local(url,init);
   };
   const sleeps=[];
-  agent=createRelayAgent({config:store.load(),store,speechProvider,fetchImpl,sleep:async ms=>{sleeps.push(ms);if(!queue.length&&ms===2500)agent.stop();},...(every?{every}:{})});
+  agent=createRelayAgent({config:store.load(),store,speechProvider,liveVoice,fetchImpl,sleep:async ms=>{sleeps.push(ms);if(!queue.length&&ms===2500)agent.stop();},...(every?{every}:{})});
   return {agent,completed,localCalls,cloudCalls,sleeps,store};
 }
 

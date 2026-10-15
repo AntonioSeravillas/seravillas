@@ -167,3 +167,18 @@ Choose the smallest step that fixes the problem.
 4. **Do not rerun the migration** and do not restore KV as part of this rollback.
 5. Optional cleanup after rolling back the Worker: in the `STAFF_DB` D1 console, remove stored relay text with `DELETE FROM relay_jobs;`. The two relay tables can remain; the old Worker ignores them.
 6. Delete `jarvis-live-relay.json` on the PC if remote access is no longer wanted.
+
+
+### ElevenLabs live conversation — 15 October 2026
+
+The microphone defaults to the private ElevenLabs Agent when the PC advertises it. The pinned official client (1.28.0) connects browser audio directly using WebRTC; the manager-authenticated relay obtains a short-lived connection credential from the fixed private agent. The account key stays on the PC. The only new Worker operation is live-session with an empty parameter object. No database migration or binding change is required.
+
+The voice agent uses the existing Jarvis Seravillas voice with Eleven v3 Conversational and a hosted Gemini 2.5 Flash conversation model. Direct lookup_records searches the loaded app data without a Hermes round trip. Only projected query results are returned to the voice model; full catalogs, private notes, contact credentials and payment receipts are not exposed. ask_hermes retains the existing n8n/Hermes path for memory and supported reviewed app changes. Persistent memory remains in Hermes, not ElevenLabs automatic user memory.
+
+WhatsApp tools can read or prepare/revise a draft, never approve or send. Exact read-backs use app-controlled speech while the live session is muted, and only completed playback enables the literal owner approval. Incoming automatic AI reply drafting remains off. Typed messages during a live session mute microphone input while editing and can continue that session. Close, hide, settings and explicit pause end it. Native device speech and the previous voice workflow remain available in settings.
+
+Agent settings: private authentication; the user's chosen voice; ten-minute session maximum, ninety-second silence timeout, one concurrent session, twenty sessions per day, no paid bursting. Audio recording is off, transcript/PII retention is configured to one day (not zero retention). The API key retains the owner's 3,000-credit cap. Its allowance is separate from the local legacy TTS character counter. No subscription or billing upgrade was made.
+
+Validation: 267 automated checks passed, including real overlay integration on desktop/narrow layouts, private-token authentication, ignored/stale callbacks, one-time owner approval, relay scoping, and factual payment/crew safeguards. A real four-turn agent session used fictional records and mock WhatsApp, correctly changed follow-up dates and prepared an unsent draft. A separate short speech request verified the corrected key allowance. Actual iPhone microphone, playback quality and natural interruptions still require the owner's listening test.
+
+Rollback: previous app commit 4539b18, previous Worker version 2d8cfb9e. Switch Voice to the previous Jarvis Seravillas voice or Device voice to disable the new live connection. No app-state restore or migration is involved.

@@ -10,6 +10,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {randomBytes} from 'node:crypto';
 import {createElevenLabsVoice,loadVoiceConfig,defaultVoicePath} from './elevenlabs-voice.mjs';
+import {createElevenLabsAgent} from './elevenlabs-agent.mjs';
 
 export const PRODUCTION_RELAY='https://seravillas-sync.antonio-01e.workers.dev';
 export const defaultConfigPath=(env=process.env)=>env.LOCALAPPDATA?path.join(env.LOCALAPPDATA,'hermes','profiles','seravillas','jarvis-live-relay.json'):'';
@@ -35,6 +36,7 @@ export function mapJob({op,params}={}){
   const text=v=>{if(typeof v!=='string'||!v.trim()||v.length>2000)throw bad();return v;};
   switch(op){
     case 'health':return {method:'GET',path:'/api/jarvis/health',needsToken:false};
+    case 'live-session':{if(Object.keys(p).length)throw bad();return {liveSession:true,needsToken:false};}
     case 'speech':{if(Object.keys(p).some(k=>k!=='text')||typeof p.text!=='string'||!p.text.trim()||p.text.length>600)throw bad();return {speech:true,text:p.text,needsToken:false};}
     case 'wa-status':return {method:'GET',path:'/api/jarvis/whatsapp/status',needsToken:false};
     case 'chat':{if(!/^[a-zA-Z0-9_-]{8,100}$/.test(String(p.sessionId||''))||!p.context||typeof p.context!=='object'||Array.isArray(p.context))throw bad();return {method:'POST',path:'/api/jarvis/chat',needsToken:true,body:{text:text(p.text),sessionId:p.sessionId,context:p.context}};}
@@ -63,7 +65,7 @@ export function createFileStore(file){
 }
 const interrupted=op=>op==='wa-send'?UNCERTAIN_SEND:{status:503,body:{error:'The Jarvis PC restarted before finishing this request. Please try again.'}};
 
-export function createRelayAgent({config,store,speechProvider=null,fetchImpl=fetch,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),log=()=>{},idleMs=2500,heartbeatMs=20000,every=(fn,ms)=>{const id=setInterval(fn,ms);return ()=>clearInterval(id);}}={}){
+export function createRelayAgent({config,store,speechProvider=null,liveVoice=null,fetchImpl=fetch,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),log=()=>{},idleMs=2500,heartbeatMs=20000,every=(fn,ms)=>{const id=setInterval(fn,ms);return ()=>clearInterval(id);}}={}){
   const cfg=validateConfig(config);
   if(!store)throw Error('A private store is required for the job ledger.');
   let stopped=false,failures=0;
@@ -129,12 +131,16 @@ export function createRelayAgent({config,store,speechProvider=null,fetchImpl=fet
     let authLost=null;
     const stopBeat=every(()=>{cloud('/api/relay/device/heartbeat',{}).catch(e=>{if(e.code==='AUTH')authLost=e;});},heartbeatMs);
     try{
-      if(call.speech){
+      if(call.liveSession){
+        if(!liveVoice)result={status:503,body:{error:'The live voice agent is not connected on the Jarvis PC.'}};
+        else try{result={status:200,body:await liveVoice.session()};}catch(e){result={status:e.status||503,body:{error:e.message}};}
+      }else if(call.speech){
         if(!speechProvider)result={status:503,body:{error:'The custom voice is not connected on the Jarvis PC. Choose Device voice.'}};
         else try{result={status:200,body:await speechProvider.generate(call.text)};}catch(e){result={status:e.status||503,body:{error:e.message}};}
       }else{
         result=sanitize(await local(call.method,call.path,{body:call.body,token,timeout:TIMEOUTS[job.op]}));
         if(job.op==='health'&&speechProvider)result.body.speech=speechProvider.status();
+        if(job.op==='health'&&liveVoice)result.body.liveVoice=liveVoice.status();
       }
     }
     catch{result=job.op==='wa-send'?UNCERTAIN_SEND:{status:503,body:{error:'The Jarvis PC could not complete this request. Check that Jarvis is running.'}};}
@@ -171,7 +177,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
     if(!config)throw Error('No live relay configuration was found. See docs/jarvis-live-release.md.');
     const voiceFile=defaultVoicePath(),voiceConfig=loadVoiceConfig(voiceFile);
     const speechProvider=createElevenLabsVoice({config:voiceConfig,store:createFileStore(voiceFile+'.usage.json')});
-    const agent=createRelayAgent({config,store,speechProvider,log:message=>console.log(new Date().toISOString().slice(11,19)+'  '+message)});
+    const liveVoice=createElevenLabsAgent({config:voiceConfig});
+    const agent=createRelayAgent({config,store,speechProvider,liveVoice,log:message=>console.log(new Date().toISOString().slice(11,19)+'  '+message)});
     process.on('SIGINT',()=>{agent.stop();console.log('Stopping the live relay…');});
     console.log('Jarvis live relay is running. Keep this PC awake and this window open. Press Ctrl+C to stop.');
     const result=await agent.run();
