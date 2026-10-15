@@ -139,6 +139,16 @@ returns to the original browser voice.
 
 ## Rollback
 
+### Conversational WhatsApp and iPhone capture update — 15 October 2026
+
+The assistant now handles ordinary WhatsApp requests directly against the protected inbox: “Read my messages”, “Read Bex’s messages”, “Write a message to Bex”, followed by dictated text. Already-read retained messages remain readable. Names resolve exactly; duplicate names and phonetic alternatives such as “Becks” require an explicit option choice. Dictation stays in this workflow and is not passed to the AI drafting model.
+
+The recipient, chat detail and exact draft are displayed and spoken. The user authorised spoken **Approve and send** after the complete read-back. A vague “yes” or “send it” cannot send, and interrupted/muted read-backs do not enable voice approval. The screen approval remains available after visual review. The existing server review token binds the recipient, chat version, exact text and expiry; a new message, expiry or uncertain send requires a fresh review. There is no automatic retry. Contact messages are never interpreted as commands.
+
+The inbox now stays embedded on narrow screens so it no longer closes the assistant. Its microphone can be restarted while browsing; typing in the reply editor pauses it. iPhone recognition waits for silent media preparation to finish and keeps a microphone capture source active for the recognition turn, releasing it before speech and on every stop/error/hide/close. This addresses the audio-session lifecycle implicated by [WebKit issue317741](https://bugs.webkit.org/show_bug.cgi?id=317741); physical iPhone behaviour still needs device verification. Conversation mode retries quiet pauses with a capped delay until paused or hidden, and capture failures have bounded recovery attempts. The iPhone speech-to-listening gap is one second.
+
+This release adds no Worker operations or database schema. Restart the PC server to expose hashed per-message read keys and the five most recent retained incoming messages. Keep the existing WhatsApp linked-device session and private keys. The prior app commit is `31f3619`, with Worker `2d8cfb9e` unchanged.
+
 ### WhatsApp navigation and unread update — 15 October 2026
 
 Jarvis navigation uses its own `data-jarvis-nav` attributes so the workspace's capture handler cannot swallow footer clicks. The open assistant checks the inbox every eight seconds remotely (five locally), with one request at a time. Initial history establishes a quiet baseline. Incoming messages can play a cue and be read aloud after a microphone/send tap or **Enable message audio**. Reading waits during speech, active dictation, settings and WhatsApp review. Closing or hiding Jarvis cancels watching and audio; this is not a background phone notification service.

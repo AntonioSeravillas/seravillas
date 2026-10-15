@@ -16,11 +16,11 @@
       if(objectUrl){urlApi.revokeObjectURL(objectUrl);objectUrl='';}
     }
     function prepare(){
-      if(playing)return;
-      try{const a=media();if(a.src&&!a.src.startsWith('data:'))return;const id=turn;
+      if(playing)return Promise.resolve();
+      try{const a=media();if(a.src&&!a.src.startsWith('data:'))return Promise.resolve();const id=turn;
         a.src=SILENCE;a.volume=1;const started=a.play();
-        started?.then(()=>{if(id===turn&&!playing&&a.src===SILENCE)a.pause();}).catch(()=>{});
-      }catch{}
+        return Promise.resolve(started).then(()=>{if(id===turn&&!playing&&a.src===SILENCE)a.pause();}).catch(()=>{});
+      }catch{return Promise.resolve();}
     }
     async function play(text){
       stop();const id=turn,a=media();controller=new AbortController();const signal=controller.signal;playing=true;

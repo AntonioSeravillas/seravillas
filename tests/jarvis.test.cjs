@@ -89,7 +89,7 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false}={}){
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null}={}){
   const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
   /* Setting innerHTML registers every element that has an id, with its initial text and hidden state from the real markup. */
@@ -104,19 +104,19 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   const background=fakeEl();
   class FakeSR{constructor(){recs.push(this);this.aborted=false;}start(){audioEvents.push('record');this.onstart?.();}stop(){this.onend?.();}abort(){this.aborted=true;}}
   class FakeUtterance{constructor(text){this.text=text;(text.trim()?utterances:primes).push(this);}}
-  class FakeAudio{constructor(){this.src='';audios.push(this);}setAttribute(){}removeAttribute(){this.src='';}play(){return Promise.resolve();}pause(){}load(){}}
-  const sandbox={console,Date,Math,AbortController,Audio:FakeAudio,Blob,atob,Uint8Array,URL:{createObjectURL:()=>'blob:test',revokeObjectURL(){}},performance:{now:()=>1},navigator:{userAgent:'test'},DEV_MODE:true,
+  class FakeAudio{constructor(){this.src='';audios.push(this);}setAttribute(){}removeAttribute(){this.src='';}play(){return this.src.startsWith('data:')&&unlock?unlock:Promise.resolve();}pause(){}load(){}}
+  const sandbox={console,Date,Math,AbortController,Audio:FakeAudio,Blob,atob,Uint8Array,URL:{createObjectURL:()=>'blob:test',revokeObjectURL(){}},performance:{now:()=>1},navigator:{userAgent:iosDevice?'iPhone AppleWebKit Safari':'test',...(capture?{mediaDevices:{getUserMedia:capture}}:{})},DEV_MODE:true,
     document:{addEventListener(){},createElement:()=>fakeEl(),body:{appendChild(c){if(!root)root=c;}},querySelector:s=>s==='.app-wrapper'?background:null,getElementById:()=>null,activeElement:null,hidden:false},
     setTimeout(fn,ms){timers.set(++n,{fn,ms});return n;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(fn){rafs.push(fn);return rafs.length;},cancelAnimationFrame(){},
     addEventListener(t,f){(winListeners[t]=winListeners[t]||[]).push(f);},removeEventListener(t,f){winListeners[t]=(winListeners[t]||[]).filter(x=>x!==f);},
     matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(u){if(inGesture)speechUnlocked=true;if(speechGate&&!speechUnlocked)return;spoken.push(u);audioEvents.push(u.text.trim()?'reply':'prime');},cancel(){audioEvents.push('cancel');},getVoices:()=>[]},
     D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>agent?{kind:'chat'}:{kind:'reply',message:reply})}};
-  if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async(url,init)=>{await Promise.resolve();if(String(url).endsWith('/speech')){speechRequests.push(JSON.parse(init.body));return {ok:true,json:async()=>({contentType:'audio/mpeg',audio:Buffer.alloc(100,7).toString('base64')})};}return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n',...(customSpeech?{speech:{available:true,provider:'elevenlabs',name:'Jarvis Seravillas'}}:{})}:{reply}};};}
+  if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async(url,init)=>{await Promise.resolve();if(whatsappFetch&&String(url).includes('/whatsapp/'))return whatsappFetch(String(url),init);if(String(url).endsWith('/speech')){speechRequests.push(JSON.parse(init.body));return {ok:true,json:async()=>({contentType:'audio/mpeg',audio:Buffer.alloc(100,7).toString('base64')})};}return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n',...(customSpeech?{speech:{available:true,provider:'elevenlabs',name:'Jarvis Seravillas'}}:{})}:{reply}};};}
   sandbox.window=sandbox;
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
-  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root_,file),'utf8'));
+  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js'])run(fs.readFileSync(path.join(root_,file),'utf8'));
   const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
     click(j){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j}})}});}finally{inGesture=false;}},
@@ -220,17 +220,52 @@ test('desktop: a typed WhatsApp command with no voice loop opens the review in c
   assert.equal(app.wa.open.length,1);assert.equal(app.recs.length,0);assert.equal(app.el('jarvis-context').hidden,false);
   app.click('nav-overview');assert.equal(app.wa.close,1);assert.equal(app.el('jarvis-context').hidden,true);
 });
-test('desktop: WhatsApp review in the right column pauses the microphone, a mic tap explains why it stays off, and closing cleans up',async()=>{
+test('desktop: opening WhatsApp pauses, then the mic can resume while the inbox stays visible; close cleans up',async()=>{
   const app=desktopRuntime();app.run('openJarvis()');await flush();
   app.click('mic');assert.equal(app.recs.length,1);
   app.click('nav-whatsapp');
   assert.equal(app.recs[0].aborted,true);assert.equal(app.wa.open.length,1);assert.equal(app.wa.open[0].host,app.el('jarvis-wa-host'));assert.equal(app.el('jarvis-context').hidden,false);
-  app.click('mic');assert.equal(app.recs.length,1);assert.match(app.el('jarvis-error').textContent,/Close WhatsApp first/);assert.equal(app.phase(),'paused');
+  app.click('mic');assert.equal(app.recs.length,2);assert.equal(app.el('jarvis-error').textContent,'');assert.equal(app.phase(),'listening');
   await app.run(`SV_JARVIS.send('What is next?')`);const u=app.utterances.at(-1);u.onstart();u.onend();app.utterances.at(-1).onstart?.();app.utterances.at(-1).onend?.();
-  app.runDelay(450);assert.equal(app.recs.length,1);
+  app.runDelay(450);assert.equal(app.recs.length,2);
   app.click('close');
   assert.equal(app.wa.close,1);assert.equal(app.root().removed,true);assert.equal(app.background.hasAttribute('inert'),false);
-  for(const ms of [450,900,1800,3600])app.runDelay(ms);assert.equal(app.recs.length,1);
+  for(const ms of [450,900,1800,3600])app.runDelay(ms);assert.equal(app.recs.length,2);
+});
+test('iPhone waits for audio unlock and capture before recognition; speech releases capture and the next turn reopens it',async()=>{
+  let unlock,requested=0,stopped=0;const ready=new Promise(r=>{unlock=r;});
+  const app=desktopRuntime({agent:true,iosDevice:true,unlock:ready,capture:async()=>{requested++;return {getTracks:()=>[{stop(){stopped++;}}]};}});
+  app.run('openJarvis()');await flush();app.click('mic');assert.equal(app.phase(),'connecting');assert.equal(requested,0);assert.equal(app.recs[0].onresult!=null,true);
+  unlock();await flush();assert.equal(requested,1);assert.equal(app.phase(),'listening');
+  app.hear('Hello');await flush();assert.equal(stopped,1);app.finishSpeech();app.runDelay(1000);await flush();assert.equal(requested,2);assert.equal(app.phase(),'listening');
+  app.click('close');assert.equal(stopped,2);
+});
+test('iPhone: closing while the microphone permission is pending stops the late stream and cannot restart recording',async()=>{
+  let release,stopped=0;const app=desktopRuntime({agent:true,iosDevice:true,capture:()=>new Promise(r=>{release=r;})});
+  app.run('openJarvis()');await flush();app.click('mic');await flush();assert.equal(app.phase(),'connecting');const rec=app.recs[0];
+  app.click('close');release({getTracks:()=>[{stop(){stopped++;}}]});await flush();assert.equal(stopped,1);assert.equal(rec.aborted,true);assert.equal(app.root().removed,true);
+});
+test('conversation mode survives long silence with capped retry delays; explicit pause still cancels everything',()=>{
+  const app=runtime(),v=conversation(app,{keepAlive:true,recoverCapture:true});v.c.start();
+  for(let i=0;i<8;i++){v.fail('no-speech');assert.equal(v.c.active,true);assert.ok([...v.timers.values()][0].ms<=3600);v.run();}
+  v.fail('audio-capture');assert.equal(v.c.phase,'waiting');v.run();v.fail('audio-capture');v.run();v.fail('audio-capture');assert.equal(v.c.phase,'error');
+  v.c.start();v.fail('no-speech');v.c.pause();v.run();assert.equal(v.c.active,false);assert.equal(v.timers.size,0);
+});
+test('real overlay: read chat, dictate body, hear recipient and draft, then spoken approval sends once on desktop and narrow screens',async()=>{
+  for(const desktop of [true,false]){
+    const sends=[],reads=[],key='a'.repeat(20),message={id:'b'.repeat(20),from:'contact',text:'Can we start at ten?'},chat={key,name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1,messages:[message]};
+    const app=desktopRuntime({agent:true,desktop,whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
+      if(url.endsWith('/status'))return {available:true,requestToken:'FICTIONAL_SESSION'};
+      if(url.includes('/inbox'))return {connection:{state:'open'},chats:[chat],chat,unreadCount:1,unread:[{...message,name:'Bex'}]};
+      const body=JSON.parse(init.body);if(url.endsWith('/read')){reads.push(body);return {read:1};}
+      if(url.endsWith('/review'))return {reviewToken:'R'.repeat(24),version:1,text:body.text,recipient:chat,expiresAt:Date.now()+300000};
+      if(url.endsWith('/send')){sends.push(body);return {status:'sent'};}throw Error('Unexpected WhatsApp call');
+    }})});
+    app.run('openJarvis()');await flush();app.click('mic');app.hear('Read Bex’s messages');await flush();assert.equal(reads.length,0);app.finishSpeech();await flush();assert.equal(reads.length,1);app.runDelay(450);
+    app.hear('Write a message to Bex');await flush();assert.match(app.utterances.at(-1).text,/What should I say/);app.finishSpeech();app.runDelay(450);
+    app.hear('Hello, the cleaning starts at ten.');await flush();assert.equal(app.el('jarvis-voice-review').hidden,false);assert.equal(app.el('jarvis-review-text').textContent,'Hello, the cleaning starts at ten.');assert.equal(sends.length,0);
+    app.finishSpeech();app.runDelay(450);app.hear('Approve and send');await flush();assert.equal(sends.length,1);assert.equal(sends[0].text,'Hello, the cleaning starts at ten.');assert.match(app.utterances.at(-1).text,/Sent to Bex/);assert.equal(app.el('jarvis-voice-review').hidden,true);app.click('close');
+  }
 });
 test('single-reply mode, the spoken stop phrase and every explicit pause cancel the loop and any queued resume',()=>{
   const app=runtime();

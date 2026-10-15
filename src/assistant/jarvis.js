@@ -8,6 +8,8 @@
   let speechTimer=null,speechUtterance=null,speechChunks=[],customAudio=null,manualAudio=false,settings={language:'en-GB',muted:false,sounds:true,continuous:true,customVoice:true};
   let health={ready:false,message:'Open the local Jarvis server to connect Hermes.'},requestToken='',sessionId='',returnFocus=null,background=null,wasInert=false;
   let inboxMonitor=null,inboxState=null,announcements=[],messageAudioArmed=false,speechCompletion=null;
+  let waConversation=null,audioReady=Promise.resolve();
+  const ios=()=>/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   settings.messageAnnouncements=true;
   const motion={input:0,output:0,speech:false,inputPulse:-Infinity,outputPulse:-Infinity,measuredOutput:false};
   const icons={close:'<path d="m6 6 12 12M18 6 6 18"/>',mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>',pause:'<path d="M9 6v12M15 6v12"/>',keyboard:'<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16h10"/>',settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',send:'<path d="m6 12 6-6 6 6M12 6v14"/>',speaker:'<path d="m11 4-6 5H2v6h3l6 5V4ZM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"/>'};
@@ -48,7 +50,8 @@
      The silent utterance is cancelled before recording starts, so it never becomes a reply or echo. */
   function prepareSpeech(){
     messageAudioArmed=true;updateInboxStatus();
-    ensureCustomAudio()?.prepare();
+    audioReady=Promise.resolve(ensureCustomAudio()?.prepare());
+    if(settings.customVoice&&health.speech?.available)return;
     try{const synth=window.speechSynthesis;if(!synth||!window.SpeechSynthesisUtterance)return;
       synth.getVoices();const prime=new SpeechSynthesisUtterance(' ');prime.volume=0;prime.lang=settings.language;
       synth.speak(prime);synth.cancel();if(synth.paused)synth.resume();
@@ -104,14 +107,14 @@
     inboxMonitor?.stop();inboxState=null;announcements=[];updateInboxStatus();
     if(!root||document.hidden||!window.SV_JARVIS_WHATSAPP?.createMonitor)return;
     inboxMonitor=SV_JARVIS_WHATSAPP.createMonitor({fetchImpl:jarvisFetch,delay:viaRelay()?8000:5000,
-      onUpdate:data=>{if(!root)return;inboxState=data;updateInboxStatus();announcements=announcements.filter(m=>(data.recent||[]).some(n=>n.id===m.id&&n.unread));flushAnnouncements();},
+      onUpdate:data=>{if(!root)return;inboxState=data;updateInboxStatus();if(waConversation?.observe(data))add('Jarvis · WhatsApp','A new message changed the chat, so the draft approval was cancelled. Please review it again.');announcements=announcements.filter(m=>(data.recent||[]).some(n=>n.id===m.id&&n.unread));flushAnnouncements();},
       onArrivals:messages=>{if(!root)return;announcements=[...announcements,...messages].slice(-10);flushAnnouncements();}});
     void inboxMonitor.refresh();
   }
   const receivedWords=m=>(m.kind==='group'?'In '+m.name+(m.sender?', '+m.sender:''):'From '+m.name)+': '+(m.text||m.media||'Attachment, not downloaded.');
   function flushAnnouncements(){
     const active=document.activeElement,editing=active?.tagName==='TEXTAREA'||active?.tagName==='INPUT'&&!!active.value;
-    if(!root||document.hidden||!settings.messageAnnouncements||settings.muted||!messageAudioArmed||panel||waEmbedded||!['idle','paused','waiting','listening'].includes(phase)||motion.speech||el('jarvis-caption-text')?.textContent||editing||!announcements.length)return;
+    if(!root||document.hidden||!settings.messageAnnouncements||settings.muted||!messageAudioArmed||panel||waEmbedded||waConversation?.hasPending()||waConversation?.busy||!['idle','paused','waiting','listening'].includes(phase)||motion.speech||el('jarvis-caption-text')?.textContent||editing||!announcements.length)return;
     voice?.holdForReply?.();recognizer?.cancel();recognizer=null;releaseMic();
     const m=announcements.shift(),monitor=inboxMonitor;cue('message');add('WhatsApp',receivedWords(m));
     speak('New WhatsApp message. '+receivedWords(m),false,async()=>{try{await monitor?.markRead([m.id]);}catch{error('Message was read aloud, but its unread status could not be saved.');}});
@@ -276,20 +279,38 @@
   function closeContext(){if(!root)return;el('jarvis-context').hidden=true;root.classList.remove('has-context');waEmbedded=false;setNav('overview');}
   function openWhatsApp(intent){
     pauseVoice('Paused while WhatsApp is open.');
+    waConversation?.cancel();
     if(!window.SV_JARVIS_WHATSAPP)return;
-    if(!root||!desktop()){const launch=document.getElementById('jarvis-launch');closeJarvis();SV_JARVIS_WHATSAPP.open({returnFocus:launch,intent});return;}
+    if(!root){SV_JARVIS_WHATSAPP.open({intent});return;}
     if(SV_JARVIS_WHATSAPP.isOpen?.())SV_JARVIS_WHATSAPP.close();
     const host=el('jarvis-wa-host');el('jarvis-context').hidden=false;root.classList.add('has-context');setNav('whatsapp');
     waEmbedded=SV_JARVIS_WHATSAPP.open({host,intent,returnFocus:el('jarvis-mic'),onClose:closeContext})!==false;
   }
+  function renderVoiceReview(review){
+    const card=el('jarvis-voice-review');if(!card)return;card.hidden=!review||review.stage!=='review';
+    if(card.hidden)return;el('jarvis-review-recipient').textContent=review.name+' · '+review.detail;el('jarvis-review-text').textContent=review.text;
+    el('jarvis-review-note').textContent=review.heard?'Say “Approve and send”, or approve below.':'Listen to the full read-back before approving by voice, or review below.';
+  }
+  function ensureWhatsAppConversation(){
+    if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,onChange:renderVoiceReview});return waConversation;
+  }
+  async function whatsappTurn(text,id,screenApproval=false){
+    if(!root)return false;
+    const workflow=ensureWhatsAppConversation();if(!workflow)return false;
+    const result=await workflow.handle(text,{screenApproval});if(id!==generation||!root)return true;
+    if(!result)return true;if(!result.handled)return false;
+    if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();
+    add('Jarvis · WhatsApp',result.text);speak(result.text,false,result.afterSpoken);return true;
+  }
 
-  async function send(text,{fromVoice=false}={}){
+  async function send(text,{fromVoice=false,screenApproval=false}={}){
     text=String(text||'').trim().slice(0,2000);if(!text)return;
     // A new turn always takes over: any earlier attention focus is removed first.
     cancelReply();clearFocus();if(!fromVoice&&voice?.active)voice.stop();
     error('');caption('');const id=generation;add('You',text);if(el('jarvis-input')&&!fromVoice)el('jarvis-input').value='';setPhase('thinking');
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){voice?.pause('Paused. Tap the microphone to talk again.');add('Jarvis','Paused. Tap the microphone when you want to talk again.');if(!voice?.active)setPhase('paused');return;}
-    // Only the user's own words are routed. WhatsApp commands open the inbox locally; a spoken "send" never sends.
+    // The owner’s words go to bounded inbox tools; contact text is never routed back as commands.
+    if(await whatsappTurn(text,id,screenApproval))return;
     const wa=window.SV_JARVIS_WHATSAPP?.parseCommand?.(text);
     if(wa?.kind==='unread'){await readUnread(id);return;}
     if(wa&&(wa.kind==='clarify'||wa.kind==='refuse_send')){add('Jarvis',wa.message);speak(wa.message);return;}
@@ -319,6 +340,7 @@
   function ensureVoice(){
     if(voice||!window.SV_JARVIS_VOICE)return voice;
     voice=SV_JARVIS_VOICE.createConversation({
+      keepAlive:true,recoverCapture:ios(),gap:ios()?1000:450,
       startRecognition:(callbacks,kind)=>beginRecognition(callbacks,kind),
       onTranscript:text=>void send(text,{fromVoice:true}),
       onStatus:(next,note)=>{if(next==='error'||next==='paused')clearFocus();if(next==='error')error(note);else if(next==='listening')error('');setPhase(next);}
@@ -331,25 +353,33 @@
     releaseMic();const token=micToken;
     if(kind!=='retry')cue('ready');
     const controller=createRecognizer(SR,settings.language,{
-      ready(){if(token!==micToken)return;const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(Chrome|Chromium|Edg)\//.test(navigator.userAgent);if(!safari&&navigator.mediaDevices?.getUserMedia)void navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(stream=>{if(token!==micToken||phase!=='listening'){stream.getTracks().forEach(t=>t.stop());return;}micStream=stream;try{const analyser=audioContext.createAnalyser();analyser.fftSize=512;audioContext.createMediaStreamSource(stream).connect(analyser);const values=new Float32Array(analyser.fftSize);const tick=()=>{if(token!==micToken)return;analyser.getFloatTimeDomainData(values);let sum=0;for(const v of values)sum+=v*v;motion.input=Math.min(1,Math.max(0,Math.sqrt(sum/values.length)-.008)*10);meterFrame=requestAnimationFrame(tick);};tick();}catch{}}).catch(()=>{});},
+      ready(){if(token!==micToken)return;setPhase('listening');const safari=/AppleWebKit/i.test(navigator.userAgent)&&!/(Chrome|Chromium|Edg)\//.test(navigator.userAgent);if(!ios()&&!safari&&navigator.mediaDevices?.getUserMedia)void navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(stream=>{if(token!==micToken||phase!=='listening'){stream.getTracks().forEach(t=>t.stop());return;}micStream=stream;try{const analyser=audioContext.createAnalyser();analyser.fftSize=512;audioContext.createMediaStreamSource(stream).connect(analyser);const values=new Float32Array(analyser.fftSize);const tick=()=>{if(token!==micToken)return;analyser.getFloatTimeDomainData(values);let sum=0;for(const v of values)sum+=v*v;motion.input=Math.min(1,Math.max(0,Math.sqrt(sum/values.length)-.008)*10);meterFrame=requestAnimationFrame(tick);};tick();}catch{}}).catch(()=>{});},
       activity(active){if(token!==micToken)return;motion.speech=active;if(active)motion.inputPulse=performance.now();},
       draft(text){if(token!==micToken)return;caption(text);},
       done(text){if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.done(text);},
       error(code){if(token!==micToken)return;recognizer=null;releaseMic();caption('');callbacks.error(code);}
     });
-    recognizer=controller;controller.start();
-    return {cancel(){if(recognizer===controller)recognizer=null;controller.cancel();releaseMic();}};
+    recognizer=controller;
+    if(ios()){
+      /* Keep a real capture source active while WebKit recognises speech. Wait for silent playback to
+         release the audio session first; stop the source on every result, error, pause and close. */
+      setPhase('connecting');
+      void (async()=>{try{
+        await audioReady;if(token!==micToken||document.hidden)return;
+        if(navigator.mediaDevices?.getUserMedia){const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});if(token!==micToken||document.hidden){stream.getTracks().forEach(t=>t.stop());return;}micStream=stream;}
+        if(token===micToken)controller.start();
+      }catch(e){if(token===micToken){controller.cancel();releaseMic();callbacks.error(e.name==='NotAllowedError'?'not-allowed':'audio-capture');}}})();
+    }else controller.start();
+    return {cancel(){const ownsCapture=token===micToken;if(recognizer===controller)recognizer=null;controller.cancel();if(ownsCapture)releaseMic();}};
   }
-  /* While a WhatsApp chat or review is open in the right column, the microphone stays off. */
-  const whatsappOpen=()=>waEmbedded&&!!window.SV_JARVIS_WHATSAPP?.isEmbedded?.();
+  /* Browsing WhatsApp no longer disables conversation; editing its text box pauses dictation. */
   function startVoice(){
-    if(whatsappOpen()){error('The microphone stays off while WhatsApp is open. Close WhatsApp first, then tap the microphone.');setPhase('paused');return;}
+    if(['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))document.activeElement.blur?.();
     error('');const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SR||!window.SV_JARVIS_VOICE){error('Speech recognition is unavailable here. Type in Conversation instead.');el('jarvis-input')?.focus();return;}
     cancelReply();prepareAudio();prepareSpeech();ensureVoice().start();
   }
   function micPressed(){
-    if(whatsappOpen()){pauseVoice('');startVoice();return;}
     prepareAudio();
     if(phase==='speaking'){cancelReply();clearFocus();if(voice?.active)voice.interrupt();else startVoice();return;}
     if(['listening','waiting','thinking','connecting'].includes(phase)){pauseVoice('Paused. Tap the microphone to talk again.');return;}
@@ -363,13 +393,13 @@
     const finish=()=>{if(closed)return;clearTimeout(settling);try{rec.stop();}catch{complete();return;}if(!closed)settling=setTimeout(()=>complete(),1200);};
     rec.onstart=()=>{if(!closed)callbacks.ready();};rec.onspeechstart=rec.onsoundstart=()=>{if(!closed)callbacks.activity(true);};rec.onspeechend=rec.onsoundend=()=>{if(!closed)callbacks.activity(false);};
     rec.onresult=e=>{if(closed)return;const drafts=[],finals=[];for(let i=0;i<e.results.length;i++){drafts.push(e.results[i][0].transcript);if(e.results[i].isFinal)finals.push(e.results[i][0].transcript);}latest=drafts.join(' ').trim();callbacks.draft(latest);callbacks.activity(true);clearTimeout(settling);settling=setTimeout(finish,finals.join(' ').trim()===latest?550:1800);};
-    rec.onerror=e=>complete(e.error);rec.onend=()=>complete();return {start(){watchdog=setTimeout(()=>complete(latest?undefined:'timeout'),30000);try{rec.start();}catch{complete('audio-capture');}},finish,cancel(){if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}}};
+    rec.onerror=e=>complete(e.error);rec.onend=()=>complete();return {start(){if(closed)return;watchdog=setTimeout(()=>complete(latest?undefined:'timeout'),30000);try{rec.start();}catch{complete('audio-capture');}},finish,cancel(){if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}}};
   }
 
   function closePanel(){panel=null;el('jarvis-panel').hidden=true;el('jarvis-mic')?.focus();}
   function openPanel(kind){
     if(kind==='chat'){const input=el('jarvis-input');el('jarvis-chat-body')?.scrollIntoView?.({block:'nearest'});input?.focus();return;}
-    stop();panel=kind;el('jarvis-panel').hidden=false;el('jarvis-settings-body').hidden=false;el('jarvis-panel-title').textContent='Make it yours';updateConnection();el('jarvis-mode-select')?.focus();
+    waConversation?.cancel();stop();panel=kind;el('jarvis-panel').hidden=false;el('jarvis-settings-body').hidden=false;el('jarvis-panel-title').textContent='Make it yours';updateConnection();el('jarvis-mode-select')?.focus();
   }
   const MARKUP=()=>'<div class="jarvis-shell">'
     +'<header class="jarvis-header"><span class="jarvis-wordmark" aria-hidden="true">JARVIS</span><div class="jarvis-header-right"><button class="jarvis-connection" data-j="settings" aria-label="Connection and voice settings"><i id="jarvis-mode-dot"></i><span id="jarvis-mode-text">App tools</span></button><button class="jarvis-icon" data-j="close" aria-label="Close Jarvis">'+svg('close',20)+'</button></div></header>'
@@ -380,14 +410,14 @@
     +'<button class="jarvis-keep" id="jarvis-keep" data-j="keep" aria-pressed="true"><i aria-hidden="true"></i><span>Keep listening</span></button>'
     +'<div class="jarvis-controls"><button class="jarvis-icon" data-j="chat" aria-label="Type a message">'+svg('keyboard')+'</button><button class="jarvis-mic" id="jarvis-mic" data-j="mic" aria-label="Start conversation">'+svg('mic',24)+'</button><button class="jarvis-icon" data-j="settings" aria-label="Voice settings">'+svg('settings')+'</button></div>'
     +'<button class="jarvis-play" data-j="replay">'+svg('speaker',16)+'<span>Play reply</span></button></main>'
-    +'<aside class="jarvis-side" aria-label="Conversation"><section class="jarvis-conversation" id="jarvis-chat-body"><h2 class="jarvis-kicker">Conversation</h2><div class="jarvis-transcript" id="jarvis-transcript"></div><form class="jarvis-form" id="jarvis-form"><input id="jarvis-input" autocomplete="off" aria-label="Message Jarvis" placeholder="Message Jarvis…" maxlength="2000"><button aria-label="Send message">'+svg('send',18)+'</button></form><button class="jarvis-clear" data-j="new">New conversation</button></section>'
+    +'<aside class="jarvis-side" aria-label="Conversation"><section class="jarvis-conversation" id="jarvis-chat-body"><h2 class="jarvis-kicker">Conversation</h2><div class="jarvis-transcript" id="jarvis-transcript"></div><section class="jarvis-voice-review" id="jarvis-voice-review" aria-label="WhatsApp message review" hidden><small>WhatsApp draft</small><p id="jarvis-review-recipient"></p><p class="jarvis-review-message" id="jarvis-review-text"></p><p id="jarvis-review-note"></p><div><button type="button" data-j="wa-voice-approve">Approve and send</button><button type="button" data-j="wa-voice-repeat">Read again</button><button type="button" data-j="wa-voice-cancel">Cancel</button></div></section><form class="jarvis-form" id="jarvis-form"><input id="jarvis-input" autocomplete="off" aria-label="Message Jarvis" placeholder="Message Jarvis…" maxlength="2000"><button aria-label="Send message">'+svg('send',18)+'</button></form><button class="jarvis-clear" data-j="new">New conversation</button></section>'
     +'<section class="jarvis-context" id="jarvis-context" aria-label="WhatsApp" hidden><h2 class="jarvis-kicker">Message review</h2><div id="jarvis-wa-host"></div></section></aside>'
     +'<nav class="jarvis-nav" aria-label="Jarvis"><button type="button" data-jarvis-nav="overview" data-j="nav-overview" aria-current="page">Overview</button><button type="button" data-jarvis-nav="whatsapp" data-j="nav-whatsapp">WhatsApp</button><button type="button" data-jarvis-nav="cleaning" data-j="nav-cleaning">Cleanings</button><button type="button" data-jarvis-nav="tasks" data-j="nav-tasks">Tasks</button></nav>'
     +'<div class="jarvis-footnote jarvis-inbox-status"><button type="button" id="jarvis-whatsapp-status" data-j="nav-whatsapp">WhatsApp · checking</button><button type="button" id="jarvis-message-audio" data-j="message-audio">Enable message audio</button></div></div>'
     +'<svg class="jarvis-link" id="jarvis-link" aria-hidden="true" focusable="false" hidden><path id="jarvis-link-path" d=""/><circle class="jarvis-link-dot" id="jarvis-link-dot-0" r="1.6" opacity="0"/><circle class="jarvis-link-dot" id="jarvis-link-dot-1" r="1.3" opacity="0"/><circle class="jarvis-link-dot" id="jarvis-link-dot-2" r="1.1" opacity="0"/></svg>'
     +'<div class="jarvis-panel-backdrop" id="jarvis-panel" hidden><section class="jarvis-sheet" role="dialog" aria-modal="true" aria-labelledby="jarvis-panel-title"><div class="jarvis-sheet-head"><div><small>JARVIS</small><h2 id="jarvis-panel-title">Make it yours</h2></div><button class="jarvis-icon" data-j="close-panel" aria-label="Close settings">'+svg('close',20)+'</button></div>'
-    +'<div class="jarvis-settings" id="jarvis-settings-body" hidden><label>Connection<select id="jarvis-mode-select"><option value="local">App tools · no AI model</option><option value="hermes" id="jarvis-agent-option" disabled>Hermes agent</option></select></label><div class="jarvis-connection-detail" id="jarvis-connection-detail"></div><button class="jarvis-wide" data-j="check">Check connection</button><button class="jarvis-wide" data-j="whatsapp">WhatsApp inbox</button><details class="jarvis-relay" id="jarvis-relay" hidden><summary>Use Jarvis from this device</summary><p class="jarvis-privacy">Phones and other computers reach Jarvis through your existing Cloudflare service. The Jarvis PC must stay on and awake, with Jarvis and the live relay running. Your request text, replies and custom voice audio pass through Cloudflare: a request expires if the PC does not pick it up (after 30 seconds for a WhatsApp send, 5 minutes otherwise) and a reply after 2 minutes. Expired text is removed the next time the relay is used, so it can stay stored longer while nobody uses Jarvis remotely. Sending on WhatsApp still needs Review and Approve on screen; AI WhatsApp drafts stay off.</p><p class="jarvis-privacy" id="jarvis-relay-status" role="status"></p><button class="jarvis-wide" data-j="relay-status">Check the Jarvis PC</button><button class="jarvis-wide" data-j="relay-register">Register the Jarvis PC…</button><label id="jarvis-relay-code-label" hidden>One-time PC code — paste it into the relay configuration on the PC. It is not shown again.<input id="jarvis-relay-code" readonly autocomplete="off" spellcheck="false"></label><button class="jarvis-wide" data-j="relay-revoke">Revoke PC access</button></details><label>Voice<select id="jarvis-voice-choice"><option value="elevenlabs" id="jarvis-custom-voice-option" disabled>Jarvis Seravillas · ElevenLabs</option><option value="device">Device voice · free</option></select></label><p class="jarvis-privacy">The custom voice sends spoken reply text to ElevenLabs and uses your account credits. Device voice uses this browser.</p><label>Speech language<select id="jarvis-language"><option value="en-GB">English</option><option value="es-ES">Español</option><option value="hr-HR">Hrvatski</option><option value="de-DE">Deutsch</option></select></label><label class="jarvis-check"><span>Listening sounds</span><input type="checkbox" id="jarvis-sounds" checked></label><label class="jarvis-check"><span>Announce new WhatsApp messages</span><input type="checkbox" id="jarvis-message-alerts" checked></label><p class="jarvis-privacy">While Jarvis is open and this page is visible, new messages play a sound and are read aloud after audio is enabled. Custom voice sends message text to ElevenLabs. Read status is tracked in Jarvis, separately from your phone. Muting replies also silences announcements.</p><label class="jarvis-check"><span>Mute replies</span><input type="checkbox" id="jarvis-muted"></label><button class="jarvis-wide" data-j="test-speaker">'+svg('speaker',16)+'Test speaker</button>'
-    +'<p class="jarvis-privacy">The microphone starts only when you tap it. With Keep listening on, Jarvis listens again after each reply until you pause, open a review or close Jarvis. It never listens while it is speaking.</p><p class="jarvis-privacy" id="jarvis-data-note"></p><p class="jarvis-privacy">Hermes holds agent memory on your computer. New conversation starts a fresh chat; it does not erase Hermes memory.</p><p class="jarvis-privacy">Jarvis can prepare a new task, a task due date or priority change, a cleaning move, or a WhatsApp message for you to review. Nothing is saved or sent until you confirm on screen.</p></div></section></div>';
+    +'<div class="jarvis-settings" id="jarvis-settings-body" hidden><label>Connection<select id="jarvis-mode-select"><option value="local">App tools · no AI model</option><option value="hermes" id="jarvis-agent-option" disabled>Hermes agent</option></select></label><div class="jarvis-connection-detail" id="jarvis-connection-detail"></div><button class="jarvis-wide" data-j="check">Check connection</button><button class="jarvis-wide" data-j="whatsapp">WhatsApp inbox</button><details class="jarvis-relay" id="jarvis-relay" hidden><summary>Use Jarvis from this device</summary><p class="jarvis-privacy">Phones and other computers reach Jarvis through your existing Cloudflare service. The Jarvis PC must stay on and awake, with Jarvis and the live relay running. Your request text, replies and custom voice audio pass through Cloudflare: a request expires if the PC does not pick it up (after 30 seconds for a WhatsApp send, 5 minutes otherwise) and a reply after 2 minutes. Expired text is removed the next time the relay is used, so it can stay stored longer while nobody uses Jarvis remotely. WhatsApp messages need a reviewed draft: approve on screen or say “Approve and send” after the complete spoken read-back. AI WhatsApp drafts stay off.</p><p class="jarvis-privacy" id="jarvis-relay-status" role="status"></p><button class="jarvis-wide" data-j="relay-status">Check the Jarvis PC</button><button class="jarvis-wide" data-j="relay-register">Register the Jarvis PC…</button><label id="jarvis-relay-code-label" hidden>One-time PC code — paste it into the relay configuration on the PC. It is not shown again.<input id="jarvis-relay-code" readonly autocomplete="off" spellcheck="false"></label><button class="jarvis-wide" data-j="relay-revoke">Revoke PC access</button></details><label>Voice<select id="jarvis-voice-choice"><option value="elevenlabs" id="jarvis-custom-voice-option" disabled>Jarvis Seravillas · ElevenLabs</option><option value="device">Device voice · free</option></select></label><p class="jarvis-privacy">The custom voice sends spoken reply text to ElevenLabs and uses your account credits. Device voice uses this browser.</p><label>Speech language<select id="jarvis-language"><option value="en-GB">English</option><option value="es-ES">Español</option><option value="hr-HR">Hrvatski</option><option value="de-DE">Deutsch</option></select></label><label class="jarvis-check"><span>Listening sounds</span><input type="checkbox" id="jarvis-sounds" checked></label><label class="jarvis-check"><span>Announce new WhatsApp messages</span><input type="checkbox" id="jarvis-message-alerts" checked></label><p class="jarvis-privacy">While Jarvis is open and this page is visible, new messages play a sound and are read aloud after audio is enabled. Custom voice sends message text to ElevenLabs. Read status is tracked in Jarvis, separately from your phone. Muting replies also silences announcements.</p><label class="jarvis-check"><span>Mute replies</span><input type="checkbox" id="jarvis-muted"></label><button class="jarvis-wide" data-j="test-speaker">'+svg('speaker',16)+'Test speaker</button>'
+    +'<p class="jarvis-privacy">The microphone starts only when you tap it. With Keep listening on, Jarvis listens again after each reply until you pause, open a review or close Jarvis. It never listens while it is speaking.</p><p class="jarvis-privacy" id="jarvis-data-note"></p><p class="jarvis-privacy">Hermes holds agent memory on your computer. New conversation starts a fresh chat; it does not erase Hermes memory.</p><p class="jarvis-privacy">Jarvis can prepare a new task, a task due date or priority change, a cleaning move, or a WhatsApp message for you to review. App changes need on-screen confirmation. WhatsApp replies need a reviewed draft; after hearing the recipient and exact text you can say “Approve and send”, or approve on screen.</p></div></section></div>';
   function openJarvis(){
     if(root)return;if(!DEV_MODE&&!SYNC_SECRET){toast('Sign in before opening Jarvis.');return;}returnFocus=document.activeElement;background=document.querySelector('.app-wrapper');wasInert=background?.hasAttribute('inert')||false;
     root=document.createElement('div');root.className='jarvis-root';root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Jarvis assistant');root.innerHTML=MARKUP();
@@ -402,6 +432,7 @@
       if(action==='replay'){stop();prepareSpeech();error('');speak(lastReply||'At your service, Antonio.',true);}
       if(action==='test-speaker'){stop();prepareSpeech();closePanel();error('');speak('At your service, Antonio. Your speaker is ready.',true);}
       if(action==='message-audio'){prepareAudio();prepareSpeech();settings.messageAnnouncements=true;el('jarvis-message-alerts').checked=true;cue('message');flushAnnouncements();}
+      if(action==='wa-voice-approve'||action==='wa-voice-repeat'||action==='wa-voice-cancel'){prepareAudio();prepareSpeech();void send(action==='wa-voice-approve'?'Approve and send':action==='wa-voice-repeat'?'Read the draft again':'Cancel',{screenApproval:action==='wa-voice-approve'});return;}
       if(action==='check')void checkConnection();
       if(action==='relay-status'||action==='relay-register'||action==='relay-revoke')void relayAction(action);
       if(action==='whatsapp'){closePanel();openWhatsApp(null);return;}
@@ -409,12 +440,13 @@
       if(action==='nav-overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();clearFocus();renderDashboard();return;}
       if(action==='nav-cleaning'){goWorkspace('cleaning');return;}
       if(action==='nav-tasks'){goWorkspace('tasks');return;}
-      if(action==='new'){stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
+      if(action==='new'){waConversation?.cancel();stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
       if(e.target===el('jarvis-panel'))closePanel();
     });
     root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(panel)closePanel();else closeJarvis();}if(e.key==='Tab'){const scope=panel?el('jarvis-panel'):root;const items=[...scope.querySelectorAll('button,input,select,textarea,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
     /* Typing a message ends voice listening so the microphone never records in the background. */
     el('jarvis-input').addEventListener('focus',()=>{if(voice?.active)pauseVoice('Paused while you type.');});
+    root.addEventListener('focusin',event=>{if(event.target?.id==='wa-editor'&&voice?.active)pauseVoice('Paused while you edit the WhatsApp reply.');});
     el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();cancelReply();prepareAudio();prepareSpeech();const text=el('jarvis-input').value;void send(text);});
     el('jarvis-voice-choice').addEventListener('change',e=>{stop();settings.customVoice=e.target.value==='elevenlabs';updateConnection();});
     el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&(phase==='speaking'||customAudio?.active)){cancelReply();replyDone();}});
@@ -425,13 +457,14 @@
     try{ringCleanup=createJarvisRing(el('jarvis-ring'),()=>phase,()=>motion);}catch{error('The ring animation could not start. Conversation is still available.');}setPhase('idle');updateConnection();el('jarvis-mic').focus();void checkConnection();startInbox();
   }
   function closeJarvis(){
+    waConversation?.cancel();waConversation=null;
     inboxMonitor?.stop();inboxMonitor=null;announcements=[];inboxState=null;messageAudioArmed=false;
     stop();
     if(waEmbedded&&window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();waEmbedded=false;
     customAudio?.dispose();customAudio=null;ringCleanup?.();ringCleanup=null;root?.remove();root=null;panel=null;requestToken='';mode='local';
     if(background&&!wasInert)background.removeAttribute('inert');background=null;try{void audioContext?.close().catch(()=>{});}catch{}audioContext=null;returnFocus?.focus?.();returnFocus=null;
   }
-  document.addEventListener('visibilitychange',()=>{if(!root)return;if(document.hidden){inboxMonitor?.stop();inboxMonitor=null;announcements=[];stop();}else startInbox();});
+  document.addEventListener('visibilitychange',()=>{if(!root)return;if(document.hidden){waConversation?.cancel();inboxMonitor?.stop();inboxMonitor=null;announcements=[];stop();}else startInbox();});
   window.openJarvis=openJarvis;window.closeJarvis=closeJarvis;
   // Parser/lifecycle hooks allow deterministic tests without microphone hardware.
   window.SV_JARVIS={createRecognizer,getPhase:()=>phase,send:text=>send(text)};

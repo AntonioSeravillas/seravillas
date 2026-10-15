@@ -77,6 +77,7 @@
 .jarvis-footnote{grid-column:3;justify-self:end;align-self:center;margin:0;font-size:13px;color:var(--j-muted)}
 
 /* Settings sheet. */
+.jarvis-voice-review[hidden]{display:none}.jarvis-voice-review{border-top:1px solid var(--j-line);border-bottom:1px solid var(--j-line);padding:18px 0;margin:12px 0}.jarvis-voice-review small{color:var(--j-accent);font-size:10px;letter-spacing:.2em;text-transform:uppercase}.jarvis-voice-review p{font-size:12px;line-height:1.6;color:var(--j-muted)}.jarvis-voice-review .jarvis-review-message{white-space:pre-wrap;font-size:16px;color:var(--j-text)}.jarvis-voice-review>div{display:flex;gap:22px;flex-wrap:wrap}.jarvis-voice-review button{min-height:40px;font:inherit;font-size:12px}.jarvis-voice-review button:first-child{color:var(--j-accent)}
 .jarvis-inbox-status{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}.jarvis-inbox-status button{font:inherit;min-height:36px;text-align:left}.jarvis-inbox-status button:hover{color:var(--j-text)}
 .jarvis-panel-backdrop{position:fixed;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:#000a;padding:24px}.jarvis-panel-backdrop[hidden]{display:none}
 .jarvis-sheet{width:100%;max-width:480px;max-height:88dvh;overflow:auto;background:#0c0c0c;border:1px solid #232323;border-radius:16px;padding:24px 26px}
