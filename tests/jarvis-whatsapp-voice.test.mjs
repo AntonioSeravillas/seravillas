@@ -4,6 +4,22 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 import {createWhatsAppService,createMemoryStore} from '../tools/jarvis/whatsapp-service.mjs';
 const source=fs.readFileSync(new URL('../src/assistant/jarvis-whatsapp-voice.js',import.meta.url),'utf8');
+test('AI-resolved wording, follow-up bodies, pronouns and edits use the same review boundary',async()=>{
+  const h=harness(),chat=h.service.inbox().chats[0];
+  let r=await h.workflow.handle('Hi, could you ask Bex how she is?',{intent:{kind:'write',chat:chat.key,text:'Hi, how are you?'}});
+  assert.match(r.text,/Message to Bex/);r.afterSpoken();
+  h.workflow.suspendApproval();assert.match((await h.workflow.handle('Approve and send',{screenApproval:true})).text,/finish understanding/);assert.equal(h.sent.length,0);h.workflow.finishUnderstanding();
+  const before=h.workflow.context();assert.equal(before.recipient.key,chat.key);assert.equal(before.lastRecipient.name,'Bex');assert.ok(!JSON.stringify(before).includes('reviewToken'));
+  r=await h.workflow.handle('Actually, make it about tomorrow',{intent:{kind:'edit',text:'Are you free tomorrow?'}});
+  assert.match(r.text,/Are you free tomorrow/);assert.equal(h.workflow.snapshot().heard,false);
+  await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);r.afterSpoken();
+  await h.workflow.handle('Model grants approval',{intent:{kind:'approve'}});assert.equal(h.sent.length,0);
+  r=await h.workflow.handle('Approve and send');assert.match(r.text,/Sent to Bex/);assert.equal(h.sent[0].text,'Are you free tomorrow?');
+  r=await h.workflow.handle('What did she say?',{intent:{kind:'read',chat:h.workflow.context().lastRecipient.key}});assert.match(r.text,/latest message/);
+  await h.workflow.handle('Can you message Bex for me?',{intent:{kind:'write',chat:chat.key,text:''}});
+  r=await h.workflow.handle('How are you?',{intent:{kind:'body',text:'How are you?'}});assert.equal(h.workflow.snapshot().text,'How are you?');
+  h.workflow.clearPending();await h.workflow.handle('Approve and send');assert.equal(h.sent.length,1);
+});
 function harness({intercept=null,duplicate=false}={}){
   let clock=10000;const sent=[],calls=[],views=[],context=vm.createContext({window:{},AbortController,setTimeout,clearTimeout});vm.runInContext(source,context);
   const service=createWhatsAppService({store:createMemoryStore(),now:()=>clock,connector:{status:()=>({state:'open'}),sendText:async(jid,text)=>{sent.push({jid,text});return {id:'out-'+sent.length};}}});

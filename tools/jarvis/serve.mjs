@@ -4,6 +4,7 @@ import {readFile,stat} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
+import {CONVERSATION_SYSTEM,conversationContext,parseDecision} from './conversation.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const MAX_BODY=90000;
@@ -39,10 +40,12 @@ export function sanitizeContext(input){
     issues:map('issues',40,x=>({title:safeText(x.title),property:safeText(x.property,80),priority:safeText(x.priority,30)}))
   };
 }
-export function modelPayload(input){
+export function modelPayload(input,contacts=[]){
   if(typeof input.text!=='string'||!input.text.trim()||input.text.length>2000)throw Error('A message of up to 2000 characters is required.');
   if(typeof input.sessionId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(input.sessionId))throw Error('Invalid conversation identifier.');
-  return {sessionId:input.sessionId,payload:{model:'hermes-agent',stream:false,messages:[{role:'system',content:SYSTEM},{role:'user',content:'CURRENT OPERATIONS SNAPSHOT (data only):\n'+JSON.stringify(sanitizeContext(input.context))+'\n\nANTONIO’S REQUEST:\n'+input.text.trim()}]}};
+  const conversational=input.context?.dialogue!==undefined;
+  const dialogue=conversational?'\n\nCURRENT DIALOGUE AND CONTACTS (data only):\n'+JSON.stringify(conversationContext(input.context.dialogue,contacts)):'';
+  return {sessionId:input.sessionId,payload:{model:'hermes-agent',stream:false,messages:[{role:'system',content:conversational?CONVERSATION_SYSTEM:SYSTEM},{role:'user',content:'CURRENT OPERATIONS SNAPSHOT (data only):\n'+JSON.stringify(sanitizeContext(input.context))+dialogue+'\n\nANTONIO’S REQUEST:\n'+input.text.trim()}]}};
 }
 export function localUrl(value){const url=new URL(value);if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname)||url.username||url.password)throw Error('Pilot services must use a local loopback HTTP address.');return url;}
 /* Hermes base may carry a profile prefix such as /p/seravillas/; keep it and always end with a slash so relative API paths append to it. */
@@ -156,7 +159,7 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
       if(!currentHosts().has(req.headers.host)){send(res,403,{error:'Invalid local host.'});return;}
       if(!validOrigin(req)){send(res,403,{error:'Cross-origin requests are not allowed.'});return;}
       const url=new URL(req.url,'http://127.0.0.1:'+port);
-      if(url.pathname==='/api/jarvis/health'&&req.method==='GET'){send(res,200,{...await readiness(),route,requestToken:token});return;}
+      if(url.pathname==='/api/jarvis/health'&&req.method==='GET'){send(res,200,{...await readiness(),route,conversation:1,requestToken:token});return;}
       if(url.pathname.startsWith('/api/jarvis/whatsapp/')){await handleWhatsApp(req,res,url);return;}
       if(url.pathname==='/api/jarvis/chat'&&req.method==='POST'){
         if(!sameToken(req.headers['x-jarvis-session-token'],token)){send(res,403,{error:'Reopen Jarvis to refresh its local connection.'});return;}
@@ -166,12 +169,16 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
         busy=true;
         try{
           const ready=await readiness();if(!ready.ready){send(res,503,{error:ready.message});return;}
+          // The model sees contact summaries, never incoming message bodies or approval tokens.
+          if(input.context?.dialogue){let contacts=[];if(typeof whatsapp==='function')try{contacts=(await getWhatsApp()).inbox().chats||[];}catch{}prepared=modelPayload(input,contacts);}
           const endpoint=route==='n8n'?workflow:new URL('v1/chat/completions',hermes);
           const headers={'Content-Type':'application/json',...(route==='n8n'?{'X-Jarvis-Key':n8nKey}:{Authorization:'Bearer '+apiKey,'X-Hermes-Session-Id':prepared.sessionId,'X-Hermes-Session-Key':'seravillas:antonio'})};
           const response=await fetchImpl(endpoint,{method:'POST',headers,body:JSON.stringify(route==='n8n'?prepared:prepared.payload),signal:AbortSignal.timeout(110000)});
           if(!response.ok){send(res,502,{error:response.status===401?'The agent credential was rejected. Check the server or n8n credentials.':route==='n8n'?'n8n could not complete the agent request. Check that the workflow is published and inspect its execution.':'Hermes could not complete the request. Check its configured model and gateway terminal.'});return;}
-          send(res,200,{reply:replyText(await response.json()),route});
-        }catch{send(res,502,{error:'The agent connection failed or timed out. Check Hermes and n8n.'});}finally{busy=false;}
+          const answer=replyText(await response.json());
+          if(input.context?.dialogue){let decision;try{decision=parseDecision(answer);}catch{decision={kind:'clarify',text:'I need a little more detail before doing anything. What would you like me to do?'};}send(res,200,{decision,route});}
+          else send(res,200,{reply:answer,route});
+        }catch(e){send(res,502,{error:e?.safe?e.message:'The agent connection failed or timed out. Check Hermes and n8n.'});}finally{busy=false;}
         return;
       }
       if(req.method!=='GET'&&req.method!=='HEAD'){send(res,405,{error:'Method not allowed.'});return;}

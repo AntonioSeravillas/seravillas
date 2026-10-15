@@ -1,5 +1,5 @@
-/* Opt-in Jarvis overlay. Agent replies are text, never executable app actions.
-   Explicit change requests from the user become local review drafts (jarvis-actions.js).
+/* Opt-in Jarvis overlay. AI decisions use a bounded action vocabulary, never executable code.
+   Changes become review drafts; only explicit owner approval can send or save.
    Desktop layout: Today/Tasks (left) · ring and voice controls (centre) · conversation and WhatsApp review (right).
    The voice loop (jarvis-voice.js) starts only when the microphone is tapped and pauses for every reply, review or form. */
 (function(){
@@ -134,7 +134,7 @@
   async function checkConnection(){
     if(!DEV_MODE&&!transport()){health={ready:false,message:'Jarvis on other devices needs the live relay. App tools work here without an AI connection.'};updateConnection();return;}
     const opened=root;
-    try{const res=await jarvisFetch('/api/jarvis/health',{cache:'no-store',signal:AbortSignal.timeout(viaRelay()?22000:5000)});const data=await res.json().catch(()=>({}));if(root!==opened)return;if(!res.ok)throw Object.assign(Error(),{detail:typeof data.error==='string'?data.error:''});health={ready:data.ready===true,route:data.route,message:data.message,speech:data.speech};requestToken=typeof data.requestToken==='string'?data.requestToken:'';if(health.ready&&requestToken)mode='hermes';}
+    try{const res=await jarvisFetch('/api/jarvis/health',{cache:'no-store',signal:AbortSignal.timeout(viaRelay()?22000:5000)});const data=await res.json().catch(()=>({}));if(root!==opened)return;if(!res.ok)throw Object.assign(Error(),{detail:typeof data.error==='string'?data.error:''});health={ready:data.ready===true,route:data.route,message:data.message,speech:data.speech,conversation:data.conversation};requestToken=typeof data.requestToken==='string'?data.requestToken:'';if(health.ready&&requestToken)mode='hermes';}
     catch(e){if(root!==opened)return;health={ready:false,message:viaRelay()?(e?.detail||'The Jarvis PC is not reachable. It must be on, with Jarvis and the live relay running.')+' App tools still work here.':'Start the local Jarvis server to connect Hermes. Your app questions still work in App tools mode.'};}
     updateConnection();
   }
@@ -289,18 +289,39 @@
   function renderVoiceReview(review){
     const card=el('jarvis-voice-review');if(!card)return;card.hidden=!review||review.stage!=='review';
     if(card.hidden)return;el('jarvis-review-recipient').textContent=review.name+' · '+review.detail;el('jarvis-review-text').textContent=review.text;
-    el('jarvis-review-note').textContent=review.heard?'Say “Approve and send”, or approve below.':'Listen to the full read-back before approving by voice, or review below.';
+    el('jarvis-review-note').textContent=review.understanding?'Checking your latest request. Review again before sending.':review.heard?'Say “Approve and send”, or approve below.':'Listen to the full read-back before approving by voice, or review below.';
   }
   function ensureWhatsAppConversation(){
     if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,onChange:renderVoiceReview});return waConversation;
   }
-  async function whatsappTurn(text,id,screenApproval=false){
+  async function whatsappTurn(text,id,screenApproval=false,intent){
     if(!root)return false;
     const workflow=ensureWhatsAppConversation();if(!workflow)return false;
-    const result=await workflow.handle(text,{screenApproval});if(id!==generation||!root)return true;
+    const result=await workflow.handle(text,{screenApproval,intent});if(id!==generation||!root)return true;
     if(!result)return true;if(!result.handled)return false;
     if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();
     add('Jarvis · WhatsApp',result.text);speak(result.text,false,result.afterSpoken);return true;
+  }
+
+  async function conversationTurn(text,id){
+    beginFocus(text);ensureWhatsAppConversation()?.suspendApproval();const controller=new AbortController();request=controller;const timeout=setTimeout(()=>controller.abort(),120000);
+    try{
+      const context=SV_JARVIS_DATA.context();context.dialogue={schema:1,ownerTurns:lines.filter(l=>l.role==='You').slice(-6).map(l=>l.text),whatsapp:ensureWhatsAppConversation()?.context?.()||{}};
+      const res=await jarvisFetch('/api/jarvis/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:JSON.stringify({text,sessionId,context}),signal:controller.signal});
+      const data=await res.json();if(id!==generation||!root)return;if(!res.ok)throw Error(data.error||'The agent could not respond.');
+      const d=data.decision;if(!d||typeof d!=='object')throw Error('Jarvis could not interpret that reliably. Please try again.');
+      if(d.kind==='whatsapp'){
+        if(!await whatsappTurn(text,id,false,d.intent))throw Error('The WhatsApp voice tools are unavailable. Please reopen Jarvis.');
+      }else if((d.kind==='reply'||d.kind==='clarify')&&typeof d.text==='string'&&d.text.trim()){
+        if(d.kind==='reply'&&!d.retainTask)waConversation?.clearPending();else waConversation?.finishUnderstanding();add('Jarvis · Hermes',d.text);speak(d.text);
+      }else if(d.kind==='app_request'&&typeof d.text==='string'){
+        waConversation?.clearPending();const routed=SV_JARVIS_ACTIONS.route(d.text,mode);
+        if(routed.kind==='review'){add('Jarvis',routed.message);stop();closeJarvis();SV_JARVIS_ACTIONS.openReview(routed.draft);}
+        else if(routed.kind==='correct'){add('Jarvis','Please check the request on screen. Nothing is saved yet.');stop();closeJarvis();SV_JARVIS_ACTIONS.openCorrection(routed.correction);}
+        else{const message=routed.kind==='reply'?routed.message:'I need a little more detail. Which task or cleaning should I change, and how?';add('Jarvis',message);speak(message);}
+      }else throw Error('Jarvis returned an unsupported action. Nothing was changed.');
+    }catch(e){if(id===generation&&root){pauseVoice('Paused after an error.');error(e.name==='AbortError'?'The agent request timed out. Check Hermes and n8n, then try again.':e.message||'Could not connect to Hermes.');}}
+    finally{clearTimeout(timeout);if(id===generation)request=null;}
   }
 
   async function send(text,{fromVoice=false,screenApproval=false}={}){
@@ -309,6 +330,12 @@
     cancelReply();clearFocus();if(!fromVoice&&voice?.active)voice.stop();
     error('');caption('');const id=generation;add('You',text);if(el('jarvis-input')&&!fromVoice)el('jarvis-input').value='';setPhase('thinking');
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){voice?.pause('Paused. Tap the microphone to talk again.');add('Jarvis','Paused. Tap the microphone when you want to talk again.');if(!voice?.active)setPhase('paused');return;}
+    // Always recognise owner approval locally. The AI cannot propose or grant approval.
+    const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
+    if(root&&mode==='hermes'&&health.ready&&requestToken&&health.conversation===1){
+      if(['approve','ambiguousApproval','cancel','review'].includes(literal?.kind)){if(await whatsappTurn(text,id,screenApproval))return;}
+      await conversationTurn(text,id);return;
+    }
     // The owner’s words go to bounded inbox tools; contact text is never routed back as commands.
     if(await whatsappTurn(text,id,screenApproval))return;
     const wa=window.SV_JARVIS_WHATSAPP?.parseCommand?.(text);

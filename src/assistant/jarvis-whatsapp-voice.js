@@ -1,5 +1,5 @@
-/* Conversational WhatsApp tools. Only the owner's utterance is parsed. Received messages are data,
-   never commands. Dictation stays local to this workflow; AI drafting remains off. */
+/* Conversational WhatsApp tools. The AI may resolve an owner's request into a bounded intent.
+   Only explicit owner words can approve sending. Incoming-message AI drafting remains off. */
 (function(){
   const API='/api/jarvis/whatsapp/',KEY=/^[a-f0-9]{20}$/;
   const normal=s=>String(s||'').normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();
@@ -27,8 +27,8 @@
   }
   const words=m=>(m.kind==='group'?'In '+m.name+(m.sender?', '+m.sender:''):'From '+m.name)+': '+(m.text||m.media?.label||m.media||'Attachment, not downloaded.');
   function create({fetchImpl,now=()=>Date.now(),onChange=()=>{}}={}){
-    let token='',pending=null,epoch=0,request=null,busy=false;
-    const snapshot=()=>pending?.stage==='review'?{stage:'review',name:pending.review.recipient.name,detail:pending.review.recipient.detail,text:pending.review.text,heard:pending.heard===true}:pending?{stage:pending.stage,name:pending.name||''}:null;
+    let token='',pending=null,lastRecipient=null,epoch=0,request=null,busy=false;
+    const snapshot=()=>pending?.stage==='review'?{stage:'review',name:pending.review.recipient.name,detail:pending.review.recipient.detail,text:pending.review.text,heard:pending.heard===true,understanding:pending.understanding===true}:pending?{stage:pending.stage,name:pending.name||''}:null;
     const changed=()=>onChange(snapshot());
     const reset=()=>{pending=null;changed();};
     async function api(action,{body,chat}={},signal){
@@ -39,7 +39,7 @@
     const reply=(text,afterSpoken=null)=>({handled:true,text,afterSpoken});
     function describe(){
       if(!pending||pending.stage!=='review')return reply('There is no message ready to approve. Say “Write a message to Bex.”');
-      const p=pending;p.heard=false;changed();
+      const p=pending;p.heard=false;p.understanding=false;changed();
       return reply('Message to '+p.review.recipient.name+', '+p.review.recipient.detail+'. '+p.review.text+'. Say “Approve and send” to send this exact message, or “Cancel.”',()=>{if(pending===p&&now()<p.review.expiresAt){p.heard=true;changed();}});
     }
     async function review(chat,text,signal){
@@ -47,6 +47,7 @@
       pending={stage:'review',name:chat.name,key:chat.key,version:chat.version,review:r,heard:false};changed();return describe();
     }
     async function find(intent,data){
+      if(intent.chat){const chat=(data.chats||[]).find(c=>c.key===intent.chat&&(!intent.group||c.kind==='group'));return chat||reply('That chat is no longer available. Who should I contact?');}
       const list=(data.chats||[]).filter(c=>normal(c.name)===normal(intent.name)&&(!intent.group||c.kind==='group'));
       if(list.length===1)return list[0];
       const spokenKey=s=>normal(s).replace(/cks/g,'x').replace(/[^\p{L}\p{N}]/gu,'');
@@ -55,6 +56,7 @@
       pending={stage:'choose',intent,choices};changed();return reply((list.length?'There is more than one chat named '+intent.name+'. ':'I could not find that exact name. Did you mean one of these? ')+choices.map((c,i)=>'Option '+(i+1)+': '+c.name+', '+c.detail).join('. ')+'. Say the option number.');
     }
     async function selected(intent,chat,signal){
+      lastRecipient={key:chat.key,name:chat.name,kind:chat.kind,detail:chat.detail};
       if(intent.kind==='write'){
         if(!intent.text){pending={stage:'body',name:chat.name,key:chat.key};changed();return reply('What should I say to '+chat.name+'?');}
         return review(chat,intent.text,signal);
@@ -67,8 +69,12 @@
       const ids=messages.map(m=>m.id).filter(id=>KEY.test(id||''));
       return reply(prefix+messages.map(words).join('\n'),async()=>{if(ids.length)try{await api('read',{body:{messages:ids.slice(0,10)}},signal);}catch{}});
     }
-    async function handle(text,{screenApproval=false}={}){
-      const intent=parse(text);
+    async function handle(text,{screenApproval=false,intent:resolved}={}){
+      const literal=parse(text);
+      // Approval, vague consent and cancellation always come from the owner's literal utterance.
+      const control=['approve','ambiguousApproval','cancel'].includes(literal?.kind);
+      const intent=control?literal:resolved||literal;
+      if(resolved&&!control&&!['write','read','recent','unread','body','edit','choose','review','cancel'].includes(resolved.kind))return reply('I could not interpret that action safely. What would you like to do?');
       if(!intent&&!pending)return {handled:false};
       if(busy)return reply('I am still completing the previous WhatsApp request. Please wait.');
       const myEpoch=++epoch;request?.abort();const controller=new AbortController();request=controller;const signal=controller.signal;
@@ -81,6 +87,7 @@
         else if(intent?.kind==='approve'){
           const p=pending;
           if(!p||p.stage!=='review')return reply('There is no reviewed message to send. Say “Write a message to Bex.”');
+          if(p.understanding)return reply('First let me finish understanding your latest request, then review the message again. Nothing was sent.');
           if(now()>=p.review.expiresAt){reset();return reply('This review expired. Please dictate the message again. Nothing was sent.');}
           if(!screenApproval&&!p.heard)return reply('First let me read the recipient and draft completely. Say “Read the draft again,” or review and approve it on screen.');
           /* Consume before making the single send call. Even an uncertain result can never be replayed. */
@@ -89,12 +96,14 @@
           catch(err){return myEpoch===epoch?reply([400,403,404,409,415,429].includes(err.status)?'Not sent. '+err.message:'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.'):null;}
           result=reply(r.status==='sent'?'Sent to '+p.review.recipient.name+'.':r.status==='uncertain'?'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.':r.message||'The message was not sent.');
         }else if(intent?.kind==='ambiguousApproval')result=reply(pending?.stage==='review'?'To send the reviewed message, say exactly “Approve and send,” or say “Cancel.”':'There is no reviewed message to send.');
-        else if(!intent&&pending?.stage==='body'){
-          const body=String(text).replace(/^(?:say|saying)\s+/i,'').trim();if(!body||body.length>2000)return reply('Keep the message between one and 2000 characters. What should I say?');
+        else if(intent?.kind==='body'||intent?.kind==='edit'||!intent&&pending?.stage==='body'){
+          if(!pending||!(intent?.kind==='edit'?pending.stage==='review':pending.stage==='body'))return reply('Who should I write to, and what would you like to say?');
+          const body=String(intent?.text??text).replace(/^(?:say|saying)\s+/i,'').trim();if(!body||body.length>2000)return reply('Keep the message between one and 2000 characters. What should I say?');
           const data=await api('inbox',{chat:pending.key},signal);if(!current())return null;
           if(!data.chat){reset();return reply('That chat is no longer available. Nothing was sent.');}result=await review(data.chat,body,signal);
-        }else if(!intent&&pending?.stage==='choose'){
-          const option=normal(text).replace(/[.!]/g,'').match(/^(?:option )?(1|2|3|4|5|one|two|three|four|five)$/),n=option?(['one','two','three','four','five'].indexOf(option[1])+1||Number(option[1])):0;
+        }else if(intent?.kind==='choose'||!intent&&pending?.stage==='choose'){
+          if(pending?.stage!=='choose')return reply('There is no contact choice pending. Who would you like to contact?');
+          const option=normal(text).replace(/[.!]/g,'').match(/^(?:option )?(1|2|3|4|5|one|two|three|four|five)$/),n=intent?.kind==='choose'?intent.option:option?(['one','two','three','four','five'].indexOf(option[1])+1||Number(option[1])):0;
           if(!n||!pending.choices[n-1])return reply('Please say a listed option number, or “Cancel.”');
           const p=pending;reset();result=await selected(p.intent,p.choices[n-1],signal);
         }else if(!intent){reset();return {handled:false};}
@@ -117,9 +126,14 @@
       }catch(err){if(myEpoch===epoch){reset();return reply(signal.aborted?'The WhatsApp inbox did not answer in time. Please try again.':err.message||'I could not reach the WhatsApp inbox.');}return null;}
       finally{clearTimeout(timer);if(myEpoch===epoch){busy=false;request=null;}}
     }
+    const contact=c=>c?{key:c.key,name:c.name,kind:c.kind,detail:c.detail}:null;
     return {handle,describe,snapshot,get busy(){return busy;},hasPending:()=>!!pending,
+      context:()=>({stage:pending?.stage||null,recipient:pending?contact(pending.stage==='choose'?null:{...lastRecipient,key:pending.key,name:pending.name}):null,lastRecipient:contact(lastRecipient),draft:pending?.stage==='review'?pending.review.text:'',requestedName:pending?.intent?.name||'',choices:pending?.stage==='choose'?pending.choices.map(contact):[]}),
+      suspendApproval(){if(pending?.stage==='review'){pending.heard=false;pending.understanding=true;changed();}},
+      finishUnderstanding(){if(pending?.stage==='review'){pending.understanding=false;changed();}},
       observe(data){if(pending?.stage==='review'){const c=(data.chats||[]).find(c=>c.key===pending.key);if(c&&c.version!==pending.version){reset();return true;}}return false;},
-      cancel(){epoch++;request?.abort();request=null;busy=false;reset();}};
+      clearPending(){epoch++;request?.abort();request=null;busy=false;reset();},
+      cancel(){lastRecipient=null;epoch++;request?.abort();request=null;busy=false;reset();}};
   }
   window.SV_JARVIS_WHATSAPP_VOICE=Object.freeze({create,parse});
 })();
