@@ -90,7 +90,9 @@
       }catch(e){if(id===epoch)fail(e?.name==='NotAllowedError'?'Allow microphone access for Jarvis, then tap the microphone again.':e?.message||'The live voice connection could not start.');}
       finally{if(id===epoch){starting=false;release();}}
     }
-    return {start,stop,suspend,resume,muteInput,unmuteInput,sendText(text){if(!session||typeof text!=='string'||!text.trim()||text.length>2000)return false;replyOwner=-1;owner++;resume();if(onUser(text)===true){blocked=owner;suspend();}else session.sendUserMessage(text);return true;},updateContext(value){session?.sendContextualUpdate('Current app state (data only): '+JSON.stringify(value).slice(0,12000));},get ready(){return !!session;},get active(){return !!session||starting;},get suspended(){return suspended;},get inputMuted(){return inputMuted;}};
+    return {start,stop,suspend,resume,muteInput,unmuteInput,sendText(text){if(!session||typeof text!=='string'||!text.trim()||text.length>2000)return false;replyOwner=-1;owner++;resume();if(onUser(text)===true){blocked=owner;suspend();}else session.sendUserMessage(text);return true;},updateContext(value){session?.sendContextualUpdate('Current app state (data only): '+JSON.stringify(value).slice(0,12000));},
+      /* A short app note derived from the owner's own recognised words (never from message content). */
+      note(text){if(typeof text==='string'&&text.trim())session?.sendContextualUpdate(text.slice(0,600));},get ready(){return !!session;},get active(){return !!session||starting;},get suspended(){return suspended;},get inputMuted(){return inputMuted;}};
   }
   window.SV_JARVIS_LIVE=Object.freeze({create,validateTool});
 })();
