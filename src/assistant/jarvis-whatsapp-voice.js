@@ -21,6 +21,29 @@
     /^who (?:sent|wrote) (?:me )?the (?:last|latest|most recent) (?:whats\s?app )?message$/i,
     /^who(?: is|['’]?s|was) (?:my|the) (?:last|latest|most recent) (?:whats\s?app )?message from$/i
   ];
+  /* Topic searches: "Did anyone ask about a private chef in the last seven days?", "¿Alguien preguntó por un chef privado?".
+     Asking-style verbs only, so business-record questions keep their existing route. */
+  const NUM={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,fourteen:14,thirty:30,un:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,catorce:14,treinta:30};
+  const SEARCH=[
+    /^(?:did|has|have) (?:anyone|anybody|someone|somebody|any (?:guests?|clients?|customers?)) (?:ask|asked|enquire|enquired|inquire|inquired|write|wrote|written|message|messaged|mention|mentioned|request|requested|say anything|said anything)(?: me| us)?(?: (?:about|for|regarding))? (.+)$/i,
+    /^(?:(?:were|are) there|have there been|any) (?:any )?(?:whats\s?app )?(?:messages|requests|questions|enquiries|inquiries|mentions)(?: on whats\s?app)? (?:about|for|regarding|mentioning|asking (?:about|for)) (.+)$/i,
+    /^(?:search|look) (?:through )?(?:my |the )?(?:whats\s?app|messages|chats)(?: messages| chats)? for (.+)$/i,
+    /^(?:search|find|look for)(?: (?:whats\s?app|messages|chats))? (?:messages |requests )?(?:about|mentioning|regarding) (.+)$/i,
+    /^who (?:asked|enquired|inquired|wrote|messaged)(?: me| us)? (?:about|for|regarding) (.+)$/i,
+    /^¿?(?:alguien|algún cliente|algun cliente|algún huésped|algun huesped) (?:me |nos )?(?:ha )?(?:preguntado|preguntó|pregunto|pedido|pidió|pidio|escrito|escribió|escribio|mencionado|mencionó|menciono)(?: (?:por|sobre|acerca de))? (.+)$/i,
+    /^(?:busca|buscar)(?: en)?(?: (?:whats\s?app|los mensajes|mensajes))?(?: sobre| de| por)? (.+)$/i
+  ];
+  function searchIntent(text){
+    let t=String(text||'').replace(/[?¿!.]+$/,'').trim(),days=7,m;
+    const range=[[/\s+(?:in|over|during|within|from)?\s*(?:the )?(?:last|past|previous) (\d{1,2}|[a-z]+) days?$/i,n=>n],[/\s+(?:en )?(?:los )?(?:últimos|ultimos) (\d{1,2}|[a-z]+) d[ií]as?$/i,n=>n],[/\s+(?:in |over |during )?(?:the )?(?:last|past) (?:two|2) weeks$/i,()=>14],[/\s+(?:in |over |during )?(?:this|the last|the past|last|past) week$|\s+(?:esta|la última|la ultima) semana$/i,()=>7],[/\s+(?:in |over |during )?(?:this|the last|the past|last|past) month$|\s+(?:este|el último|el ultimo) mes$/i,()=>30],[/\s+(?:today|hoy)$/i,()=>1],[/\s+(?:yesterday|ayer)$/i,()=>2]];
+    for(const [re,f] of range){m=t.match(re);if(m){const raw=m[1],n=f(raw===undefined?undefined:/^\d+$/.test(raw)?Number(raw):NUM[raw.toLowerCase()]);if(!Number.isInteger(n))return null;days=n;t=t.slice(0,m.index).trim();break;}}
+    t=t.replace(/\s+(?:on|in|en) whats\s?app$/i,'');
+    for(const re of SEARCH){m=t.match(re);if(m)break;}
+    if(!m)return null;
+    const topic=m[1].replace(/^(?:a|an|the|any|some|un|una|unos|unas|el|la|los|las)\s+/i,'').replace(/\s+(?:on|in|en) whats\s?app$/i,'').trim();
+    if(topic.length<2||topic.length>60||days<1||days>30)return null;
+    return {kind:'search',query:topic,days};
+  }
   function parse(input){
     let t=String(input||'').trim();if(!t||t.length>2200)return null;
     t=t.replace(/^(?:okay|ok)[,.!\s]+/i,'').replace(/^(?:(?:hi|hey|hello)[,\s]+)?jarvis[,!.\s]+/i,'').replace(/^(?:good morning[,\s]+)?(?:please\s+)?(?:(?:can|could|would|will) you\s+|i (?:want|need) you to\s+|i(?:['’]d| would) like (?:you )?to\s+)?(?:please\s+)?/i,'');
@@ -42,6 +65,7 @@
     m=asked.match(LATEST);if(!split&&m)return {kind:'recent',limit:1,...(m[1]||m[2]?{direction:'outgoing'}:{})};
     if(!split&&LAST_SENDER.some(r=>r.test(asked)))return {kind:'recent',limit:1};
     if(!split&&/\b(?:unread|new (?:whats\s?app )?messages)\b/i.test(t)&&/\b(?:whats\s?app|messages)\b/i.test(t))return {kind:'unread'};
+    if(!split){const s=searchIntent(asked);if(s)return s;}
     if(!split&&/^(?:(?:do (?:we|i) have|are there) (?:any )?(?:whats\s?app )?messages|(?:read|read out|read aloud|read out loud|check|show)(?: me)? (?:my |the )?(?:latest |recent |last )?(?:whats\s?app )?messages|read (?:my )?whats\s?app)(?: (?:on|in|from) whats\s?app)?[.!?]?$/i.test(readText))return {kind:'recent'};
     m=readText.match(/^(?:read|read out|read out loud|read aloud|show|check|what (?:are|were))\s+(?:me\s+)?(?:the\s+|my\s+)?(?:last\s+|latest\s+|recent\s+)?(?:whats\s?app\s+)?messages?\s+(?:from|with|in|for)\s+(?:the\s+)?(group\s+)?(.+?)[.!?]?$/i);
     if(!m)m=readText.match(/^(?:read|read out|read out loud|read aloud|show|check)\s+(?:me\s+)?(?:the\s+)?(group\s+)?(.+?)(?:['’]s)?\s+(?:whats\s?app\s+)?messages?[.!?]?$/i);
@@ -56,6 +80,33 @@
     const ago=at=>{if(!(Number(at)>0))return '';const s=Math.max(0,now()/1000-Number(at));if(s<90)return 'just now';const m=Math.round(s/60);if(m<60)return m+' minutes ago';const h=Math.round(m/60);if(h<24)return h===1?'an hour ago':h+' hours ago';const d=Math.round(h/24);return d===1?'yesterday':d+' days ago';};
     const when=m=>{const t=ago(m?.at);return t?', '+t:'';};
     const line=m=>(m.from==='owner'?'You':m.kind==='group'?'In '+m.name+(m.sender?', '+m.sender:''):'From '+m.name)+when(m)+': '+quote(m);
+    const dated=at=>{try{return new Date(at*1000).toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});}catch{return '';}};
+    const speaker=m=>m.from==='owner'?'You':m.kind==='group'?(m.sender||'Someone')+' in '+m.name:m.name;
+    /* "days:7|private chef|chef privado" — the PC validates and expands it; the relay sees an ordinary bounded query. */
+    function searchQuery(intent){
+      let q='days:'+(Number.isInteger(intent.days)&&intent.days>=1&&intent.days<=30?intent.days:7);
+      for(const t of [intent.query,...(Array.isArray(intent.terms)?intent.terms:[])]){const w=String(t||'').replace(/[|]/g,' ').trim().slice(0,60);if(w&&q.length+w.length+1<=120)q+='|'+w;}
+      return q;
+    }
+    /* Original wording, date, who/where, whether Antonio replied, nearest context and an explicit coverage note.
+       English translation is added by Hermes or the live agent from the reading; this text is the untranslated fallback. */
+    function searchResult(intent,data){
+      const s=data.search||{},days=s.days||intent.days||7,topic=String(intent.query||s.terms?.[0]||'that'),total=data.page?.total??data.results.length,offset=intent.offset||0;
+      const others=(s.expanded||[]).filter(t=>!(s.terms||[]).includes(t)).slice(0,4);
+      const head=total?'I found '+(total===1?'1 message':total+' messages')+' about “'+topic+'” in the last '+days+' days'+(offset?' (continuing from result '+(offset+1)+')':'')+'.':'I found no messages about “'+topic+'” in the stored WhatsApp messages from the last '+days+' days.';
+      const rows=data.results.map((r,i)=>{
+        const before=(r.context||[]).filter(c=>c.position==='before').at(-1),after=(r.context||[]).find(c=>c.position==='after');
+        return (offset+i+1)+'. '+speaker(r)+', '+dated(r.at)+(ago(r.at)?' ('+ago(r.at)+')':'')+': '+quote(r,300)+(r.answered?' You replied afterwards.':'')
+          +(before?'\n   Before — '+speaker(before)+': '+quote(before,140):'')+(after?'\n   After — '+speaker(after)+': '+quote(after,140):'');
+      });
+      const more=total-offset-data.results.length,history=data.coverage?.history;
+      const note=history?(history.complete?'History check: '+history.summary:'Note: '+history.summary):'Note: history coverage is unknown.';
+      const spoken=[head+(others.length?' I also searched for '+others.join(', ')+'.':''),...rows,...(more>0?['There '+(more===1?'is 1 more.':'are '+more+' more.')]:[]),note+' Attachments and voice notes are not searched.'].join('\n');
+      if(data.results.length===1){const r=data.results[0];lastRecipient={key:r.chat,name:r.name,kind:r.kind};}
+      return {...reply(spoken),reading:{kind:'search',topic,days,terms:s.expanded||[],total,offset,nextOffset:data.page?.nextOffset??null,coverage:data.coverage,search:s,
+        results:data.results.map(r=>({name:r.name,chat:r.chat,kind:r.kind,from:r.from,sender:r.sender||'',text:r.text||'',media:r.media||'',at:r.at,date:dated(r.at),ago:ago(r.at),answered:r.answered===true,matched:r.matched||[],truncated:r.truncated===true,
+          context:(r.context||[]).map(c=>({position:c.position,name:c.name,kind:c.kind,from:c.from,sender:c.sender||'',text:c.text||'',media:c.media||'',at:c.at,ago:ago(c.at)}))}))}};
+    }
     const snapshot=()=>pending?.stage==='review'?{stage:'review',name:pending.review.recipient.name,detail:pending.review.recipient.detail,text:pending.review.text,english:pending.english||'',language:pending.language||'',heard:pending.heard===true,understanding:pending.understanding===true}:pending?{stage:pending.stage,name:pending.name||''}:null;
     const changed=()=>onChange(snapshot());
     const reset=()=>{pending=null;changed();};
@@ -115,7 +166,7 @@
       // Approval, vague consent and cancellation always come from the owner's literal utterance.
       const control=['approve','cancel'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&pending?.stage==='review';
       const intent=control?literal:resolved||literal;
-      if(resolved&&!control&&!['write','read','recent','unread','history','awaiting','body','edit','choose','review','cancel'].includes(resolved.kind))return reply('I could not interpret that action safely. What would you like to do?');
+      if(resolved&&!control&&!['write','read','recent','unread','history','awaiting','search','body','edit','choose','review','cancel'].includes(resolved.kind))return reply('I could not interpret that action safely. What would you like to do?');
       if(!intent&&!pending)return {handled:false};
       if(busy)return reply('I am still completing the previous WhatsApp request. Please wait.');
       const myEpoch=++epoch;request?.abort();const controller=new AbortController();request=controller;const signal=controller.signal;
@@ -149,10 +200,13 @@
           const p=pending;reset();result=await selected(p.intent,p.choices[n-1],signal);
         }else if(!intent){reset();return {handled:false};}
         else{
-          reset();const scoped=['recent','unread','awaiting'].includes(intent.kind),data=await api('inbox',scoped?{view:intent.kind,limit:Math.min(intent.kind==='awaiting'?8:10,intent.limit||(intent.kind==='recent'?1:5)),offset:intent.offset||0,direction:intent.direction||'incoming'}:{view:'voice'},signal);if(!current())return null;
+          reset();const scoped=['recent','unread','awaiting'].includes(intent.kind),data=await api('inbox',intent.kind==='search'?{view:'history',query:searchQuery(intent),limit:Math.min(10,intent.limit||5),offset:intent.offset||0,direction:intent.direction||'incoming'}:scoped?{view:intent.kind,limit:Math.min(intent.kind==='awaiting'?8:10,intent.limit||(intent.kind==='recent'?1:5)),offset:intent.offset||0,direction:intent.direction||'incoming'}:{view:'voice'},signal);if(!current())return null;
           if(data.connection?.state!=='open')return reply('WhatsApp is not connected right now. '+(data.connection?.message||'Check the Jarvis PC.'));
           if(intent.kind==='write'||intent.kind==='read'||intent.kind==='history'){
             const chat=await find(intent,data);if(!current())return null;result=chat.handled?chat:await selected(intent,chat,signal);
+          }else if(intent.kind==='search'){
+            if(!Array.isArray(data.results))return reply('The Jarvis PC needs its latest update before it can search WhatsApp.');
+            result=searchResult(intent,data);
           }else if(intent.kind==='awaiting'){
             if(!Array.isArray(data.candidates)&&!Array.isArray(data.awaiting))return reply('The PC inbox needs the latest update before I can check unanswered chats.');
             const offset=intent.offset||0,limit=Math.min(8,intent.limit||5),candidates=data.candidates||data.awaiting.slice(offset,offset+limit);

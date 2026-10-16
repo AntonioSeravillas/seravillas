@@ -7,7 +7,7 @@ import path from 'node:path';
 
 /* Messages are kept for retentionDays; messagesPerChat/chats are only safety caps, and any trim they cause is logged in coverage.
    chatView bounds the inbox screen's per-chat payload (relay results are limited to 256 KB). */
-export const LIMITS=Object.freeze({chats:500,messagesPerChat:2000,retentionDays:30,chatView:30,seenIdsPerChat:4000,ownSentPerChat:50,coverageLog:200,gapSeconds:60,text:2000,draft:2000,name:80,queue:25,historyForDraft:12});
+export const LIMITS=Object.freeze({chats:500,messagesPerChat:2000,retentionDays:30,chatView:30,chatList:150,seenIdsPerChat:4000,ownSentPerChat:50,coverageLog:200,gapSeconds:60,text:2000,draft:2000,name:80,queue:25,historyForDraft:12});
 
 /* Only one-to-one chats and groups. Status updates, broadcasts, newsletters and anything else are refused. */
 export function chatKind(jid){
@@ -38,6 +38,32 @@ export function isAcknowledgement(m){
   return words.length<=6&&words.every(w=>ACK_WORDS.has(w));
 }
 const ASKS=/[?¿]|^(?:can|could|would|will) you\b|\b(?:please|por favor|puedes|podr[ií]as|need you to|let me know)\b/i;
+/* Topic search: accent/case-insensitive whole-word phrases with a plural ending. A term that names a known villa topic
+   also searches its English and Spanish wording; anything else is searched as given. */
+const fold=s=>String(s||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+const TOPICS=[
+  ['private chef','personal chef','chef','cook','cooking','catering','caterer','chef privado','chef a domicilio','cocinero','cocinera','cocinar'],
+  ['transfer','airport transfer','taxi','pick up','pickup','shuttle','driver','traslado','recogida','aeropuerto','conductor','chofer'],
+  ['late checkout','late check out','early check in','early checkin','salida tardía','entrada temprana','check out tarde'],
+  ['babysitter','babysitting','nanny','canguro','niñera'],
+  ['groceries','grocery','supermarket','food delivery','compra','supermercado'],
+  ['massage','masseuse','spa','masaje','masajista'],
+  ['boat','yacht','boat trip','barco','yate'],
+  ['cleaning','cleaner','housekeeping','limpieza','limpiar','limpiadora']
+];
+const escapeRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+export function parseSearch(query){
+  const parts=String(query||'').split('|').map(p=>p.trim()).filter(Boolean);let days=7;
+  const d=parts[0]?.match(/^days:(\d{1,2})$/);if(d){days=Number(d[1]);parts.shift();}
+  if(!Number.isInteger(days)||days<1||days>30)throw fail(400,'Search between 1 and 30 days.');
+  const terms=[...new Set(parts.filter(p=>p.length<=60).map(fold).filter(t=>t.length>=2))].slice(0,12);
+  if(!terms.length)throw fail(400,'Say what to search for.');
+  /* Display keeps accents; matching folds them. */
+  const expanded=new Map(terms.map(t=>[t,t]));
+  for(const group of TOPICS)if(terms.some(t=>group.some(g=>(' '+t+' ').includes(' '+fold(g)+' '))))for(const g of group)if(!expanded.has(fold(g)))expanded.set(fold(g),g);
+  return {days,terms,expanded:[...expanded.values()],patterns:[...expanded].map(([key,term])=>({term,re:new RegExp('(?:^| )'+escapeRe(key)+'(?:s|es)?(?= |$)')}))};
+}
+export const matchTerms=(text,patterns)=>{const t=fold(text);return t?patterns.filter(p=>p.re.test(t)).map(p=>p.term):[];};
 
 /* In-memory store for tests and the sample flow. */
 export function createMemoryStore(initial=null){
@@ -294,9 +320,24 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
     if(!['voice','recent','unread','history','awaiting'].includes(view)||!Number.isInteger(limit)||limit<1||limit>10||!Number.isInteger(offset)||offset<0||offset>100||!['incoming','outgoing','both'].includes(direction)||typeof query!=='string'||query.length>120)throw fail(400,'Invalid message window.');
     const history=historyCoverage(7),coverage={chats:Object.keys(state.chats).length,retentionDays:limits.retentionDays,history,scope:'Stored linked-device text only, kept for '+limits.retentionDays+' days from '+day(history.trackingSince)+' onward; '+history.summary+' Older phone history is not imported. Attachments are listed but not downloaded or transcribed. Waiting means a contact wrote after the last observed owner reply, not a guaranteed unanswered request. Chats ending only in thanks/OK/emoji are counted separately as acknowledgements.'};
     const project=(c,m,max=limits.text)=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,from:m.from,sender:m.sender,text:clip(m.text,max),truncated:(m.text||'').length>max,media:mediaLabel(m.media),at:m.at,receivedAt:m.receivedAt||m.at*1000,unread:m.unread===true});
-    const chats=Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt),out={chats:chats.map(summary),coverage};
+    const chats=Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt),out={chats:chats.slice(0,limits.chatList).map(summary),coverage};
     if(view==='voice'){if(key)out.chat=summary(need(key));return out;}
     const page=all=>({total:all.length,offset,nextOffset:offset+limit<all.length?offset+limit:null});
+    /* Topic search across every stored chat and group. Carried as history without a chat so the existing relay/Worker
+       validation (view list, query ≤120 chars) applies unchanged: query is "days:N|term|term…". Read-only: nothing is marked read. */
+    if(view==='history'&&!key){
+      const q=parseSearch(query),t=nowSec(),windowStart=t-q.days*86400,ctx=(c,i)=>[...c.messages.slice(Math.max(0,i-2),i).map(m=>({...project(c,m,300),position:'before'})),...c.messages.slice(i+1,i+3).map(m=>({...project(c,m,300),position:'after'}))];
+      const hits=[];
+      for(const c of chats)c.messages.forEach((m,i)=>{
+        if(m.at<windowStart||!(direction==='both'||m.from===(direction==='outgoing'?'owner':'contact')))return;
+        const found=matchTerms(m.text,q.patterns);if(found.length)hits.push({c,m,i,found});
+      });
+      hits.sort((a,b)=>b.m.at-a.m.at);
+      out.page=page(hits);out.coverage.history=historyCoverage(q.days);
+      out.search={days:q.days,windowStart,terms:q.terms,expanded:q.expanded,chatsSearched:chats.length,note:'Text only; attachments, voice notes and photos are not searched. Matching uses these words and close variants, so differently worded requests can be missed.'};
+      out.results=hits.slice(offset,offset+limit).map(({c,m,i,found})=>({...project(c,m,700),matched:found,answered:c.messages.slice(i+1).some(x=>x.from==='owner'),context:ctx(c,i)}));
+      return out;
+    }
     if(view==='awaiting'){
       const waiting=[],acknowledged=[];
       for(const c of chats){

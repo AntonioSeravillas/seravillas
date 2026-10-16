@@ -246,3 +246,23 @@ test('queued work that is never picked up expires (payload removed) and is never
   assert.equal(app.sql.sqlite.prepare('SELECT payload FROM relay_jobs WHERE id=?').get(jobId).payload,'');
   assert.deepEqual(await (await app.device('/api/relay/device/claim',code)).json(),{job:null});
 });
+test('a cross-chat WhatsApp search passes the unchanged Worker and PC relay and reaches the Jarvis server read-only',async()=>{
+  const {mapJob}=await import('../tools/jarvis/live-relay.mjs');
+  const {createJarvisServer}=await import('../tools/jarvis/serve.mjs');
+  const {createWhatsAppService,createMemoryStore}=await import('../tools/jarvis/whatsapp-service.mjs');
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  const params={view:'history',query:'days:7|private chef|chef privado|cocinero',limit:5,offset:0,direction:'incoming'};
+  assert.equal((await h.job('wa-inbox',params)).status,202);
+  const {job}=await(await h.device('/api/relay/device/claim',code)).json();assert.deepEqual(job.params,params);
+  const mapped=mapJob(job);assert.equal(mapped.method,'GET');assert.equal(mapped.needsToken,true);assert.match(mapped.path,/^\/api\/jarvis\/whatsapp\/inbox\?/);
+  const wa=createWhatsAppService({store:createMemoryStore(),connector:{status:()=>({state:'open'}),sendText:async()=>{throw Error('No sends in tests');}}});
+  wa.receive({providerId:'f1',chatJid:'34600000401@s.whatsapp.net',text:'¿Conocéis algún chef privado?',senderName:'Fictional guest',timestamp:Math.floor(Date.now()/1000)-3600,live:true});
+  const server=createJarvisServer({apiKey:'HERMES_SENTINEL',fetchImpl:async()=>{throw Error('No provider calls');},whatsapp:()=>wa});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  try{
+    const base='http://127.0.0.1:'+server.address().port,{requestToken}=await(await fetch(base+'/api/jarvis/whatsapp/status')).json();
+    const res=await fetch(base+mapped.path,{headers:{'X-Jarvis-Session-Token':requestToken}}),body=await res.json();
+    assert.equal(res.status,200);assert.equal(body.results.length,1);assert.match(body.results[0].text,/chef privado/);assert.equal(body.coverage.history.complete,false);
+    assert.ok(JSON.stringify(body).length<262144,'within the relay result limit');assert.equal(wa.inbox().unreadCount,1,'nothing marked read');
+  }finally{await new Promise(r=>server.close(r));}
+});
