@@ -42,3 +42,11 @@ test('interruption, missing completion, stale frames and playback failure cannot
 test('a transport error after some audio cancels all queued sound and reports failure instead of completion',async()=>{
   const h=playerHarness(async()=>streamResponse([frame(),{type:'error',message:'Provider stopped.'}]));await h.player.prepare();await h.player.play('Draft for review.');assert.deepEqual(h.events,['Provider stopped.']);assert.equal(h.sources[1].stopped,true);
 });
+test('resumed audio reuses the same speech job, keeps frame order and cannot finish at a continuation boundary',async()=>{
+  let requests=0,resumes=0;const first=streamResponse([frame(0),{type:'continue',next:1}]);
+  first.resumeSpeech=async next=>{resumes++;assert.equal(next,1);return streamResponse([frame(1),{type:'end',frames:2}]);};
+  const h=playerHarness(async()=>{requests++;return first;});await h.player.prepare();await h.player.play('A fictional draft.');assert.equal(requests,1);assert.equal(resumes,1);assert.equal(h.events.includes('done'),false);
+  const audio=h.sources.slice(1);assert.equal(audio.length,2);audio[0].onended();assert.equal(h.events.includes('done'),false);audio[1].onended();assert.equal(h.events.filter(x=>x==='done').length,1);
+  const invalid=streamResponse([frame(0),{type:'continue',next:0}]);invalid.resumeSpeech=()=>{throw Error('Must not resume an invalid cursor');};
+  const bad=playerHarness(async()=>invalid);await bad.player.prepare();await bad.player.play('Draft.');assert.equal(bad.events.includes('done'),false);assert.ok(bad.events.some(x=>/cursor was invalid/.test(x)));
+});

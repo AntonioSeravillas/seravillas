@@ -26,7 +26,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body;\nif (!body || typeof body.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(body.sessionId) || !body.payload || body.payload.model !== 'hermes-agent' || !Array.isArray(body.payload.messages) || body.payload.messages.length !== 2 || body.payload.messages[0].role !== 'system' || body.payload.messages[1].role !== 'user' || body.payload.messages.some(m => typeof m.content !== 'string' || m.content.length > 85000)) throw new Error('Invalid Jarvis request');\nreturn [{json:{sessionId:body.sessionId,payload:{model:'hermes-agent',stream:false,messages:body.payload.messages}}}];"
+        "jsCode": "const body = $input.first().json.body;\nif (!body || typeof body.sessionId !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(body.sessionId) || !body.payload || body.payload.model !== 'hermes-agent' || !Array.isArray(body.payload.messages) || body.payload.messages.length !== 2 || body.payload.messages[0].role !== 'system' || body.payload.messages[1].role !== 'user' || body.payload.messages.some(m => typeof m.content !== 'string' || m.content.length > 85000)) throw new Error('Invalid Jarvis request');\nreturn [{json:{sessionId:body.sessionId,payload:{model:'hermes-agent',stream:false,model_options:{reasoning:{effort:'low'}},messages:body.payload.messages}}}];"
       },
       "id": "jarvis-validate",
       "name": "Validate request",

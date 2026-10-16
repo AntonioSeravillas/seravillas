@@ -227,12 +227,17 @@ async function relayRoutes(request, env, path, isManager) {
       await sql.prepare('DELETE FROM relay_audio WHERE job_id=?').bind(audioJob[1]).run();return Response.json({cancelled:true});
     }
     if(audioJob[2]||method!=='GET')fail(405,'Method not allowed');
-    let cursor=0,cancelled=false;const encoder=new TextEncoder(),start=Date.now();
+    const audioParams=new URL(request.url).searchParams,segmented=audioParams.get('segmented')==='1',from=Number(audioParams.get('from')||0);if(!Number.isInteger(from)||from<0||from>200||(!segmented&&from))fail(400,'Invalid audio cursor');
+    let cursor=from,cancelled=false,checks=0;const encoder=new TextEncoder(),start=Date.now();
     const stream=new ReadableStream({
       async pull(controller){
         try{while(!cancelled){
-          const row=await find();if(!row||row.status==='expired'||row.expires_at<relayNow()||Date.now()-start>65000||request.signal.aborted){controller.enqueue(encoder.encode(JSON.stringify({type:'error',message:'The speech connection ended. Nothing was approved.'})+'\n'));controller.close();return;}
-          const frames=(await sql.prepare('SELECT seq,audio FROM relay_audio WHERE job_id=? AND seq>=? ORDER BY seq LIMIT 8').bind(audioJob[1],cursor).all()).results;
+          // Leave room for authentication/purge queries under the free D1 per-invocation limit.
+          if(segmented&&checks>=28){controller.enqueue(encoder.encode(JSON.stringify({type:'continue',next:cursor})+'\n'));controller.close();return;}
+          checks++;
+          const rows=(await sql.prepare("SELECT j.status,j.result,j.expires_at,a.seq,a.audio FROM relay_jobs j JOIN relay_devices d ON d.token_hash=j.device_hash LEFT JOIN relay_audio a ON a.job_id=j.id AND a.seq>=?2 WHERE j.id=?1 AND d.id=1 AND d.revoked=0 ORDER BY a.seq LIMIT 8").bind(audioJob[1],cursor).all()).results;
+          const row=rows[0];if(!row||row.status==='expired'||row.expires_at<relayNow()||Date.now()-start>65000||request.signal.aborted){controller.enqueue(encoder.encode(JSON.stringify({type:'error',message:'The speech connection ended. Nothing was approved.'})+'\n'));controller.close();return;}
+          const frames=rows.filter(r=>r.seq!==null);
           if(frames.length){for(const frame of frames){if(frame.seq!==cursor)throw Error('Missing speech frame');controller.enqueue(encoder.encode(JSON.stringify({type:'audio',seq:cursor++,sampleRate:24000,audio:frame.audio})+'\n'));}return;}
           if(row.status==='done'){
             const result=JSON.parse(row.result||'{}');
@@ -249,8 +254,14 @@ async function relayRoutes(request, env, path, isManager) {
   const job = path.match(/^\/api\/relay\/jobs\/([a-f0-9]{64})$/);
   if (job && method === 'GET') {
     if (!isManager) fail(401, 'Unauthorized');
+    const waitValue=new URL(request.url).searchParams.get('waitMs');const waitMs=waitValue===null?0:Number(waitValue);if(!Number.isInteger(waitMs)||waitMs<0||waitMs>5000)fail(400,'Invalid wait');
     const sql = await relaySql(env); await relayPurge(sql, now);
-    const row = await sql.prepare('SELECT status, result FROM relay_jobs WHERE id=?').bind(job[1]).first();
+    const until=Date.now()+waitMs;let row;
+    do{
+      row=await sql.prepare('SELECT status, result FROM relay_jobs WHERE id=?').bind(job[1]).first();
+      if(!row||!['queued','processing'].includes(row.status)||!waitMs||Date.now()>=until||request.signal.aborted)break;
+      await new Promise(resolve=>setTimeout(resolve,150));
+    }while(Date.now()<until);
     if (!row) return Response.json({status:'gone'}, {status:404});
     return Response.json(row.status === 'done' ? {status:'done', result:JSON.parse(row.result)} : {status:row.status});
   }
@@ -265,7 +276,7 @@ async function relayRoutes(request, env, path, isManager) {
       /* The active-generation check is inside the same statement, so a registration or revoke that lands between
          authentication and this claim cannot hand work to a stale code. */
       do{
-        const claimed = await sql.prepare("UPDATE relay_jobs SET status='processing', claimed_at=?1 WHERE id=(SELECT id FROM relay_jobs WHERE status='queued' AND expires_at>?1 AND device_hash=?2 ORDER BY created_at, id LIMIT 1) AND status='queued' AND device_hash=?2 AND EXISTS (SELECT 1 FROM relay_devices WHERE id=1 AND revoked=0 AND token_hash=?2) RETURNING id, op, payload").bind(relayNow(), generation).first();
+        const claimed = await sql.prepare("UPDATE relay_jobs SET status='processing', claimed_at=?1 WHERE id=(SELECT id FROM relay_jobs WHERE status='queued' AND expires_at>?1 AND device_hash=?2 ORDER BY CASE WHEN op IN ('speech-stream','wa-send','wa-review','wa-discard') THEN 0 WHEN op='chat' THEN 1 ELSE 2 END, created_at, id LIMIT 1) AND status='queued' AND device_hash=?2 AND EXISTS (SELECT 1 FROM relay_devices WHERE id=1 AND revoked=0 AND token_hash=?2) RETURNING id, op, payload").bind(relayNow(), generation).first();
         if(claimed)return Response.json({job:{jobId:claimed.id,op:claimed.op,params:JSON.parse(claimed.payload)}});
         if(!waitMs||Date.now()>=until||request.signal.aborted)break;
         await new Promise(resolve=>setTimeout(resolve,250));

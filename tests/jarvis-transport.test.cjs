@@ -29,7 +29,7 @@ test('Fish streams directly after one job; cancellation is scoped to audio and n
   const app=runtime({results:[{body:{stream:true}}]});const controller=new AbortController();
   const response=await app.t.speechStream('A fictional voice test.',{signal:controller.signal,token:'PC_TOKEN_SENTINEL'});
   assert.deepEqual(JSON.parse(app.jobPosts()[0].init.body),{op:'speech-stream',params:{text:'A fictional voice test.'}});
-  assert.equal(app.calls[1].url,'https://sync.example.invalid/api/relay/jobs/'+JOB+'/audio');
+  assert.equal(app.calls[1].url,'https://sync.example.invalid/api/relay/jobs/'+JOB+'/audio?segmented=1&from=0');
   assert.equal(app.calls[1].init.headers['X-Secret'],'MANAGER_SECRET_SENTINEL');
   assert.ok(!JSON.stringify(app.calls).includes('PC_TOKEN_SENTINEL'));
   controller.abort();await Promise.resolve();assert.equal(app.calls[2].url,'https://sync.example.invalid/api/relay/jobs/'+JOB+'/audio/cancel');
@@ -53,7 +53,18 @@ test('health travels as one manager-authenticated relay job; the PC token is rep
   assert.equal(res.status,200);assert.equal(body.requestToken,'relay');assert.equal(body.ready,true);assert.ok(!JSON.stringify(body).includes('LEAKED'));
   assert.equal(app.jobPosts().length,1);const post=app.jobPosts()[0];
   assert.equal(post.init.headers['X-Secret'],'MANAGER_SECRET_SENTINEL');assert.deepEqual(JSON.parse(post.init.body),{op:'health',params:{}});
-  assert.ok(app.calls.slice(1).every(c=>c.url==='https://sync.example.invalid/api/relay/jobs/'+JOB&&c.init.headers['X-Secret']));
+  assert.ok(app.calls.slice(1).every(c=>c.url==='https://sync.example.invalid/api/relay/jobs/'+JOB+'?waitMs=5000'&&c.init.headers['X-Secret']));
+});
+
+test('a completed result is requested immediately without any deliberate polling sleep',async()=>{
+  let waits=0;const app=runtime({results:[done({ready:true})],extra:{setTimeout(){waits++;return 1;}}});
+  const response=await app.t.fetch('/api/jarvis/health');assert.equal(response.status,200);assert.equal(waits,0);
+  assert.equal(app.calls.length,2);assert.ok(app.calls[1].url.endsWith('?waitMs=5000'));
+});
+test('audio continuation opens the same authenticated job at an exact cursor without another generation request',async()=>{
+  const app=runtime({results:[{body:{stream:true}}]}),controller=new AbortController();const response=await app.t.speechStream('Fictional sample',{signal:controller.signal});
+  response.releaseSpeech();const next=await response.resumeSpeech(28);assert.equal(app.jobPosts().length,1);assert.ok(app.calls[2].url.endsWith('/audio?segmented=1&from=28'));
+  next.releaseSpeech();assert.throws(()=>next.resumeSpeech(-1),/Invalid audio cursor/);
 });
 
 test('WhatsApp review and send map to exact fields; a send is posted once and becomes uncertain when no result arrives',async()=>{

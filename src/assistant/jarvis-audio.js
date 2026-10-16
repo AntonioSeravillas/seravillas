@@ -83,14 +83,18 @@
         later(()=>fail('The voice reply did not finish. Tap Play reply to try again.'),180000);
         const parts=sections(text);if(!parts.length||parts.length>20)throw Error('The spoken reply is too long.');
         for(const part of parts){
-          const response=await request(part,signal);if(!current())return;
+          let response=await request(part,signal);if(!current())return;
+          let seq=0,ended=false,total=0,segments=0;
+          do{
+          if(++segments>60)throw Error('The voice stream did not finish.');
           if(!response.ok){let data={};try{data=await response.json();}catch{}response.releaseSpeech?.();throw Error(data.error||'Fish free voice could not start.');}
           if(!response.body?.getReader||!String(response.headers.get('content-type')||'').startsWith('application/x-ndjson')){response.releaseSpeech?.();throw Error('The voice stream returned an unexpected format.');}
-          const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',seq=0,ended=false,total=0;
+          const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',continued=false;
           function packet(item){
             if(!current())throw Object.assign(Error('Cancelled'),{name:'AbortError'});
-            if(ended)throw Error('Unexpected audio after completion.');
+            if(ended||continued)throw Error('Unexpected audio after completion.');
             if(item.type==='error')throw Error(typeof item.message==='string'?item.message:'The voice stream was interrupted.');
+            if(item.type==='continue'){if(item.next!==seq||!response.resumeSpeech)throw Error('The voice stream cursor was invalid.');continued=true;return;}
             if(item.type==='end'){if(!seq||item.frames!==seq)throw Error('The voice reply was incomplete.');ended=true;return;}
             if(item.type!=='audio'||item.seq!==seq++||item.sampleRate!==24000||typeof item.audio!=='string'||item.audio.length>32768||!/^[A-Za-z0-9+/]+={0,2}$/.test(item.audio))throw Error('The voice stream contained an invalid frame.');
             const bytes=decode(item.audio);total+=bytes.length;if(!bytes.length||bytes.length%2||total>2880000)throw Error('The voice reply exceeded its audio limit.');
@@ -101,8 +105,10 @@
             source.onended=()=>{sources.delete(source);source.disconnect();finish();};source.start(at);
             if(!started){started=true;later(()=>{if(current())onStart();},Math.max(0,(at-context.currentTime)*1000));}
           }
-          try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let end;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);if(line.length>45000)throw Error('The voice stream frame was too large.');if(line)packet(JSON.parse(line));}if(buffer.length>45000)throw Error('The voice stream frame was too large.');}buffer+=decoder.decode();if(buffer.trim())packet(JSON.parse(buffer));if(!ended)throw Error('The voice connection ended before the reply finished.');}
+          try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let end;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);if(line.length>45000)throw Error('The voice stream frame was too large.');if(line)packet(JSON.parse(line));}if(buffer.length>45000)throw Error('The voice stream frame was too large.');}buffer+=decoder.decode();if(buffer.trim())packet(JSON.parse(buffer));if(!ended&&!continued)throw Error('The voice connection ended before the reply finished.');}
           finally{try{await reader.cancel();}catch{}reader.releaseLock();response.releaseSpeech?.();}
+          if(continued){if(!current())return;response=await response.resumeSpeech(seq);}
+          }while(!ended);
         }
         networkDone=true;finish();
       }catch(error){if(current())fail(error.message||'Fish free voice was interrupted.');}

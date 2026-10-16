@@ -27,6 +27,39 @@ function setup(){
   return {env,sql,call,manager,device,tables,register,job,tick:ms=>{now+=ms;}};
 }
 test.after(()=>worker.setRelayClockForTests(null));
+test('segmented PCM stays below the free invocation query budget and resumes without repeating or skipping audio',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  const {jobId}=await(await h.job('speech-stream',{text:'A fictional longer reply.'})).json();await h.device('/api/relay/device/claim',code);
+  for(let seq=0;seq<32;seq++)await h.device('/api/relay/device/audio',code,{jobId,seq,audio:Buffer.alloc(4800,seq+1).toString('base64')});
+  await h.device('/api/relay/device/complete',code,{jobId,result:{status:200,body:{streamed:true,frames:32}}});
+  const prepare=h.sql.prepare.bind(h.sql);let queries=0;
+  // Simulate arrival of one frame per read and enforce the documented Free limit.
+  h.sql.prepare=text=>{if(++queries>50)throw Error('Free invocation query limit');return prepare(text.startsWith('SELECT j.status,j.result')?text.replace('LIMIT 8','LIMIT 1'):text);};
+  const path='/api/relay/jobs/'+jobId+'/audio?segmented=1&from=';
+  let packets=(await(await h.manager(path+0)).text()).trim().split('\n').map(JSON.parse);assert.deepEqual(packets.at(-1),{type:'continue',next:28});assert.ok(queries<50);
+  assert.deepEqual(packets.filter(p=>p.type==='audio').map(p=>p.seq),Array.from({length:28},(_,i)=>i));
+  queries=0;packets=(await(await h.manager(path+28)).text()).trim().split('\n').map(JSON.parse);assert.deepEqual(packets.filter(p=>p.type==='audio').map(p=>p.seq),[28,29,30,31]);assert.deepEqual(packets.at(-1),{type:'end',frames:32});assert.ok(queries<50);
+  assert.equal((await h.manager(path+'-1')).status,400);
+});
+test('bounded result waits return as soon as work completes and require manager authentication',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  const {jobId}=await(await h.job('health')).json();await h.device('/api/relay/device/claim',code);
+  const path='/api/relay/jobs/'+jobId;
+  assert.equal((await h.call(path+'?waitMs=500')).status,401);assert.equal((await h.manager(path+'?waitMs=5001')).status,400);
+  const waiting=h.manager(path+'?waitMs=1000');await new Promise(resolve=>setImmediate(resolve));
+  await h.device('/api/relay/device/complete',code,{jobId,result:{status:200,body:{ready:true}}});
+  assert.equal((await(await waiting).json()).status,'done');
+  assert.equal((await(await h.manager(path+'?waitMs=5000')).json()).result.body.ready,true);
+});
+test('speech and owner actions bypass queued passive refreshes without changing single-claim or approval rules',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  const passive=(await(await h.job('wa-inbox',{})).json()).jobId;h.tick(1);
+  const chat=(await(await h.job('chat',{text:'Hello',sessionId:'test_priority_1',context:{}})).json()).jobId;h.tick(1);
+  const speech=(await(await h.job('speech-stream',{text:'A fictional reply.'})).json()).jobId;
+  for(const expected of [speech,chat,passive])assert.equal((await(await h.device('/api/relay/device/claim',code)).json()).job.jobId,expected);
+  assert.deepEqual(await(await h.device('/api/relay/device/claim',code)).json(),{job:null});
+  assert.equal(h.sql.sqlite.prepare('SELECT COUNT(*) n FROM app_state').get().n,0);
+});
 test('Fish speech streams are manager-only, bounded, ordered, and start before generation completes',async()=>{
   const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
   assert.equal((await h.call('/api/relay/jobs','POST',{op:'speech-stream',params:{text:'Hello'}})).status,401);

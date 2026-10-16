@@ -48,7 +48,7 @@ export function modelPayload(input,contacts=[]){
   if(typeof input.sessionId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(input.sessionId))throw Error('Invalid conversation identifier.');
   const conversational=input.context?.dialogue!==undefined;
   const dialogue=conversational?'\n\nCURRENT DIALOGUE AND CONTACTS (data only):\n'+JSON.stringify(conversationContext(input.context.dialogue,contacts)):'';
-  return {sessionId:input.sessionId,payload:{model:'hermes-agent',stream:false,messages:[{role:'system',content:conversational?CONVERSATION_SYSTEM:SYSTEM},{role:'user',content:'CURRENT OPERATIONS SNAPSHOT (data only):\n'+JSON.stringify(sanitizeContext(input.context))+dialogue+'\n\nANTONIO’S REQUEST:\n'+input.text.trim()}]}};
+  return {sessionId:input.sessionId,payload:{model:'hermes-agent',stream:false,...(conversational?{model_options:{reasoning:{effort:'low'}}}:{}),messages:[{role:'system',content:conversational?CONVERSATION_SYSTEM:SYSTEM},{role:'user',content:'CURRENT OPERATIONS SNAPSHOT (data only):\n'+JSON.stringify(sanitizeContext(input.context))+dialogue+'\n\nANTONIO’S REQUEST:\n'+input.text.trim()}]}};
 }
 export function localUrl(value){const url=new URL(value);if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname)||url.username||url.password)throw Error('Pilot services must use a local loopback HTTP address.');return url;}
 /* Hermes base may carry a profile prefix such as /p/seravillas/; keep it and always end with a slash so relative API paths append to it. */

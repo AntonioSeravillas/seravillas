@@ -12,6 +12,7 @@ test('conversation revalidates contacts and strips incoming content, tokens and 
   assert.equal(conversationContext({...context.dialogue,whatsapp:{recipient:{key:'b'.repeat(20)}}},contacts).whatsapp.recipient,null);
   const payload=modelPayload({text:'Hi, can you send message to bex saying hi how are you?',sessionId:'test_session_123',context},contacts);
   assert.equal(payload.payload.messages.length,2);assert.match(payload.payload.messages[0].content,/NO send\/approve action/);assert.match(payload.payload.messages[1].content,/Bex/);
+  assert.deepEqual(payload.payload.model_options,{reasoning:{effort:'low'}});
   assert.throws(()=>conversationContext({schema:9}),/interpret/);
 });
 

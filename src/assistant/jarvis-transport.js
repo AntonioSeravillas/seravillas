@@ -48,12 +48,11 @@
     let accepted={};try{accepted=await posted.json();}catch{}
     if(!posted.ok)return reply(posted.status,{error:typeof accepted.error==='string'?accepted.error:'The relay could not take this request.'});
     if(!/^[a-f0-9]{64}$/.test(String(accepted.jobId||'')))return reply(502,{error:'The relay returned an unexpected reply.'});
-    let pause=500;
     while(Date.now()<deadline){
-      await wait(pause,signal);pause=Math.min(1500,pause+250);
+      const pollStart=Date.now();
       let res;
-      try{res=await fetch(relayUrl()+'/api/relay/jobs/'+accepted.jobId,{headers:{'X-Secret':secret()},cache:'no-store',signal});}
-      catch(e){if(e?.name==='AbortError'||signal?.aborted)throw e;continue;}
+      try{res=await fetch(relayUrl()+'/api/relay/jobs/'+accepted.jobId+'?waitMs=5000',{headers:{'X-Secret':secret()},cache:'no-store',signal});}
+      catch(e){if(e?.name==='AbortError'||signal?.aborted)throw e;await wait(500,signal);continue;}
       let state={};try{state=await res.json();}catch{}
       /* Sign-in or service problems while waiting are shown at once. A send was already submitted, so it is uncertain. */
       if(res.status===401||res.status===403||res.status>=500){
@@ -68,6 +67,8 @@
         if((job.op==='health'&&body.ready===true)||(job.op==='wa-status'&&body.available===true))body.requestToken=SENTINEL;
         return reply(Number.isInteger(state.result.status)?state.result.status:502,body);
       }
+      // Older Workers may ignore waitMs. Avoid a tight loop during a staggered rollout.
+      if(Date.now()-pollStart<250)await wait(250,signal);
     }
     return job.op==='wa-send'?UNCERTAIN():reply(504,{error:'The Jarvis PC did not answer in time. Check that it is on and the live relay is running.'});
   }
@@ -83,9 +84,13 @@
     const base=relayUrl()+'/api/relay/jobs/'+accepted.jobId+'/audio';
     const cancel=()=>{void fetch(base+'/cancel',{method:'POST',headers,body:'{}',cache:'no-store',keepalive:true}).catch(()=>{});};
     if(signal?.aborted){cancel();throw Object.assign(Error('Cancelled'),{name:'AbortError'});}
-    signal?.addEventListener('abort',cancel,{once:true});
-    try{const response=await fetch(base,{headers:{'X-Secret':secret()},cache:'no-store',signal});response.releaseSpeech=()=>signal?.removeEventListener('abort',cancel);return response;}
-    catch(error){signal?.removeEventListener('abort',cancel);cancel();throw error;}
+    async function open(from=0){
+      if(signal?.aborted)throw Object.assign(Error('Cancelled'),{name:'AbortError'});
+      signal?.addEventListener('abort',cancel,{once:true});
+      try{const response=await fetch(base+'?segmented=1&from='+from,{headers:{'X-Secret':secret()},cache:'no-store',signal});response.releaseSpeech=()=>signal?.removeEventListener('abort',cancel);response.resumeSpeech=next=>{if(!Number.isInteger(next)||next<0||next>200)throw Error('Invalid audio cursor.');return open(next);};return response;}
+      catch(error){signal?.removeEventListener('abort',cancel);cancel();throw error;}
+    }
+    return open();
   }
   /* Owner-only PC registration. The one-time code is returned to the caller for display and is never stored. */
   async function device(method,payload){

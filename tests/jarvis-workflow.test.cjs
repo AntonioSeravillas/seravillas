@@ -10,6 +10,9 @@ test('n8n workflow forwards exactly the validated model request and requires bot
   const body={sessionId:'conversation_123',payload:{model:'hermes-agent',messages:[{role:'system',content:'Assistant instructions'},{role:'user',content:'Hello'}]},extra:'not forwarded'};
   const result=vm.runInNewContext('(function(){'+node('Validate request').parameters.jsCode+'})()',{$input:{first:()=>({json:{body}})}});assert.equal(result[0].json.sessionId,body.sessionId);assert.equal(result[0].json.payload.stream,false);assert.equal(result[0].json.extra,undefined);
   assert.throws(()=>vm.runInNewContext('(function(){'+node('Validate request').parameters.jsCode+'})()',{$input:{first:()=>({json:{body:{...body,sessionId:'bad\r\nheader'}}})}}),/Invalid/);
+  assert.equal(result[0].json.payload.model_options.reasoning.effort,'low');
+  const injected=vm.runInNewContext('(function(){'+node('Validate request').parameters.jsCode+'})()',{$input:{first:()=>({json:{body:{...body,payload:{...body.payload,model_options:{provider:'OTHER',reasoning:{effort:'ultra'}}}}}})}});
+  assert.equal(JSON.stringify(injected[0].json.payload.model_options),JSON.stringify({reasoning:{effort:'low'}}));
 });
 test('n8n Ask Hermes targets the seravillas profile through the shared default gateway',()=>{
   assert.equal(node('Ask Hermes').parameters.url,'http://127.0.0.1:8642/p/seravillas/v1/chat/completions');
