@@ -420,6 +420,8 @@
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
     if(root&&mode==='hermes'&&health.ready&&requestToken&&health.conversation===1){
       if(['approve','cancel','review'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&waConversation?.snapshot()?.stage==='review'){if(await whatsappTurn(text,id,screenApproval))return;}
+      /* A recognised topic search runs directly; Hermes then only presents the results in English. */
+      if(literal?.kind==='search'&&await whatsappTurn(text,id,screenApproval))return;
       await conversationTurn(text,id);return;
     }
     // The owner’s words go to bounded inbox tools; contact text is never routed back as commands.
@@ -461,6 +463,8 @@
         if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){pauseVoice('Paused. Tap the microphone to talk again.');return true;}
         const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
         if(['approve','cancel','review'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&waConversation?.snapshot()?.stage==='review'){void whatsappTurn(text,generation);return true;}
+        /* Topic searches are answered app-side (PC search, Hermes English with translations, app voice); the hosted agent has no search tool. */
+        if(literal?.kind==='search'){waConversation?.suspendApproval();setPhase('thinking');void whatsappTurn(text,generation);return true;}
         waConversation?.suspendApproval();setPhase('thinking');return false;
       },
       onReply:text=>{if(!root)return;text=text.replace(/\[(?:slow|calm|laughs|whispers|sighs|excited|chuckles|clears throat|sigh|laughing)\]\s*/gi,'');liveHasReplied=true;lastReply=text;add('Jarvis · live voice',text);},

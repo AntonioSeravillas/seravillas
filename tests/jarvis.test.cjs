@@ -198,6 +198,31 @@ test('live overlay on desktop and phone: direct records, one voice, exact WhatsA
     assert.match(await options.clientTools.whatsapp_request({intent:'{"kind":"approve"}'}),/paused/);app.finishSpeech();await flush();app.click('close');assert.equal(ended,1);assert.equal(app.recs.length,0);
   }
 });
+test('a typed or spoken topic search, with or without a live session, runs the PC search and Hermes English answer (not the agent or a general Hermes turn) and sends nothing',async()=>{
+  for(const how of ['typed','spoken','typed without a live session']){
+    let options;const agentMessages=[],inboxUrls=[],readings=[],other=[];
+    const english='One fictional guest, Lucía, asked 2 days ago: “¿Conocéis algún chef privado?” — “Do you know a private chef?” You replied afterwards. Note: history is incomplete.';
+    const app=desktopRuntime({agent:true,liveSdk:{Conversation:{startSession:async o=>{options=o;return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){},sendUserMessage:t=>agentMessages.push(t)};}}},
+      understand:async body=>{readings.push(body.context?.dialogue?.whatsappReading);return {kind:'reply',text:english};},
+      whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
+        if(url.endsWith('/status'))return {available:true,requestToken:'FICTIONAL_SESSION'};
+        if(url.includes('/inbox')){inboxUrls.push(url);return {connection:{state:'open'},chats:[],page:{total:1,offset:0,nextOffset:null},search:{days:7,terms:['private chef'],expanded:['private chef','chef privado']},
+          coverage:{history:{days:7,complete:false,summary:'Incomplete: fictional coverage.'}},
+          results:[{id:'c'.repeat(20),chat:'a'.repeat(20),name:'Lucía',kind:'direct',from:'contact',sender:'',text:'¿Conocéis algún chef privado?',at:Math.floor(Date.now()/1000)-2*86400,answered:true,matched:['chef privado'],context:[]}]};}
+        other.push(url);throw Error('Search must not call '+url);
+      }})});
+    app.run('openJarvis()');await flush();if(how!=='typed without a live session'){app.click('mic');await flush();}
+    if(how!=='spoken')app.submit('Did anyone ask about a private chef in the last seven days?');
+    else options.onMessage({source:'user',message:'Did anyone ask about a private chef in the last seven days?',event_id:1});
+    for(let i=0;i<6;i++)await flush();
+assert.deepEqual(agentMessages,[],how+': the hosted agent is not asked');
+    assert.equal(inboxUrls.length,1);const q=new URL(inboxUrls[0],'http://x.invalid').searchParams;assert.equal(q.get('view'),'history');assert.equal(q.get('chat'),null);assert.equal(q.get('query'),'days:7|private chef');
+assert.equal(readings.length,1);assert.equal(readings[0].kind,'search');assert.equal(readings[0].results[0].text,'¿Conocéis algún chef privado?');assert.equal(readings[0].coverage.history.complete,false);
+    for(let i=0;i<4&&app.spoken.map(u=>u.text).join(' ').length<english.length;i++){app.finishSpeech();await flush();}
+    assert.equal(app.spoken.map(u=>u.text).join(' ').replace(/\s+/g,' ').trim(),english,'the app voice reads the English answer');assert.deepEqual(other,[]);
+    app.click('close');
+  }
+});
 test('live WhatsApp readings use the natural voice directly and only completed, uninterrupted audio marks them read',async()=>{
   for(const outcome of ['complete','interrupt','new-turn']){
     let options;const reads=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat',version:1};
