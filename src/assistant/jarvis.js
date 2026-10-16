@@ -10,6 +10,7 @@
   let inboxMonitor=null,inboxState=null,announcements=[],messageAudioArmed=false,speechCompletion=null;
   let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null,records=null,recordsView=null,live=null,liveHasReplied=false,liveOwnerText='';
   settings.liveVoice=true;
+  let connectionCheck=null,appToolsSelected=false;
   const ios=()=>/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   settings.messageAnnouncements=true;
   const motion={input:0,output:0,speech:false,inputPulse:-Infinity,outputPulse:-Infinity,measuredOutput:false};
@@ -143,7 +144,11 @@
     }
     add('Jarvis · WhatsApp',words);speak(words);
   }
-  async function checkConnection(){
+  function checkConnection(){
+    if(connectionCheck)return connectionCheck;
+    connectionCheck=refreshConnection().finally(()=>{connectionCheck=null;});return connectionCheck;
+  }
+  async function refreshConnection(){
     if(!DEV_MODE&&!transport()){health={ready:false,message:'Jarvis on other devices needs the live relay. App tools work here without an AI connection.'};updateConnection();return;}
     const opened=root;
     try{const res=await jarvisFetch('/api/jarvis/health',{cache:'no-store',signal:AbortSignal.timeout(viaRelay()?22000:5000)});const data=await res.json().catch(()=>({}));if(root!==opened)return;if(!res.ok)throw Object.assign(Error(),{detail:typeof data.error==='string'?data.error:''});health={ready:data.ready===true,route:data.route,message:data.message,speech:data.speech,conversation:data.conversation,liveVoice:data.liveVoice};requestToken=typeof data.requestToken==='string'?data.requestToken:'';if(health.ready&&requestToken)mode='hermes';}
@@ -308,7 +313,7 @@
     el('jarvis-review-note').textContent=review.understanding?'Checking your latest request. Review again before sending.':review.heard?'Say “Approve and send”, or approve below.':'Listen to the full read-back before approving by voice, or review below.';
   }
   function ensureWhatsAppConversation(){
-    if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,onChange:renderVoiceReview});return waConversation;
+    if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,getToken:()=>requestToken,onChange:renderVoiceReview});return waConversation;
   }
   function ensureRecords(){if(!records&&window.SV_JARVIS_RECORDS)records=SV_JARVIS_RECORDS.create();return records;}
   function closeRecords(){if(focus?.data.kind==='records')clearFocus();const node=el('jarvis-records');if(node)node.hidden=true;if(!waEmbedded)root?.classList.remove('has-context');}
@@ -425,7 +430,7 @@
   function ensureLiveVoice(){
     if(live||!window.SV_JARVIS_LIVE)return live;
     live=SV_JARVIS_LIVE.create({
-      connect:async signal=>{const r=await jarvisFetch('/api/jarvis/live-session',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:'{}',signal});const data=await r.json();if(!r.ok)throw Error(data.error||'The live voice agent could not connect.');return data;},
+      connect:async signal=>{if(connectionCheck)await connectionCheck;else if(!health.liveVoice?.available||!requestToken)await checkConnection();if(signal.aborted)throw Object.assign(Error('Connection cancelled'),{name:'AbortError'});if(!health.liveVoice?.available||!requestToken)throw Error('Live conversation is not connected. Check the Jarvis PC and Voice settings.');const r=await jarvisFetch('/api/jarvis/live-session',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:'{}',signal});const data=await r.json();if(!r.ok)throw Error(data.error||'The live voice agent could not connect.');return data;},
       context:liveContext,
       onUser:text=>{
         if(!root||document.hidden)return true;liveOwnerText=text;cancelReply();clearFocus();error('');add('You',text);
@@ -499,7 +504,9 @@
   /* Browsing WhatsApp no longer disables conversation; editing its text box pauses dictation. */
   function startVoice(){
     if(['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))document.activeElement.blur?.();
-    if(settings.liveVoice&&settings.customVoice&&mode==='hermes'&&health.liveVoice?.available&&window.SV_JARVIS_LIVE){
+    // A tap during the initial health check must wait for live credentials, never silently
+    // start the much slower browser-recognition → Hermes → separate TTS loop.
+    if(settings.liveVoice&&settings.customVoice&&!appToolsSelected&&(health.liveVoice?.available||connectionCheck)&&window.SV_JARVIS_LIVE){
       if(settings.muted){error('Unmute replies in Voice settings to start a live conversation.');return;}
       stop();liveHasReplied=false;customFallback=false;prepareAudio();prepareSpeech();void ensureLiveVoice().start();return;
     }
@@ -585,7 +592,7 @@
     root.addEventListener('focusin',event=>{if(event.target?.id==='wa-editor'&&(voice?.active||live?.active))pauseVoice('Paused while you edit the WhatsApp reply.');});
     el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();if(live?.active){if(!live.ready){error('The live connection is still starting. Wait a moment, then send your message.');return;}const input=el('jarvis-input'),text=input.value.trim();if(text){input.value='';input.blur?.();live.sendText(text);}return;}cancelReply();prepareAudio();prepareSpeech();const text=el('jarvis-input').value;void send(text);});
     el('jarvis-voice-choice').addEventListener('change',e=>{stop();customFallback=false;settings.liveVoice=e.target.value==='live';settings.customVoice=e.target.value!=='device';updateConnection();});
-    el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&live?.active)pauseVoice('Paused while replies are muted.');if(settings.muted&&(phase==='speaking'||customAudio?.active)){cancelReply();replyDone();}});
+    el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';appToolsSelected=mode==='local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&live?.active)pauseVoice('Paused while replies are muted.');if(settings.muted&&(phase==='speaking'||customAudio?.active)){cancelReply();replyDone();}});
     el('jarvis-data-note').textContent=DEV_MODE?'This local preview uses fictional data until you restore your private app backup in Settings. Hermes receives a limited operations summary when you send an agent message.':'App tools read your current app data. Hermes runs on the Jarvis PC; other devices reach it through the live relay.';
     el('jarvis-message-alerts').checked=settings.messageAnnouncements;el('jarvis-message-alerts').addEventListener('change',e=>{settings.messageAnnouncements=e.target.checked;if(!settings.messageAnnouncements)announcements=[];});
     if(viaRelay())el('jarvis-relay').hidden=false;
@@ -598,7 +605,7 @@
     inboxMonitor?.stop();inboxMonitor=null;announcements=[];inboxState=null;messageAudioArmed=false;
     stop();
     if(waEmbedded&&window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();waEmbedded=false;
-    customAudio?.dispose();customAudio=null;ringCleanup?.();ringCleanup=null;root?.remove();root=null;panel=null;requestToken='';mode='local';
+    customAudio?.dispose();customAudio=null;ringCleanup?.();ringCleanup=null;root?.remove();root=null;panel=null;requestToken='';mode='local';appToolsSelected=false;
     if(background&&!wasInert)background.removeAttribute('inert');background=null;try{void audioContext?.close().catch(()=>{});}catch{}audioContext=null;returnFocus?.focus?.();returnFocus=null;
   }
   document.addEventListener('visibilitychange',()=>{if(!root)return;if(document.hidden){waConversation?.cancel();inboxMonitor?.stop();inboxMonitor=null;announcements=[];stop();}else startInbox();});

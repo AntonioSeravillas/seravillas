@@ -4,7 +4,7 @@
   const SILENCE='data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==';
   function sections(text){
     const out=[];let rest=String(text||'').trim();
-    while(rest){if(rest.length<=600){out.push(rest);break;}let cut=rest.lastIndexOf('. ',600);if(cut<180)cut=rest.lastIndexOf(' ',600);if(cut<1)cut=600;else cut++;out.push(rest.slice(0,cut).trim());rest=rest.slice(cut).trim();}
+    while(rest){const limit=out.length?600:220;if(rest.length<=limit){out.push(rest);break;}let cut=rest.lastIndexOf('. ',limit);if(cut<(out.length?180:70))cut=rest.lastIndexOf(' ',limit);if(cut<1)cut=limit;else cut++;out.push(rest.slice(0,cut).trim());rest=rest.slice(cut).trim();}
     return out;
   }
   function createPlayer({request,onStart=()=>{},onDone=()=>{},onError=()=>{},makeAudio=()=>new Audio(),urlApi=URL,makeBlob=(bytes)=>new Blob([bytes],{type:'audio/mpeg'}),decode=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0)),schedule=setTimeout,clear=clearTimeout}={}){
@@ -30,12 +30,20 @@
       const current=()=>id===turn;
       const fail=message=>{if(!current())return;stop();onError(message);};
       try{
-        for(const section of sections(text)){
+        const parts=sections(text);let ahead=null;
+        const load=async section=>{
           let payload=cache.get(section);
           if(!payload){payload=await request(section,signal);if(!current())return;
             if(payload?.contentType!=='audio/mpeg'||typeof payload.audio!=='string'||payload.audio.length<24||payload.audio.length>240000||!/^[A-Za-z0-9+/]+={0,2}$/.test(payload.audio))throw Error('The voice service returned invalid audio.');
             cache.set(section,payload);if(cache.size>12)cache.delete(cache.keys().next().value);
           }
+          return payload;
+        };
+        // Generate at most one section ahead while the current one is actually playing.
+        // Catch immediately so a cancelled/failed prefetch never becomes an unhandled error.
+        const prefetch=section=>load(section).then(payload=>({payload}),error=>({error}));
+        for(let index=0;index<parts.length;index++){
+          const loaded=await (ahead||prefetch(parts[index]));ahead=null;if(loaded.error)throw loaded.error;const payload=loaded.payload;
           if(!current())return;
           if(objectUrl)urlApi.revokeObjectURL(objectUrl);
           objectUrl=urlApi.createObjectURL(makeBlob(decode(payload.audio)));a.src=objectUrl;a.volume=1;a.muted=false;
@@ -43,7 +51,7 @@
             let ended=false;const valid=()=>current()&&!ended;
             const finish=()=>{if(!valid())return;ended=true;clearTimer();resolve();};
             const failed=()=>{if(!valid())return;ended=true;clearTimer();reject(Error('Audio could not play. Tap Play reply to enable it on this device.'));};
-            a.onplaying=()=>{if(!valid())return;clearTimer();onStart();timer=schedule(failed,90000);};
+            a.onplaying=()=>{if(!valid())return;clearTimer();onStart();if(!ahead&&index+1<parts.length)ahead=prefetch(parts[index+1]);timer=schedule(failed,90000);};
             a.onended=finish;a.onerror=failed;
             timer=schedule(failed,10000);try{a.play()?.catch(failed);}catch{failed();}
             /* Settle the promise on cancellation too; late events cannot affect another turn. */

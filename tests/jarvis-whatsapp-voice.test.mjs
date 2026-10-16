@@ -21,7 +21,7 @@ test('AI-resolved wording, follow-up bodies, pronouns and edits use the same rev
   r=await h.workflow.handle('How are you?',{intent:{kind:'body',text:'How are you?'}});assert.equal(h.workflow.snapshot().text,'How are you?');
   h.workflow.clearPending();await h.workflow.handle('Approve and send');assert.equal(h.sent.length,1);
 });
-function harness({intercept=null,duplicate=false}={}){
+function harness({intercept=null,duplicate=false,getToken=()=>''}={}){
   let clock=10000;const sent=[],calls=[],views=[],context=vm.createContext({window:{},AbortController,setTimeout,clearTimeout});vm.runInContext(source,context);
   const service=createWhatsAppService({store:createMemoryStore(),now:()=>clock,connector:{status:()=>({state:'open'}),sendText:async(jid,text)=>{sent.push({jid,text});return {id:'out-'+sent.length};}}});
   const incoming=(id,text,jid='34600000001@s.whatsapp.net',name='Bex')=>service.receive({chatJid:jid,providerId:id,text,senderName:name,timestamp:100,live:true});
@@ -36,9 +36,17 @@ function harness({intercept=null,duplicate=false}={}){
       if(action==='review')return reply(service.review(body.chat,body));if(action==='read')return reply(service.markRead(body));if(action==='send')return reply(await service.send(body.chat,body));throw Error('Unexpected endpoint');
     }catch(e){return reply({error:e.message},e.status||500);}
   };
-  const workflow=context.window.SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl,now:()=>clock,onChange:view=>views.push(view)});
+  const workflow=context.window.SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl,getToken,now:()=>clock,onChange:view=>views.push(view)});
   return {workflow,service,sent,calls,views,incoming,tick:ms=>{clock+=ms;},parse:context.window.SV_JARVIS_WHATSAPP_VOICE.parse};
 }
+test('a verified app session skips the redundant inbox status round trip without changing review or approval',async()=>{
+  const h=harness({getToken:()=> 'FICTIONAL_SESSION'});
+  const r=await h.workflow.handle('',{intent:{kind:'write',name:'Bex',text:'Hello'}});
+  assert.match(r.text,/Message to Bex/);assert.equal(h.calls.some(c=>c.url.endsWith('/status')),false);
+  assert.equal(h.workflow.snapshot().heard,false);assert.equal(h.sent.length,0);
+  await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);r.afterSpoken();
+  await h.workflow.handle('Approve and send');assert.equal(h.sent.length,1);
+});
 test('natural voice requests support read, recent, unread and two-turn dictation; dictated approval words remain message data',()=>{
   const {parse}=harness();for(const text of ['Read Bex’s messages','Can you read messages from Bex?','Jarvis, read the WhatsApp messages from Bex'])assert.equal(parse(text).kind,'read',text);
   for(const text of ['Read my messages','Read my WhatsApp messages','Do we have any WhatsApp messages?'])assert.equal(parse(text).kind,'recent',text);

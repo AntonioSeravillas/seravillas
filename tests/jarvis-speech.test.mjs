@@ -72,6 +72,14 @@ test('cancel/close aborts generation and drops late audio; playback errors never
   const failed=h.player.play('Will not play');h.pending[2](audioResult);await flush();h.audio().onerror();await failed;
   assert.equal(h.requests.length,3);assert.equal(h.events.includes('done'),false);assert.ok(h.events.some(e=>/Tap Play reply/.test(e)));assert.equal(h.timers.size,0);
 });
+test('exact read-backs start with a short section and prepare only the next section during playback',async()=>{
+  const h=playerHarness(),text=('A complete sentence for the owner to review. ').repeat(25),parts=h.sections(text);
+  assert.ok(parts[0].length<=220);assert.equal(parts.join(' '),text.trim());
+  const play=h.player.play(text);h.pending[0](audioResult);await flush();assert.equal(h.requests.length,1);
+  h.audio().onplaying();assert.equal(h.requests.length,2);assert.equal(h.events.includes('done'),false);
+  const late=h.pending[1];h.player.stop();assert.equal(h.requests[1].signal.aborted,true);late(audioResult);await play;
+  assert.equal(h.events.includes('done'),false);assert.equal(h.requests.length,2);
+});
 test('a pending media unlock is bounded and stop settles it; a late unlock cannot pause a newer reply',async()=>{
   const h=playerHarness();let release;h.audio();
   // First create the media, then simulate Safari leaving play() pending.

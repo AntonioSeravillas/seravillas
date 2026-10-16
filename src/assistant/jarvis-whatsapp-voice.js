@@ -26,12 +26,15 @@
     return null;
   }
   const words=m=>(m.kind==='group'?'In '+m.name+(m.sender?', '+m.sender:''):'From '+m.name)+': '+(m.text||m.media?.label||m.media||'Attachment, not downloaded.');
-  function create({fetchImpl,now=()=>Date.now(),onChange=()=>{}}={}){
+  function create({fetchImpl,getToken=()=>'',now=()=>Date.now(),onChange=()=>{}}={}){
     let token='',pending=null,lastRecipient=null,epoch=0,request=null,busy=false;
     const snapshot=()=>pending?.stage==='review'?{stage:'review',name:pending.review.recipient.name,detail:pending.review.recipient.detail,text:pending.review.text,heard:pending.heard===true,understanding:pending.understanding===true}:pending?{stage:pending.stage,name:pending.name||''}:null;
     const changed=()=>onChange(snapshot());
     const reset=()=>{pending=null;changed();};
     async function api(action,{body,chat}={},signal){
+      // The health and inbox endpoints share the same owner session token. Reuse the
+      // authenticated connection rather than paying for another relay status round trip.
+      if(!token)token=String(getToken()||'');
       if(!token){const r=await fetchImpl(API+'status',{cache:'no-store',signal});const s=await r.json();if(!r.ok||!s.available||!s.requestToken)throw Error(s.error||'The WhatsApp inbox is not connected.');token=s.requestToken;}
       const res=await fetchImpl(API+action+(chat?'?chat='+encodeURIComponent(chat):''),{method:body?'POST':'GET',headers:{'X-Jarvis-Session-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',signal});
       const data=await res.json();if(signal?.aborted)throw Object.assign(Error('Cancelled'),{name:'AbortError'});if(!res.ok){if(res.status===403)token='';throw Object.assign(Error(data.error||'WhatsApp could not complete that.'),{status:res.status});}return data;

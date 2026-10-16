@@ -25,6 +25,7 @@ test('private live voice uses a fixed agent, returns only a short-lived credenti
 test('agent configuration preserves the chosen voice, private authentication, short retention and no send/approval tool',()=>{
   const c=agentConfiguration('VOICE_TEST_123456789');assert.equal(c.conversation_config.tts.voice_id,'VOICE_TEST_123456789');assert.equal(c.conversation_config.tts.model_id,'eleven_v3_conversational');assert.equal(c.platform_settings.auth.enable_auth,true);assert.equal(c.platform_settings.privacy.record_voice,false);assert.equal(c.platform_settings.call_limits.bursting_enabled,false);assert.equal(c.conversation_config.conversation.max_duration_seconds,600);assert.ok(c.conversation_config.turn.turn_timeout>c.conversation_config.turn.silence_end_call_timeout);assert.ok(c.conversation_config.turn.initial_wait_time>c.conversation_config.turn.silence_end_call_timeout);
   assert.deepEqual(c.conversation_config.agent.prompt.tools.map(t=>t.name),['lookup_records','whatsapp_request','ask_hermes']);assert.ok(!JSON.stringify(c).includes(config.apiKey));
+  assert.equal(c.conversation_config.agent.prompt.thinking_budget,0);
 });
 test('one opt-in creates one WebRTC session; transcripts deduplicate, live replies are not sent through a second TTS and pause releases everything',async()=>{
   const h=harness();await h.player.start();await h.player.start();const o=h.options();assert.equal(o.connectionType,'webrtc');assert.equal(h.events.filter(e=>e[0]==='track').length,1);

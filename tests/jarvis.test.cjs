@@ -89,7 +89,7 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null}={}){
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null}={}){
   const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
   /* Setting innerHTML registers every element that has an id, with its initial text and hidden state from the real markup. */
@@ -112,6 +112,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
     matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(u){if(inGesture)speechUnlocked=true;if(speechGate&&!speechUnlocked)return;spoken.push(u);audioEvents.push(u.text.trim()?'reply':'prime');},cancel(){audioEvents.push('cancel');},getVoices:()=>[]},
     D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>agent?{kind:'chat'}:{kind:'reply',message:reply})}};
   if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async(url,init)=>{
+    if(String(url).endsWith('/health')&&healthGate)await healthGate;
     await Promise.resolve();if(whatsappFetch&&String(url).includes('/whatsapp/'))return whatsappFetch(String(url),init);
     if(String(url).endsWith('/live-session'))return {ok:true,json:async()=>({conversationToken:'EPHEMERAL_ONLY',maxDurationSeconds:600})};
     if(String(url).endsWith('/speech')){speechRequests.push(JSON.parse(init.body));return {ok:!speechError,json:async()=>speechError?{error:speechError}:{contentType:'audio/mpeg',audio:Buffer.alloc(100,7).toString('base64')}};}
@@ -136,6 +137,19 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 }
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+test('an early microphone tap waits for live health instead of silently entering the slow Hermes speech loop',async()=>{
+  for(const desktop of [true,false]){
+    let release,options,starts=0;const healthGate=new Promise(r=>{release=r;});
+    const liveSdk={Conversation:{startSession:async o=>{starts++;options=o;return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0};}}};
+    const app=desktopRuntime({agent:true,desktop,liveSdk,healthGate});app.run('openJarvis()');app.click('mic');
+    await flush();assert.equal(app.phase(),'connecting');assert.equal(app.recs.length,0);assert.equal(starts,0);
+    release();await flush();assert.equal(options.connectionType,'webrtc');assert.equal(starts,1);assert.equal(app.recs.length,0);app.click('close');
+  }
+});
+test('closing during the initial live health check cannot start late recording or a legacy fallback',async()=>{
+  let release,starts=0;const healthGate=new Promise(r=>{release=r;});
+  const app=desktopRuntime({agent:true,healthGate,liveSdk:{Conversation:{startSession:async()=>{starts++;}}}});app.run('openJarvis()');app.click('mic');await flush();app.click('close');release();await flush();assert.equal(starts,0);assert.equal(app.recs.length,0);
+});
 test('live overlay on desktop and phone: direct records, one voice, exact WhatsApp read-back and owner-only approval',async()=>{
   for(const desktop of [true,false]){
     let options,ended=0;const mic=[],sends=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1};
