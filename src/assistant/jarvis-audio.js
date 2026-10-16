@@ -63,5 +63,51 @@
     }
     return {prepare,play,stop,get active(){return playing;},dispose(){stop();cache.clear();audio=null;}};
   }
-  window.SV_JARVIS_AUDIO=Object.freeze({createPlayer,sections});
+  /* PCM over authenticated NDJSON works without MediaSource/MP3 streaming support on iPhone.
+     End-of-network is not end-of-playback: completion waits for every source's actual ended event. */
+  function createStreamingPlayer({request,onStart=()=>{},onDone=()=>{},onError=()=>{},makeContext=()=>new (window.AudioContext||window.webkitAudioContext)(),decode=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0)),schedule=setTimeout,clear=clearTimeout}={}){
+    let context=null,turn=0,controller=null,active=false;const sources=new Set(),timers=new Set();
+    const later=(fn,ms)=>{const timer=schedule(()=>{timers.delete(timer);fn();},ms);timers.add(timer);return timer;};
+    function stop(){turn++;controller?.abort();controller=null;active=false;for(const t of timers)clear(t);timers.clear();for(const s of sources){s.onended=null;try{s.stop();s.disconnect();}catch{}}sources.clear();}
+    function prepare(){try{if(!context||context.state==='closed')context=makeContext();const ready=context.resume();const source=context.createBufferSource();source.buffer=context.createBuffer(1,1,24000);source.connect(context.destination);source.onended=()=>source.disconnect();source.start();return Promise.resolve(ready);}catch{return Promise.resolve();}}
+    async function play(text){
+      stop();const id=turn;controller=new AbortController();const signal=controller.signal;active=true;
+      let networkDone=false,started=false,nextAt=0,frameCount=0;
+      const current=()=>id===turn;
+      const finish=()=>{if(current()&&networkDone&&frameCount>0&&!sources.size){stop();onDone();}};
+      const fail=message=>{if(current()){stop();onError(message);}};
+      try{
+        if(!context||context.state==='closed')throw Error('Tap Play reply to enable the speaker on this device.');
+        if(context.state!=='running')await Promise.race([context.resume(),new Promise((_,reject)=>later(()=>reject(Error('Tap Play reply to enable audio.')),5000))]);
+        if(!current())return;
+        later(()=>fail('The voice reply did not finish. Tap Play reply to try again.'),180000);
+        const parts=sections(text);if(!parts.length||parts.length>20)throw Error('The spoken reply is too long.');
+        for(const part of parts){
+          const response=await request(part,signal);if(!current())return;
+          if(!response.ok){let data={};try{data=await response.json();}catch{}response.releaseSpeech?.();throw Error(data.error||'Fish free voice could not start.');}
+          if(!response.body?.getReader||!String(response.headers.get('content-type')||'').startsWith('application/x-ndjson')){response.releaseSpeech?.();throw Error('The voice stream returned an unexpected format.');}
+          const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',seq=0,ended=false,total=0;
+          function packet(item){
+            if(!current())throw Object.assign(Error('Cancelled'),{name:'AbortError'});
+            if(ended)throw Error('Unexpected audio after completion.');
+            if(item.type==='error')throw Error(typeof item.message==='string'?item.message:'The voice stream was interrupted.');
+            if(item.type==='end'){if(!seq||item.frames!==seq)throw Error('The voice reply was incomplete.');ended=true;return;}
+            if(item.type!=='audio'||item.seq!==seq++||item.sampleRate!==24000||typeof item.audio!=='string'||item.audio.length>32768||!/^[A-Za-z0-9+/]+={0,2}$/.test(item.audio))throw Error('The voice stream contained an invalid frame.');
+            const bytes=decode(item.audio);total+=bytes.length;if(!bytes.length||bytes.length%2||total>2880000)throw Error('The voice reply exceeded its audio limit.');
+            const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),samples=new Float32Array(bytes.length/2);for(let i=0;i<samples.length;i++)samples[i]=view.getInt16(i*2,true)/32768;
+            const audio=context.createBuffer(1,samples.length,24000);audio.copyToChannel(samples,0);
+            const source=context.createBufferSource();source.buffer=audio;source.connect(context.destination);sources.add(source);frameCount++;
+            const at=Math.max(context.currentTime+.05,nextAt);nextAt=at+audio.duration;
+            source.onended=()=>{sources.delete(source);source.disconnect();finish();};source.start(at);
+            if(!started){started=true;later(()=>{if(current())onStart();},Math.max(0,(at-context.currentTime)*1000));}
+          }
+          try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let end;while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);if(line.length>45000)throw Error('The voice stream frame was too large.');if(line)packet(JSON.parse(line));}if(buffer.length>45000)throw Error('The voice stream frame was too large.');}buffer+=decoder.decode();if(buffer.trim())packet(JSON.parse(buffer));if(!ended)throw Error('The voice connection ended before the reply finished.');}
+          finally{try{await reader.cancel();}catch{}reader.releaseLock();response.releaseSpeech?.();}
+        }
+        networkDone=true;finish();
+      }catch(error){if(current())fail(error.message||'Fish free voice was interrupted.');}
+    }
+    return {prepare,play,stop,get active(){return active;},dispose(){stop();void context?.close?.();context=null;}};
+  }
+  window.SV_JARVIS_AUDIO=Object.freeze({createPlayer,createStreamingPlayer,sections});
 })();

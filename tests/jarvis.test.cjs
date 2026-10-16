@@ -89,7 +89,7 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null,voiceChoice=liveSdk?'live':customSpeech?'elevenlabs':null,voiceStorage=null}={}){
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,fishSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null,voiceChoice=liveSdk?'live':customSpeech?'elevenlabs':null,voiceStorage=null}={}){
   const savedVoice=voiceStorage||new Map(voiceChoice?[['sv_jarvis_voice',voiceChoice]]:[]);
   const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
@@ -120,11 +120,17 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
     return {ok:true,json:async()=>String(url).endsWith('/health')?{ready:true,requestToken:'local-test',route:'n8n',...(liveSdk?{liveVoice:{available:true}}:{}),...(understand?{conversation:1}:{}),...(customSpeech?{speech:{available:true,provider:'elevenlabs',name:'Jarvis Seravillas'}}:{})}:understand?{decision:await understand(JSON.parse(init.body))}:{reply}};
   };}
   sandbox.window=sandbox;
+  const pcmSources=[];
+  if(fishSpeech){
+    Object.assign(sandbox,{TextDecoder,DataView,Response,AudioContext:class{constructor(){this.state='running';this.currentTime=0;this.destination={};}resume(){return Promise.resolve();}close(){}createBuffer(_,length,rate){return {duration:length/rate,copyToChannel(){}};}createBufferSource(){const source={connect(){},disconnect(){},start(){},stop(){this.stopped=true;}};pcmSources.push(source);return source;}}});
+    const originalFetch=sandbox.fetch;sandbox.fetch=async(url,init)=>{const res=await originalFetch(url,init);if(String(url).endsWith('/health')){const data=await res.json();delete data.liveVoice;return {ok:true,json:async()=>({...data,speech:{available:true,provider:'fish',streaming:true}})};}return res;};
+    sandbox.SV_JARVIS_TRANSPORT={fetch:(...args)=>sandbox.fetch(...args),remote:()=>false,speechStream:async text=>{speechRequests.push({text});return new Response(JSON.stringify({type:'audio',seq:0,sampleRate:24000,audio:Buffer.alloc(4800,3).toString('base64')})+'\n'+JSON.stringify({type:'end',frames:1})+'\n',{headers:{'Content-Type':'application/x-ndjson'}});}};
+  }
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
   for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
-  const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,speechRequests,wa,timers,background,winListeners,rafs,
+  const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,pcmSources,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
     click(j,extra={}){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j,...extra}})}});}finally{inGesture=false;}},
     submit(text){app.el('jarvis-input').value=text;inGesture=true;try{app.el('jarvis-form').listeners.submit({preventDefault(){}});}finally{inGesture=false;}},
@@ -138,6 +144,15 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 }
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+test('Fish desktop and phone use incremental PCM, replace a saved live-agent choice and wait for actual playback completion',async()=>{
+  for(const desktop of [true,false]){
+    let starts=0;const app=desktopRuntime({agent:true,desktop,fishSpeech:true,voiceChoice:'live',liveSdk:{Conversation:{startSession:async()=>{starts++;}}},understand:async()=>({kind:'reply',text:'Ready when you are.'})});
+    app.run('openJarvis()');await flush();assert.equal(app.el('jarvis-voice-choice').value,'fish');app.submit('Hello');for(let i=0;i<4;i++)await flush();
+    assert.equal(starts,0);assert.equal(app.utterances.length,0);assert.equal(app.speechRequests.length,1);assert.equal(app.speechRequests[0].text,'Ready when you are.');
+    app.runDelay(50);assert.equal(app.phase(),'speaking');const sources=app.pcmSources.filter(s=>s.buffer?.duration>0.001);assert.equal(sources.length,1);
+    sources[0].onended();await flush();assert.notEqual(app.phase(),'speaking');app.click('close');
+  }
+});
 test('free voice defaults on desktop and phone, makes no paid speech/session call, and an explicit choice survives reload',async()=>{
   for(const desktop of [true,false]){
     const saved=new Map();let starts=0;const liveSdk={Conversation:{startSession:async()=>{starts++;}}};

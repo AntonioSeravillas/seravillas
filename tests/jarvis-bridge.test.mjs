@@ -23,6 +23,15 @@ async function fixture(t,options={}){
   const server=createJarvisServer({port:5500,apiKey:'HERMES_SECRET_SENTINEL',fetchImpl,...options});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));const base='http://127.0.0.1:'+server.address().port;
   const request=(pathname,init={})=>fetch(base+pathname,init);return {request,requests,origin:base};
 }
+test('local Fish streaming requires the session and JSON, exposes audio only and completes with a verified frame count',async t=>{
+  let calls=0;const f=await fixture(t,{speechProvider:{status:()=>({available:true,provider:'fish'}),stream:async(text,push)=>{calls++;assert.equal(text,'Fictional sample');await push({type:'audio',sampleRate:24000,audio:'AAAA'});return {frames:1};}}});
+  const health=await(await f.request('/api/jarvis/health')).json(),url='/api/jarvis/speech-stream',body=JSON.stringify({text:'Fictional sample'}),headers={'X-Jarvis-Session-Token':health.requestToken,'Content-Type':'application/json'};
+  assert.equal((await f.request(url,{method:'POST',body})).status,403);
+  assert.equal((await f.request(url,{method:'POST',headers:{'X-Jarvis-Session-Token':health.requestToken},body})).status,415);
+  assert.equal((await f.request(url,{method:'POST',headers,body:JSON.stringify({text:'Fictional sample',voiceId:'other'})})).status,400);
+  assert.equal(calls,0);const response=await f.request(url,{method:'POST',headers,body});assert.match(response.headers.get('content-type'),/ndjson/);
+  assert.deepEqual((await response.text()).trim().split('\n').map(JSON.parse),[{type:'audio',sampleRate:24000,audio:'AAAA',seq:0},{type:'end',frames:1}]);assert.equal(calls,1);
+});
 test('local auth, origin checks and private-file denial protect the agent route',async t=>{
   const f=await fixture(t);
   assert.equal((await f.request('/api/jarvis/health',{headers:{Origin:'https://evil.invalid'}})).status,403);

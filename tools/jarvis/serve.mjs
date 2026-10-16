@@ -7,6 +7,7 @@ import {randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {CONVERSATION_SYSTEM,conversationContext,parseDecision} from './conversation.mjs';
 import {createElevenLabsAgent} from './elevenlabs-agent.mjs';
 import {loadVoiceConfig} from './elevenlabs-voice.mjs';
+import {createFishVoice,loadFishConfig} from './fish-voice.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const MAX_BODY=90000;
@@ -105,7 +106,7 @@ export async function createDefaultWhatsApp({hermesUrl,apiKey,runtimeDir=process
 }
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.woff2':'font/woff2','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.wav':'audio/wav'};
 
-export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl='http://127.0.0.1:8642/p/seravillas/',n8nUrl='http://127.0.0.1:5678/webhook/seravillas-jarvis',n8nKey='',fetchImpl=fetch,appRoot=root,whatsapp=null,liveVoice=null}={}){
+export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl='http://127.0.0.1:8642/p/seravillas/',n8nUrl='http://127.0.0.1:5678/webhook/seravillas-jarvis',n8nKey='',fetchImpl=fetch,appRoot=root,whatsapp=null,liveVoice=null,speechProvider=null}={}){
   const hermes=hermesBase(hermesUrl),workflow=localUrl(n8nUrl),token=randomBytes(32).toString('hex');let busy=false,waService=null,waLoading=null;
   /* whatsapp is a factory. It runs only after a token-checked inbox request, so constructing the server reads no WhatsApp files. */
   async function getWhatsApp(){
@@ -161,7 +162,16 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
       if(!currentHosts().has(req.headers.host)){send(res,403,{error:'Invalid local host.'});return;}
       if(!validOrigin(req)){send(res,403,{error:'Cross-origin requests are not allowed.'});return;}
       const url=new URL(req.url,'http://127.0.0.1:'+port);
-      if(url.pathname==='/api/jarvis/health'&&req.method==='GET'){send(res,200,{...await readiness(),route,conversation:1,...(liveVoice?{liveVoice:liveVoice.status()}:{}),requestToken:token});return;}
+      if(url.pathname==='/api/jarvis/health'&&req.method==='GET'){send(res,200,{...await readiness(),route,conversation:1,...(speechProvider?{speech:speechProvider.status()}:{}),...(liveVoice?{liveVoice:liveVoice.status()}:{}),requestToken:token});return;}
+      if(url.pathname==='/api/jarvis/speech-stream'&&req.method==='POST'){
+        if(!sameToken(req.headers['x-jarvis-session-token'],token)){send(res,403,{error:'Reopen Jarvis to refresh its local connection.'});return;}
+        if(!String(req.headers['content-type']||'').startsWith('application/json')){send(res,415,{error:'JSON is required.'});return;}
+        const input=await parseBody(req,4096);if(!input||typeof input.text!=='string'||Object.keys(input).some(k=>k!=='text')||!input.text.trim()||input.text.length>600){send(res,400,{error:'Invalid speech section.'});return;}
+        if(!speechProvider?.stream){send(res,503,{error:'Fish voice is not configured on the PC.'});return;}
+        const controller=new AbortController();res.on('close',()=>controller.abort());res.writeHead(200,{'Content-Type':'application/x-ndjson','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});let seq=0;
+        try{const result=await speechProvider.stream(input.text,frame=>{if(controller.signal.aborted)throw Error('Cancelled');res.write(JSON.stringify({...frame,seq:seq++})+'\n');},{signal:controller.signal});if(!controller.signal.aborted)res.end(JSON.stringify({type:'end',frames:result.frames})+'\n');}
+        catch(e){if(!controller.signal.aborted)res.end(JSON.stringify({type:'error',message:e.message})+'\n');}return;
+      }
       if(url.pathname==='/api/jarvis/live-session'&&req.method==='POST'){
         if(!sameToken(req.headers['x-jarvis-session-token'],token)){send(res,403,{error:'Reopen Jarvis to refresh its local connection.'});return;}
         const input=await parseBody(req);if(!input||Object.keys(input).length){send(res,400,{error:'This voice connection takes no parameters.'});return;}
@@ -204,6 +214,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
   const route=process.env.JARVIS_ROUTE==='n8n'?'n8n':'hermes';
   const apiKey=process.env.HERMES_API_KEY||'';
   const whatsapp=process.env.JARVIS_WHATSAPP==='off'?null:()=>createDefaultWhatsApp({hermesUrl:'http://127.0.0.1:8642/p/seravillas/',apiKey});
-  const liveVoice=createElevenLabsAgent({config:loadVoiceConfig()});
-  createJarvisServer({port,route,apiKey,n8nKey:process.env.JARVIS_N8N_KEY||'',whatsapp,liveVoice}).listen(port,'127.0.0.1',()=>console.log('Jarvis pilot: http://127.0.0.1:'+port+' · '+route+' · cloud sync disabled in this preview'));
+  const speechProvider=createFishVoice({config:loadFishConfig()});
+  const liveVoice=speechProvider?null:createElevenLabsAgent({config:loadVoiceConfig()});
+  createJarvisServer({port,route,apiKey,n8nKey:process.env.JARVIS_N8N_KEY||'',whatsapp,liveVoice,speechProvider}).listen(port,'127.0.0.1',()=>console.log('Jarvis pilot: http://127.0.0.1:'+port+' · '+route+' · cloud sync disabled in this preview'));
 }

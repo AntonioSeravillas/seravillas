@@ -72,6 +72,21 @@
     return job.op==='wa-send'?UNCERTAIN():reply(504,{error:'The Jarvis PC did not answer in time. Check that it is on and the live relay is running.'});
   }
   function jarvisFetch(url,init={}){return remote()?relayFetch(url,init):fetch(url,init);}
+  async function speechStream(text,{signal,token}={}){
+    if(typeof text!=='string'||!text.trim()||text.length>600)throw Error('Invalid spoken section.');
+    if(!remote())return fetch('/api/jarvis/speech-stream',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':token||''},body:JSON.stringify({text}),signal});
+    if(!relayUrl()||!secret())throw Error('Sign in to the live app before using Jarvis remotely.');
+    const headers={'Content-Type':'application/json','X-Secret':secret()};
+    const posted=await fetch(relayUrl()+'/api/relay/jobs',{method:'POST',headers,body:JSON.stringify({op:'speech-stream',params:{text}}),cache:'no-store',signal});
+    let accepted={};try{accepted=await posted.json();}catch{}
+    if(!posted.ok||!/^[a-f0-9]{64}$/.test(accepted.jobId||''))throw Error(accepted.error||'The PC could not start the voice stream.');
+    const base=relayUrl()+'/api/relay/jobs/'+accepted.jobId+'/audio';
+    const cancel=()=>{void fetch(base+'/cancel',{method:'POST',headers,body:'{}',cache:'no-store',keepalive:true}).catch(()=>{});};
+    if(signal?.aborted){cancel();throw Object.assign(Error('Cancelled'),{name:'AbortError'});}
+    signal?.addEventListener('abort',cancel,{once:true});
+    try{const response=await fetch(base,{headers:{'X-Secret':secret()},cache:'no-store',signal});response.releaseSpeech=()=>signal?.removeEventListener('abort',cancel);return response;}
+    catch(error){signal?.removeEventListener('abort',cancel);cancel();throw error;}
+  }
   /* Owner-only PC registration. The one-time code is returned to the caller for display and is never stored. */
   async function device(method,payload){
     if(!remote()||!relayUrl()||!secret())throw Error('Use this from the signed-in live app.');
@@ -81,7 +96,7 @@
     return data;
   }
   window.SV_JARVIS_TRANSPORT=Object.freeze({
-    fetch:jarvisFetch,remote,
+    fetch:jarvisFetch,remote,speechStream,
     timeoutFor:(local,remoteMs)=>remote()?remoteMs:local,
     deviceStatus:()=>device('GET'),
     registerDevice:async()=>{const data=await device('POST',{action:'register'});return {deviceToken:String(data.deviceToken||'')};},

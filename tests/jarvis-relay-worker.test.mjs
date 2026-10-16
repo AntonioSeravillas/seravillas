@@ -27,6 +27,46 @@ function setup(){
   return {env,sql,call,manager,device,tables,register,job,tick:ms=>{now+=ms;}};
 }
 test.after(()=>worker.setRelayClockForTests(null));
+test('Fish speech streams are manager-only, bounded, ordered, and start before generation completes',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  assert.equal((await h.call('/api/relay/jobs','POST',{op:'speech-stream',params:{text:'Hello'}})).status,401);
+  for(const params of [{text:''},{text:'x'.repeat(601)},{text:'Hello',apiKey:'KEY'},{text:'Hello',voiceId:'OTHER'}])assert.equal((await h.job('speech-stream',params)).status,400);
+  const {jobId}=await(await h.job('speech-stream',{text:'A fictional reply.'})).json();
+  await h.device('/api/relay/device/claim',code);
+  const frame=Buffer.alloc(4800,3).toString('base64');
+  assert.equal((await h.device('/api/relay/device/audio',code,{jobId,seq:1,audio:frame})).status,409);
+  for(const bad of [{jobId,seq:0,audio:'AA=='},{jobId,seq:200,audio:frame},{jobId,seq:0,audio:frame,send:true}])assert.equal((await h.device('/api/relay/device/audio',code,bad)).status,400);
+  assert.equal((await h.device('/api/relay/device/audio',code,{jobId,seq:0,audio:frame})).status,200);
+  assert.equal((await h.call('/api/relay/jobs/'+jobId+'/audio')).status,401);
+  const response=await h.manager('/api/relay/jobs/'+jobId+'/audio'),reader=response.body.getReader();
+  const first=JSON.parse(new TextDecoder().decode((await reader.read()).value));assert.equal(first.type,'audio');assert.equal(first.seq,0);assert.equal(first.sampleRate,24000);
+  assert.equal(h.sql.sqlite.prepare('SELECT status FROM relay_jobs WHERE id=?').get(jobId).status,'processing');
+  assert.equal((await h.device('/api/relay/device/audio',code,{jobId,seq:0,audio:frame})).status,409);
+  await h.device('/api/relay/device/complete',code,{jobId,result:{status:200,body:{streamed:true,frames:1}}});
+  const end=JSON.parse(new TextDecoder().decode((await reader.read()).value));assert.deepEqual(end,{type:'end',frames:1});assert.equal((await reader.read()).done,true);
+  assert.equal(h.sql.sqlite.prepare('SELECT COUNT(*) n FROM app_state').get().n,0);
+  h.tick(120001);await h.manager('/api/relay/jobs/'+jobId);assert.equal(h.sql.sqlite.prepare('SELECT COUNT(*) n FROM relay_audio').get().n,0);
+});
+test('stream cancellation and generation rotation reject late PCM without affecting WhatsApp sends',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  const {jobId}=await(await h.job('speech-stream',{text:'A fictional reply.'})).json();await h.device('/api/relay/device/claim',code);
+  const frame=Buffer.alloc(4800,3).toString('base64');await h.device('/api/relay/device/audio',code,{jobId,seq:0,audio:frame});
+  assert.equal((await h.manager('/api/relay/jobs/'+jobId+'/audio/cancel','POST',{})).status,200);
+  assert.equal((await h.device('/api/relay/device/audio',code,{jobId,seq:1,audio:frame})).status,409);
+  assert.equal(h.sql.sqlite.prepare('SELECT COUNT(*) n FROM relay_audio').get().n,0);
+  const cancelled=await h.manager('/api/relay/jobs/'+jobId+'/audio');assert.match(await cancelled.text(),/"type":"error"/);
+  const {jobId:next}=await(await h.job('speech-stream',{text:'Another fictional reply.'})).json();await h.device('/api/relay/device/claim',code);
+  h.sql.hook=sql=>{if(!sql.startsWith('INSERT OR IGNORE INTO relay_audio'))return false;h.sql.prepare('UPDATE relay_devices SET revoked=1 WHERE id=1').sync();};
+  assert.equal((await h.device('/api/relay/device/audio',code,{jobId:next,seq:0,audio:frame})).status,409);
+  assert.equal(h.sql.sqlite.prepare('SELECT COUNT(*) n FROM relay_audio').get().n,0);
+});
+test('responsive claims wake for newly queued work without requeueing jobs',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  assert.equal((await h.device('/api/relay/device/claim',code,{waitMs:15001})).status,400);
+  const waiting=h.device('/api/relay/device/claim',code,{waitMs:1000});await new Promise(resolve=>setImmediate(resolve));
+  const {jobId}=await(await h.job('health')).json();const claimed=await(await waiting).json();assert.equal(claimed.job.jobId,jobId);
+  assert.deepEqual(await(await h.device('/api/relay/device/claim',code)).json(),{job:null});
+});
 test('new inbox views are read-only, authenticated and bounded on the cloud relay',async()=>{
   const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
   const params={view:'history',chat:'a'.repeat(20),limit:5,offset:10,direction:'both',query:'door'};

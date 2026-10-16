@@ -120,6 +120,7 @@ async function relaySql(env) {
   return sql;
 }
 async function relayPurge(sql, now) {
+  try { await sql.prepare('DELETE FROM relay_audio WHERE expires_at<?').bind(now).run(); } catch {}
   await sql.prepare("DELETE FROM relay_jobs WHERE (status='done' AND result_expires_at<?1) OR (status IN ('queued','processing','expired') AND expires_at<?2)").bind(now, now - RELAY.resultTtl).run();
   await sql.prepare("UPDATE relay_jobs SET status='expired', payload='' WHERE status='queued' AND expires_at<?1").bind(now).run();
 }
@@ -135,6 +136,7 @@ const HEX20 = /^[a-f0-9]{20}$/, HEX64 = /^[a-f0-9]{64}$/;
 const relayText = (value, max) => { if (typeof value !== 'string' || value.length > max) fail(400, 'Invalid relay request'); return value; };
 /* Exactly the operations the PC agent will run. AI drafting, model consent and WhatsApp connect/pairing are not here. */
 const RELAY_OPS = {
+  'speech-stream': p => { assertKeys(p,['text']);if(!relayText(p.text,600).trim())fail(400,'Invalid speech request');return {text:p.text}; },
   'live-session': p => { assertKeys(p, []); return {}; },
   'health': p => { assertKeys(p, []); return {}; },
   'speech': p => { assertKeys(p, ['text']); if(!relayText(p.text,600).trim())fail(400,'Invalid speech request'); return {text:p.text}; },
@@ -202,6 +204,7 @@ async function relayRoutes(request, env, path, isManager) {
     const params = check(input.params === undefined ? {} : input.params), payload = JSON.stringify(params);
     if (payload.length > RELAY.maxPayload) fail(413, 'Request too large');
     const sql = await relaySql(env); await relayPurge(sql, now);
+    if(input.op==='speech-stream')await sql.prepare('CREATE TABLE IF NOT EXISTS relay_audio (job_id TEXT NOT NULL, seq INTEGER NOT NULL, audio TEXT NOT NULL, expires_at INTEGER NOT NULL, PRIMARY KEY(job_id,seq))').run();
     /* One conditional insert: only for the active, online device generation and only below the queue cap. */
     const jobId = token(), ttl = input.op === 'wa-send' ? RELAY.sendTtl : RELAY.requestTtl;
     const added = await sql.prepare("INSERT INTO relay_jobs (id, op, payload, status, device_hash, created_at, expires_at) SELECT ?1, ?2, ?3, 'queued', d.token_hash, ?4, ?5 FROM relay_devices d WHERE d.id=1 AND d.revoked=0 AND d.last_seen>?6 AND (SELECT COUNT(*) FROM relay_jobs WHERE status='queued')<?7")
@@ -212,6 +215,36 @@ async function relayRoutes(request, env, path, isManager) {
       fail(429, 'Jarvis is busy. Wait a moment and try again.');
     }
     return Response.json({jobId, expiresAt:new Date(now + ttl).toISOString()}, {status:202});
+  }
+  const audioJob=path.match(/^\/api\/relay\/jobs\/([a-f0-9]{64})\/audio(\/cancel)?$/);
+  if(audioJob){
+    if(!isManager)fail(401,'Unauthorized');
+    const sql=await relaySql(env);await relayPurge(sql,now);
+    const find=()=>sql.prepare("SELECT j.status,j.op,j.result,j.expires_at FROM relay_jobs j JOIN relay_devices d ON d.token_hash=j.device_hash WHERE j.id=? AND d.id=1 AND d.revoked=0").bind(audioJob[1]).first();
+    const initial=await find();if(!initial||initial.op!=='speech-stream')fail(404,'Speech request is no longer available');
+    if(audioJob[2]&&method==='POST'){
+      await sql.prepare("UPDATE relay_jobs SET status='expired',payload='' WHERE id=? AND op='speech-stream' AND status IN ('queued','processing')").bind(audioJob[1]).run();
+      await sql.prepare('DELETE FROM relay_audio WHERE job_id=?').bind(audioJob[1]).run();return Response.json({cancelled:true});
+    }
+    if(audioJob[2]||method!=='GET')fail(405,'Method not allowed');
+    let cursor=0,cancelled=false;const encoder=new TextEncoder(),start=Date.now();
+    const stream=new ReadableStream({
+      async pull(controller){
+        try{while(!cancelled){
+          const row=await find();if(!row||row.status==='expired'||row.expires_at<relayNow()||Date.now()-start>65000||request.signal.aborted){controller.enqueue(encoder.encode(JSON.stringify({type:'error',message:'The speech connection ended. Nothing was approved.'})+'\n'));controller.close();return;}
+          const frames=(await sql.prepare('SELECT seq,audio FROM relay_audio WHERE job_id=? AND seq>=? ORDER BY seq LIMIT 8').bind(audioJob[1],cursor).all()).results;
+          if(frames.length){for(const frame of frames){if(frame.seq!==cursor)throw Error('Missing speech frame');controller.enqueue(encoder.encode(JSON.stringify({type:'audio',seq:cursor++,sampleRate:24000,audio:frame.audio})+'\n'));}return;}
+          if(row.status==='done'){
+            const result=JSON.parse(row.result||'{}');
+            if(result.status!==200||!result.body?.streamed||result.body.frames!==cursor||!cursor)controller.enqueue(encoder.encode(JSON.stringify({type:'error',message:result.body?.error||'The speech reply did not finish.'})+'\n'));
+            else controller.enqueue(encoder.encode(JSON.stringify({type:'end',frames:cursor})+'\n'));
+            controller.close();return;
+          }
+          await new Promise(resolve=>setTimeout(resolve,150));
+        }}catch{if(!cancelled){try{controller.enqueue(encoder.encode(JSON.stringify({type:'error',message:'The speech stream was interrupted.'})+'\n'));controller.close();}catch{}}}
+      },cancel(){cancelled=true;}
+    });
+    return new Response(stream,{headers:{'Content-Type':'application/x-ndjson','Cache-Control':'no-store'}});
   }
   const job = path.match(/^\/api\/relay\/jobs\/([a-f0-9]{64})$/);
   if (job && method === 'GET') {
@@ -227,11 +260,24 @@ async function relayRoutes(request, env, path, isManager) {
     await sql.prepare('UPDATE relay_devices SET last_seen=? WHERE id=1 AND revoked=0 AND token_hash=?').bind(now, generation).run();
     if (path === '/api/relay/device/heartbeat') return Response.json({ok:true});
     if (path === '/api/relay/device/claim') {
+      const input=await body(request,128);assertKeys(input,['waitMs']);const waitMs=input.waitMs===undefined?0:input.waitMs;if(!Number.isInteger(waitMs)||waitMs<0||waitMs>15000)fail(400,'Invalid wait');const until=Date.now()+waitMs;
       await relayPurge(sql, now);
       /* The active-generation check is inside the same statement, so a registration or revoke that lands between
          authentication and this claim cannot hand work to a stale code. */
-      const claimed = await sql.prepare("UPDATE relay_jobs SET status='processing', claimed_at=?1 WHERE id=(SELECT id FROM relay_jobs WHERE status='queued' AND expires_at>?1 AND device_hash=?2 ORDER BY created_at, id LIMIT 1) AND status='queued' AND device_hash=?2 AND EXISTS (SELECT 1 FROM relay_devices WHERE id=1 AND revoked=0 AND token_hash=?2) RETURNING id, op, payload").bind(now, generation).first();
-      return Response.json({job:claimed ? {jobId:claimed.id, op:claimed.op, params:JSON.parse(claimed.payload)} : null});
+      do{
+        const claimed = await sql.prepare("UPDATE relay_jobs SET status='processing', claimed_at=?1 WHERE id=(SELECT id FROM relay_jobs WHERE status='queued' AND expires_at>?1 AND device_hash=?2 ORDER BY created_at, id LIMIT 1) AND status='queued' AND device_hash=?2 AND EXISTS (SELECT 1 FROM relay_devices WHERE id=1 AND revoked=0 AND token_hash=?2) RETURNING id, op, payload").bind(relayNow(), generation).first();
+        if(claimed)return Response.json({job:{jobId:claimed.id,op:claimed.op,params:JSON.parse(claimed.payload)}});
+        if(!waitMs||Date.now()>=until||request.signal.aborted)break;
+        await new Promise(resolve=>setTimeout(resolve,250));
+      }while(Date.now()<until);
+      return Response.json({job:null});
+    }
+    if(path==='/api/relay/device/audio'){
+      const input=await body(request,34000);assertKeys(input,['jobId','seq','audio']);
+      if(!HEX64.test(input.jobId||'')||!Number.isInteger(input.seq)||input.seq<0||input.seq>=200||typeof input.audio!=='string'||input.audio.length<4||input.audio.length>32768||!/^[A-Za-z0-9+/]+={0,2}$/.test(input.audio))fail(400,'Invalid speech frame');
+      let decoded;try{decoded=atob(input.audio);}catch{fail(400,'Invalid audio');}if(!decoded.length||decoded.length%2)fail(400,'Invalid PCM');
+      const added=await sql.prepare("INSERT OR IGNORE INTO relay_audio(job_id,seq,audio,expires_at) SELECT ?1,?2,?3,?4 WHERE EXISTS(SELECT 1 FROM relay_jobs j JOIN relay_devices d ON d.token_hash=j.device_hash WHERE j.id=?1 AND j.op='speech-stream' AND j.status='processing' AND j.expires_at>?5 AND j.device_hash=?6 AND d.id=1 AND d.revoked=0 AND d.token_hash=?6) AND (SELECT COUNT(*) FROM relay_audio WHERE job_id=?1)=?2 AND (SELECT COALESCE(SUM(length(audio)),0) FROM relay_audio WHERE job_id=?1)+length(?3)<=3840000").bind(input.jobId,input.seq,input.audio,now+RELAY.resultTtl,now,generation).run();
+      if(!added.meta.changes)fail(409,'Speech request cancelled or frame out of order');return Response.json({ok:true});
     }
     if (path === '/api/relay/device/complete') {
       const input = await body(request, RELAY.maxResult + 2048); assertKeys(input, ['jobId','result']);

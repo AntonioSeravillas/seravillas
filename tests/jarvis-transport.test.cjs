@@ -25,6 +25,19 @@ function runtime({dev=false,results=[],postStatus=202,extra={}}={}){
   return {t:sandbox.SV_JARVIS_TRANSPORT,calls,context,sandbox,advance:ms=>{clock+=ms;},jobPosts:()=>calls.filter(c=>c.url.endsWith('/api/relay/jobs'))};
 }
 const done=body=>({body:{status:'done',result:{status:200,body}}});
+test('Fish streams directly after one job; cancellation is scoped to audio and no PC token reaches the relay',async()=>{
+  const app=runtime({results:[{body:{stream:true}}]});const controller=new AbortController();
+  const response=await app.t.speechStream('A fictional voice test.',{signal:controller.signal,token:'PC_TOKEN_SENTINEL'});
+  assert.deepEqual(JSON.parse(app.jobPosts()[0].init.body),{op:'speech-stream',params:{text:'A fictional voice test.'}});
+  assert.equal(app.calls[1].url,'https://sync.example.invalid/api/relay/jobs/'+JOB+'/audio');
+  assert.equal(app.calls[1].init.headers['X-Secret'],'MANAGER_SECRET_SENTINEL');
+  assert.ok(!JSON.stringify(app.calls).includes('PC_TOKEN_SENTINEL'));
+  controller.abort();await Promise.resolve();assert.equal(app.calls[2].url,'https://sync.example.invalid/api/relay/jobs/'+JOB+'/audio/cancel');
+  assert.equal(app.calls[2].init.keepalive,true);response.releaseSpeech();
+  const local=runtime({dev:true});await local.t.speechStream('Hello',{token:'LOCAL'});
+  assert.equal(local.calls[0].url,'/api/jarvis/speech-stream');assert.equal(local.calls[0].init.headers['X-Jarvis-Session-Token'],'LOCAL');
+  await assert.rejects(local.t.speechStream('x'.repeat(601)),/Invalid/);assert.equal(local.calls.length,1);
+});
 test('scoped WhatsApp reads retain bounded paging and literal search through the existing authenticated operation',async()=>{
   const app=runtime({results:[done({messages:[]})]});await app.t.fetch('/api/jarvis/whatsapp/inbox?view=history&chat='+ 'a'.repeat(20)+'&limit=3&offset=2&direction=both&query=door%20%26%20window');
   assert.deepEqual(JSON.parse(app.jobPosts()[0].init.body),{op:'wa-inbox',params:{chat:'a'.repeat(20),view:'history',direction:'both',query:'door & window',limit:3,offset:2}});
