@@ -9,8 +9,8 @@
   let health={ready:false,message:'Open the local Jarvis server to connect Hermes.'},requestToken='',sessionId='',returnFocus=null,background=null,wasInert=false;
   let inboxMonitor=null,inboxState=null,announcements=[],messageAudioArmed=false,speechCompletion=null;
   let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null,records=null,recordsView=null,live=null,liveHasReplied=false,liveOwnerText='';
-  // Fish is the configured free voice; a saved device choice and paid opt-ins remain explicit.
-  settings.liveVoice=false;settings.voiceProvider='fish';settings.customVoice=true;
+  // The owner restored live conversation; keep an explicit saved Device voice choice.
+  settings.liveVoice=true;settings.voiceProvider='live';settings.customVoice=true;
   try{const choice=SV_STORAGE.getItem('sv_jarvis_voice');if(['fish','device','live','elevenlabs'].includes(choice)){settings.voiceProvider=choice;settings.liveVoice=choice==='live';settings.customVoice=choice!=='device';}}catch{}
   let connectionCheck=null,appToolsSelected=false;
   let liveReading=null;
@@ -112,7 +112,13 @@
   }
   function add(role,text){lines.push({role,text});lines=lines.slice(-40);renderTranscript();}
   function renderTranscript(){const host=el('jarvis-transcript');if(!host)return;host.replaceChildren();if(!lines.length){const empty=document.createElement('p');empty.className='jarvis-empty';empty.textContent='Ask about today’s cleanings, arrivals or tasks.';host.appendChild(empty);}lines.forEach(line=>{const node=document.createElement('div');node.className='jarvis-line'+(line.role==='You'?' you':'');const label=document.createElement('small');label.textContent=line.role;const text=document.createElement('p');text.textContent=line.text;node.append(label,text);host.appendChild(node);});host.scrollTop=host.scrollHeight;}
-  function updateConnection(){if(!root)return;if(health.speech?.provider==='fish'&&settings.customVoice){settings.liveVoice=false;settings.voiceProvider='fish';}el('jarvis-mode-text').textContent=live?.active?'Jarvis · live voice':mode==='hermes'?(health.route==='n8n'?'Hermes · n8n':'Hermes'):'App tools';el('jarvis-mode-dot').classList.toggle('live',mode==='hermes'&&health.ready);el('jarvis-agent-option').disabled=!health.ready;el('jarvis-mode-select').value=mode;el('jarvis-connection-detail').textContent=health.message||'Local Hermes connection ready.';const option=el('jarvis-custom-voice-option');if(option)option.disabled=!health.speech?.available||health.speech.provider!=='elevenlabs';const fishOption=el('jarvis-fish-voice-option');if(fishOption)fishOption.disabled=!health.speech?.available||health.speech.provider!=='fish';const choice=el('jarvis-voice-choice');const liveOption=el('jarvis-live-voice-option');if(liveOption)liveOption.disabled=!health.liveVoice?.available;if(choice)choice.value=settings.liveVoice&&health.liveVoice?.available?'live':settings.customVoice&&!customFallback&&health.speech?.available&&(settings.voiceProvider!=='fish'||health.speech.provider==='fish')?(health.speech.provider==='fish'?'fish':'elevenlabs'):'device';}
+  function updateConnection(){if(!root)return;
+    if(health.speech?.provider==='fish'&&settings.customVoice){settings.liveVoice=false;settings.voiceProvider='fish';}
+    else if(settings.voiceProvider==='fish'&&health.liveVoice?.available){
+      settings.liveVoice=true;settings.voiceProvider='live';settings.customVoice=true;
+      try{SV_STORAGE.setItem('sv_jarvis_voice','live');}catch{}
+    }
+    el('jarvis-mode-text').textContent=live?.active?'Jarvis · live voice':mode==='hermes'?(health.route==='n8n'?'Hermes · n8n':'Hermes'):'App tools';el('jarvis-mode-dot').classList.toggle('live',mode==='hermes'&&health.ready);el('jarvis-agent-option').disabled=!health.ready;el('jarvis-mode-select').value=mode;el('jarvis-connection-detail').textContent=health.message||'Local Hermes connection ready.';const option=el('jarvis-custom-voice-option');if(option)option.disabled=!health.speech?.available||health.speech.provider!=='elevenlabs';const fishOption=el('jarvis-fish-voice-option');if(fishOption)fishOption.disabled=!health.speech?.available||health.speech.provider!=='fish';const choice=el('jarvis-voice-choice');const liveOption=el('jarvis-live-voice-option');if(liveOption)liveOption.disabled=!health.liveVoice?.available;if(choice)choice.value=settings.liveVoice&&health.liveVoice?.available?'live':settings.customVoice&&!customFallback&&health.speech?.available&&(settings.voiceProvider!=='fish'||health.speech.provider==='fish')?(health.speech.provider==='fish'?'fish':'elevenlabs'):'device';}
   /* Live app: Jarvis's own calls go through the relay to the Jarvis PC (jarvis-transport.js); preview: same origin. */
   const transport=()=>window.SV_JARVIS_TRANSPORT||null;
   const viaRelay=()=>!!transport()?.remote?.();

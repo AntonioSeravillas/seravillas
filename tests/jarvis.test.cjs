@@ -153,13 +153,17 @@ test('Fish desktop and phone use incremental PCM, replace a saved live-agent cho
     sources[0].onended();await flush();assert.notEqual(app.phase(),'speaking');app.click('close');
   }
 });
-test('free voice defaults on desktop and phone, makes no paid speech/session call, and an explicit choice survives reload',async()=>{
+test('restored live voice waits for a microphone tap, migrates a saved Fish choice, and preserves explicit Device voice on both layouts',async()=>{
   for(const desktop of [true,false]){
-    const saved=new Map();let starts=0;const liveSdk={Conversation:{startSession:async()=>{starts++;}}};
-    const app=desktopRuntime({agent:true,desktop,customSpeech:true,liveSdk,voiceStorage:saved,understand:async()=>({kind:'reply',text:'Ready when you are.'})});app.run('openJarvis()');await flush();
-    assert.equal(app.el('jarvis-voice-choice').value,'device');app.submit('Hello');await flush();assert.equal(app.speechRequests.length,0);assert.equal(starts,0);assert.equal(app.utterances.length,1);app.finishSpeech();
-    app.el('jarvis-voice-choice').listeners.change({target:{value:'live'}});assert.equal(saved.get('sv_jarvis_voice'),'live');app.el('jarvis-voice-choice').listeners.change({target:{value:'device'}});app.click('close');
+    const saved=new Map([['sv_jarvis_voice','fish']]);let starts=0;
+    const liveSdk={Conversation:{startSession:async()=>{starts++;return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0};}}};
+    const app=desktopRuntime({agent:true,desktop,customSpeech:true,liveSdk,voiceStorage:saved});app.run('openJarvis()');await flush();
+    assert.equal(app.el('jarvis-voice-choice').value,'live');assert.equal(saved.get('sv_jarvis_voice'),'live');
+    assert.equal(app.speechRequests.length,0);assert.equal(starts,0);assert.equal(app.recs.length,0);
+    app.click('mic');await flush();assert.equal(starts,1);assert.equal(app.recs.length,0);assert.equal(app.speechRequests.length,0);
+    app.el('jarvis-voice-choice').listeners.change({target:{value:'device'}});app.click('close');
     const reopened=desktopRuntime({agent:true,desktop,customSpeech:true,liveSdk,voiceStorage:saved});reopened.run('openJarvis()');await flush();assert.equal(reopened.el('jarvis-voice-choice').value,'device');reopened.click('close');
+    const fresh=desktopRuntime({agent:true,desktop,liveSdk,voiceStorage:new Map()});fresh.run('openJarvis()');await flush();assert.equal(fresh.el('jarvis-voice-choice').value,'live');assert.equal(starts,1);fresh.click('close');
   }
 });
 test('an early microphone tap waits for live health instead of silently entering the slow Hermes speech loop',async()=>{
