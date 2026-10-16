@@ -61,11 +61,11 @@ export function normalizeMessage(msg){
   return {chatJid:key.remoteJid,providerId:clip(key.id,128),fromMe:key.fromMe===true,participant:typeof key.participant==='string'?key.participant:'',senderName:clip(msg.pushName,80),text:body,media,timestamp:num(msg.messageTimestamp)};
 }
 
-export function createBaileysConnector({sessionDir='',runtimeDir=RUNTIME_DIR,loadModules=null,onMessage=()=>{},schedule=(fn,ms)=>setTimeout(fn,ms),cancel=timer=>clearTimeout(timer),reconnectDelays=[2000,5000,15000,30000,60000],sendTimeoutMs=40000}={}){
+export function createBaileysConnector({sessionDir='',runtimeDir=RUNTIME_DIR,loadModules=null,onMessage=()=>{},onConnection=()=>{},schedule=(fn,ms)=>setTimeout(fn,ms),cancel=timer=>clearTimeout(timer),reconnectDelays=[2000,5000,15000,30000,60000],sendTimeoutMs=40000}={}){
   let sock=null,phase='disconnected',message='Not connected.',qr='',optIn=false,attempt=0,timer=null,generation=0,mods=null;
   const groupNames=new Map();
   const load=loadModules||(()=>loadRuntime(runtimeDir));
-  const set=(next,text)=>{phase=next;message=text;if(next!=='qr')qr='';};
+  const set=(next,text)=>{const changed=next!==phase;phase=next;message=text;if(next!=='qr')qr='';if(changed)try{onConnection(next);}catch{}};
   function status(){
     if(phase==='disconnected'&&!loadModules&&!dependenciesReady(runtimeDir))return {state:'missing_dependencies',message:MISSING_DEPENDENCIES};
     return {state:phase,message,...(phase==='qr'?{qr}:{})};

@@ -5,7 +5,9 @@ import {createHash,randomBytes,timingSafeEqual} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync,openSync,fsyncSync,closeSync} from 'node:fs';
 import path from 'node:path';
 
-export const LIMITS=Object.freeze({chats:100,messagesPerChat:30,seenIdsPerChat:300,ownSentPerChat:50,text:2000,draft:2000,name:80,queue:25,historyForDraft:12});
+/* Messages are kept for retentionDays; messagesPerChat/chats are only safety caps, and any trim they cause is logged in coverage.
+   chatView bounds the inbox screen's per-chat payload (relay results are limited to 256 KB). */
+export const LIMITS=Object.freeze({chats:500,messagesPerChat:2000,retentionDays:30,chatView:30,seenIdsPerChat:4000,ownSentPerChat:50,coverageLog:200,gapSeconds:60,text:2000,draft:2000,name:80,queue:25,historyForDraft:12});
 
 /* Only one-to-one chats and groups. Status updates, broadcasts, newsletters and anything else are refused. */
 export function chatKind(jid){
@@ -71,6 +73,49 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
   }
   if(repaired)persist();
 
+  /* History coverage ledger: retention, connection sessions and every trim, so answers can disclose incomplete history.
+     First run records what the earlier 30-messages-per-chat limit already removed (lower bound from remembered message IDs). */
+  const nowSec=()=>Math.floor(now()/1000),day=s=>new Date(s*1000).toISOString().slice(0,10);
+  const log=(list,entry)=>{list.push(entry);if(list.length>limits.coverageLog)list.splice(0,list.length-limits.coverageLog);};
+  if(!state.coverage||typeof state.coverage!=='object'||state.coverage.format!==1){
+    const t=nowSec(),stored=Object.values(state.chats).flatMap(c=>c.messages.map(m=>m.at)).filter(a=>a>0);
+    const chats=Object.values(state.chats).map(c=>{const kept=new Set(c.messages.map(m=>m.id)),own=new Set(c.ownSent);return {chat:c.key,kept:c.messages.length,keptFrom:c.messages[0]?.at||null,trimmedAtLeast:c.seen.filter(id=>!kept.has(id)&&!own.has(id)).length};}).filter(x=>x.trimmedAtLeast>0);
+    state.coverage={format:1,trackingSince:t,storedSince:stored.length?Math.min(...stored):null,legacy:{recordedAt:t,rule:'Before '+day(t)+' Jarvis kept only the latest 30 messages per chat and did not record when it was offline; phone history before linking was never imported.',chats},sessions:[],trims:[]};
+    persist();
+  }
+  const coverage=state.coverage;
+  /* A session left open by a stopped server ends at its last heartbeat, so the downtime is reported as a gap. */
+  {const last=coverage.sessions.at(-1);if(last&&last.to==null){last.to=last.lastSeen;last.closedBy='restart';persist();}}
+  function recordConnection(phase){
+    const last=coverage.sessions.at(-1),open=last&&last.to==null,t=nowSec();
+    if(phase==='open'&&!open){log(coverage.sessions,{from:t,lastSeen:t,to:null});persist();}
+    else if(phase!=='open'&&open){last.to=t;last.closedBy=String(phase).slice(0,40);persist();}
+  }
+  function retain(chat){
+    const cutoff=nowSec()-limits.retentionDays*86400;let kept=chat.messages.filter(m=>m.at>=cutoff);
+    if(kept.length>limits.messagesPerChat){const cut=kept.length-limits.messagesPerChat;log(coverage.trims,{chat:chat.key,reason:'per-chat cap',count:cut,before:kept[cut].at,at:nowSec()});kept=kept.slice(cut);}
+    const expired=chat.messages.length-kept.length;chat.messages=kept;return expired;
+  }
+  /* Periodic: proves the connection was alive (gap detection) and drops messages past the retention period. */
+  function heartbeat(){
+    const last=coverage.sessions.at(-1);if(last&&last.to==null)last.lastSeen=nowSec();
+    for(const chat of Object.values(state.chats))retain(chat);
+    persist();
+  }
+  /* What history exists for a window, without claiming completeness that is not proven. */
+  function historyCoverage(days=7){
+    const t=nowSec(),windowStart=t-days*86400,s=coverage.sessions,gaps=[];
+    if(s.length&&s[0].from>coverage.trackingSince+limits.gapSeconds)gaps.push({from:coverage.trackingSince,to:s[0].from});
+    for(let i=1;i<s.length;i++){const end=s[i-1].to??s[i-1].lastSeen;if(s[i].from-end>limits.gapSeconds)gaps.push({from:end,to:s[i].from});}
+    const last=s.at(-1);if(!last)gaps.push({from:coverage.trackingSince,to:null});else if(last.to!=null)gaps.push({from:last.to,to:null});
+    const inWindow=gaps.filter(g=>(g.to??t)>windowStart),trims=coverage.trims.filter(x=>x.before>windowStart);
+    const legacyTrimmed=coverage.legacy.chats.reduce((a,c)=>a+c.trimmedAtLeast,0);
+    const complete=coverage.trackingSince<=windowStart&&!inWindow.length&&!trims.length;
+    return {days,windowStart,complete,retentionDays:limits.retentionDays,trackingSince:coverage.trackingSince,storedSince:coverage.storedSince,connectedNow:!!last&&last.to==null,gaps:inWindow.slice(-10),trims:trims.slice(-10).map(x=>({chat:x.chat,reason:x.reason,count:x.count,before:x.before})),
+      legacy:{recordedAt:coverage.legacy.recordedAt,chats:coverage.legacy.chats.length,trimmedAtLeast:legacyTrimmed,rule:coverage.legacy.rule},
+      summary:complete?'Jarvis has stored every message it received in the last '+days+' days with no recorded gaps.':'Incomplete: Jarvis has messages from '+day(coverage.storedSince||coverage.trackingSince)+' but gap tracking only began '+day(coverage.trackingSince)+(legacyTrimmed?'; at least '+legacyTrimmed+' earlier messages in '+coverage.legacy.chats.length+' chats were trimmed by the old 30-message limit':'')+(inWindow.length?'; '+inWindow.length+' connection gap(s) in this window':'')+(trims.length?'; '+trims.length+' later trim(s)':'')+'. Messages may still exist on the phone.'};
+  }
+
   const need=key=>{const chat=typeof key==='string'&&/^[a-f0-9]{20}$/.test(key)?state.chats[key]:null;if(!chat)throw fail(404,'That chat is no longer in the inbox.');return chat;};
   function invalidate(chat,reason){
     if(chat.draft&&!['discarded','stale'].includes(chat.draft.status))chat.draft={...chat.draft,status:'stale',reason};
@@ -78,7 +123,7 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
   }
   function evict(){
     const chats=Object.values(state.chats);if(chats.length<=limits.chats)return;
-    chats.filter(c=>c.lastSend?.status!=='sending').sort((a,b)=>a.updatedAt-b.updatedAt).slice(0,chats.length-limits.chats).forEach(c=>{delete state.chats[c.key];});
+    chats.filter(c=>c.lastSend?.status!=='sending').sort((a,b)=>a.updatedAt-b.updatedAt).slice(0,chats.length-limits.chats).forEach(c=>{log(coverage.trims,{chat:c.key,reason:'chat limit',count:c.messages.length,before:c.messages.at(-1)?.at??nowSec(),at:nowSec()});delete state.chats[c.key];});
   }
 
   /* Normalised event from the connector. Our own echoes are recognised; the owner's own phone replies invalidate drafts. */
@@ -90,7 +135,7 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
     const key=chatKeyFor(event.chatJid);
     let chat=state.chats[key];
     if(!chat)chat=state.chats[key]={key,jid:event.chatJid,kind,name:'',version:0,updatedAt:0,messages:[],seen:[],ownSent:[],draft:null,review:null,lastSend:null,notice:''};
-    if(chat.seen.includes(providerId))return {accepted:false,reason:'duplicate'};
+    if(chat.seen.includes(providerId)||chat.messages.some(m=>m.id===providerId))return {accepted:false,reason:'duplicate'};
     chat.seen=[...chat.seen,providerId].slice(-limits.seenIdsPerChat);
     const fromMe=event.fromMe===true;
     /* An approved send may echo before its own result arrives; same text while sending counts as the echo. */
@@ -99,7 +144,8 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
     if(kind==='group'&&event.groupName)chat.name=clip(event.groupName,limits.name);
     if(kind==='direct'&&!fromMe&&event.senderName)chat.name=clip(event.senderName,limits.name);
     const at=Number(event.timestamp);
-    chat.messages=[...chat.messages,{id:providerId,live:event.live!==false,unread:!fromMe&&event.live!==false,receivedAt:now(),from:fromMe?'owner':'contact',sender:kind==='group'&&!fromMe?clip(event.senderName,limits.name)||'Group member':'',participantKey:kind==='group'&&!fromMe&&event.participant?sha('member:'+event.participant).slice(0,12):'',text,media,at:Number.isFinite(at)&&at>0?Math.floor(at):Math.floor(now()/1000),viaJarvis:false}].sort((a,b)=>a.at-b.at||(a.receivedAt||0)-(b.receivedAt||0)).slice(-limits.messagesPerChat);
+    chat.messages=[...chat.messages,{id:providerId,live:event.live!==false,unread:!fromMe&&event.live!==false,receivedAt:now(),from:fromMe?'owner':'contact',sender:kind==='group'&&!fromMe?clip(event.senderName,limits.name)||'Group member':'',participantKey:kind==='group'&&!fromMe&&event.participant?sha('member:'+event.participant).slice(0,12):'',text,media,at:Number.isFinite(at)&&at>0?Math.floor(at):Math.floor(now()/1000),viaJarvis:false}].sort((a,b)=>a.at-b.at||(a.receivedAt||0)-(b.receivedAt||0));retain(chat);
+    {const last=coverage.sessions.at(-1);if(last&&last.to==null)last.lastSeen=nowSec();}
     chat.version+=1;chat.updatedAt=now();
     invalidate(chat,fromMe?'owner_reply':'new_message');
     evict();persist();
@@ -194,7 +240,7 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
       current.lastSend={...current.lastSend,status:outcome.status,error:outcome.error,at:now()};
       if(outcome.status==='sent'){
         current.ownSent=[...current.ownSent,outcome.providerId].slice(-limits.ownSentPerChat);current.seen=[...current.seen,outcome.providerId].slice(-limits.seenIdsPerChat);
-        current.messages=[...current.messages,{id:outcome.providerId,from:'owner',sender:'',participantKey:'',text:body,media:null,at:Math.floor(now()/1000),viaJarvis:true}].slice(-limits.messagesPerChat);
+        current.messages=[...current.messages,{id:outcome.providerId,from:'owner',sender:'',participantKey:'',text:body,media:null,at:Math.floor(now()/1000),viaJarvis:true}];retain(current);
         /* Only the approved version's draft is finished; a newer draft (message arrived meanwhile) stays. */
         if(current.draft&&current.draft.version===approval.version)current.draft=null;
         current.updatedAt=now();
@@ -246,7 +292,7 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
   }
   function voiceInbox({chat:key='',view,limit=5,offset=0,direction='incoming',query=''}={}){
     if(!['voice','recent','unread','history','awaiting'].includes(view)||!Number.isInteger(limit)||limit<1||limit>10||!Number.isInteger(offset)||offset<0||offset>100||!['incoming','outgoing','both'].includes(direction)||typeof query!=='string'||query.length>120)throw fail(400,'Invalid message window.');
-    const coverage={chats:Object.keys(state.chats).length,messagesPerChat:limits.messagesPerChat,scope:'Stored linked-device text only, up to '+limits.messagesPerChat+' messages per chat. Older phone history is not imported. Attachments are listed but not downloaded or transcribed. Waiting means a contact wrote after the last observed owner reply, not a guaranteed unanswered request. Chats ending only in thanks/OK/emoji are counted separately as acknowledgements.'};
+    const history=historyCoverage(7),coverage={chats:Object.keys(state.chats).length,retentionDays:limits.retentionDays,history,scope:'Stored linked-device text only, kept for '+limits.retentionDays+' days from '+day(history.trackingSince)+' onward; '+history.summary+' Older phone history is not imported. Attachments are listed but not downloaded or transcribed. Waiting means a contact wrote after the last observed owner reply, not a guaranteed unanswered request. Chats ending only in thanks/OK/emoji are counted separately as acknowledgements.'};
     const project=(c,m,max=limits.text)=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,from:m.from,sender:m.sender,text:clip(m.text,max),truncated:(m.text||'').length>max,media:mediaLabel(m.media),at:m.at,receivedAt:m.receivedAt||m.at*1000,unread:m.unread===true});
     const chats=Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt),out={chats:chats.map(summary),coverage};
     if(view==='voice'){if(key)out.chat=summary(need(key));return out;}
@@ -279,10 +325,11 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
     const out={unreadCount:unread.length,unread:unread.slice(0,10),recent,recentMessages,unreadScope:'Messages received by Jarvis since unread tracking was enabled. Reading on the phone is not synchronised. Older WhatsApp history is not imported.',consent:{account:state.settings.accountConsent===true,model:state.settings.modelConsent===true,modelAvailable:!!generator},chats:Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt).map(summary)};
     const chat=key&&/^[a-f0-9]{20}$/.test(key)?state.chats[key]:null;
     if(chat)out.chat={...summary(chat),notice:chat.notice||'',reviewOpen:!!chat.review,
-      messages:chat.messages.map((m,i)=>({n:i,id:readKey(chat,m),from:m.from,sender:m.sender,member:m.participantKey,text:m.text,media:m.media?{type:m.media.type,label:mediaLabel(m.media),mimetype:m.media.mimetype,sizeBytes:m.media.sizeBytes,seconds:m.media.seconds}:null,at:m.at,viaJarvis:m.viaJarvis===true})),
+      messagesShown:Math.min(chat.messages.length,limits.chatView),messagesStored:chat.messages.length,
+      messages:chat.messages.slice(-limits.chatView).map((m,i,shown)=>({n:chat.messages.length-shown.length+i,id:readKey(chat,m),from:m.from,sender:m.sender,member:m.participantKey,text:m.text,media:m.media?{type:m.media.type,label:mediaLabel(m.media),mimetype:m.media.mimetype,sizeBytes:m.media.sizeBytes,seconds:m.media.seconds}:null,at:m.at,viaJarvis:m.viaJarvis===true})),
       draft:chat.draft&&!['discarded'].includes(chat.draft.status)?{status:chat.draft.status,text:chat.draft.text,source:chat.draft.source,error:chat.draft.error,version:chat.draft.version}:null,
       lastSend:chat.lastSend?{status:chat.lastSend.status,error:chat.lastSend.error,acknowledged:chat.lastSend.acknowledged===true,at:chat.lastSend.at}:null};
     return out;
   }
-  return {receive,review,send,discardDraft,requestDraft,setModelConsent,connect,disconnect,resume,markRead,connectionStatus,inbox,idle};
+  return {receive,review,send,discardDraft,requestDraft,setModelConsent,connect,disconnect,resume,markRead,connectionStatus,inbox,idle,recordConnection,heartbeat,historyCoverage};
 }

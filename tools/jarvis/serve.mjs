@@ -99,9 +99,11 @@ export async function createDefaultWhatsApp({hermesUrl,apiKey,runtimeDir=process
   const [{createWhatsAppService,createFileStore},{createBaileysConnector,defaultDataDir}]=await Promise.all([import('./whatsapp-service.mjs'),import('./whatsapp-connector.mjs')]);
   const dir=defaultDataDir();if(!dir)throw safeError('The private WhatsApp folder could not be found on this computer.');
   let service=null;
-  const connector=createBaileysConnector({sessionDir:path.join(dir,'session'),...(runtimeDir?{runtimeDir}:{}),onMessage:event=>service?.receive(event)});
+  const connector=createBaileysConnector({sessionDir:path.join(dir,'session'),...(runtimeDir?{runtimeDir}:{}),onMessage:event=>service?.receive(event),onConnection:phase=>service?.recordConnection(phase)});
   service=createWhatsAppService({store:createFileStore(path.join(dir,'inbox')),connector,generator:createWhatsAppDraftGenerator({hermesUrl,apiKey})});
   void service.resume().catch(()=>{});
+  /* Coverage heartbeat: a stopped server is later reported as a gap; expired messages are dropped. */
+  setInterval(()=>{try{service.heartbeat();}catch{}},5*60_000).unref();
   return service;
 }
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.woff2':'font/woff2','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.wav':'audio/wav'};

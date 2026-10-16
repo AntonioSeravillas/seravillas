@@ -223,8 +223,8 @@ const groupRaw=id=>({key:{remoteJid:GROUP,id,fromMe:false,participant:MEMBER},pu
 test('linked-device connector: QR only before open, own session folder, groups named once, serialized sends, bounded reconnect, logout stops',async()=>{
   const dir=mkdtempSync(path.join(tmpdir(),'jarvis-wa-session-'));
   try{
-    const fake=fakeBaileys(),events=[],timers=[];
-    const c=createBaileysConnector({sessionDir:path.join(dir,'session'),loadModules:async()=>fake.mods,onMessage:e=>events.push(e),schedule:(fn,ms)=>{timers.push({fn,ms});return timers.length;},cancel(){}});
+    const fake=fakeBaileys(),events=[],timers=[],phases=[];
+    const c=createBaileysConnector({sessionDir:path.join(dir,'session'),loadModules:async()=>fake.mods,onMessage:e=>events.push(e),onConnection:p=>phases.push(p),schedule:(fn,ms)=>{timers.push({fn,ms});return timers.length;},cancel(){}});
     await c.connect();const s=fake.sockets[0];
     assert.deepEqual(fake.authDirs,[path.join(dir,'session')]);
     assert.equal(s.opts.printQRInTerminal,false);assert.equal(s.opts.markOnlineOnConnect,false);assert.equal(s.opts.syncFullHistory,false);
@@ -246,6 +246,7 @@ test('linked-device connector: QR only before open, own session folder, groups n
     const s2=fake.sockets[1];assert.ok(s2);
     await s2.handlers['connection.update']({connection:'close',lastDisconnect:{error:{output:{statusCode:401}}}});
     assert.equal(c.status().state,'logged_out');assert.equal(timers.length,1);
+    assert.deepEqual(phases,['connecting','open','connecting','logged_out']);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
