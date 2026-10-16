@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import {createWhatsAppService,createMemoryStore} from '../tools/jarvis/whatsapp-service.mjs';
+import {createWhatsAppService,createMemoryStore,isAcknowledgement} from '../tools/jarvis/whatsapp-service.mjs';
 import {mapJob} from '../tools/jarvis/live-relay.mjs';
 import {parseDecision,conversationContext} from '../tools/jarvis/conversation.mjs';
 import {createJarvisServer} from '../tools/jarvis/serve.mjs';
@@ -17,7 +17,7 @@ function setup(){
     else if(op==='review')out=s.review(body.chat,body);else if(op==='send')out=await s.send(body.chat,body);else if(op==='read')out=s.markRead(body);else throw Error('Unexpected endpoint');
     return {ok:true,json:async()=>out};
   }});
-  return {s,workflow,receive,sends,calls,parse:context.window.SV_JARVIS_WHATSAPP_VOICE.parse};
+  return {s,workflow,receive,sends,calls,advance:ms=>{clock+=ms;},parse:context.window.SV_JARVIS_WHATSAPP_VOICE.parse};
 }
 test('latest natural wording is not a contact named last; a single latest result supplies source text for English speech',async()=>{
   const h=setup();h.receive('one','Hola, ¿podemos empezar a las diez?');h.receive('two','¿Puedes confirmar la limpieza de mañana?');
@@ -25,12 +25,52 @@ test('latest natural wording is not a contact named last; a single latest result
   const r=await h.workflow.handle('',{intent});assert.equal(r.reading.messages.length,1);assert.match(r.reading.messages[0].text,/confirmar/);assert.equal(h.calls.length,1);assert.equal(h.sends.length,0);
   assert.equal(h.s.inbox().unreadCount,2);await r.afterSpoken();assert.equal(h.s.inbox().unreadCount,1);
 });
+test('everyday wording reads the newest fictional message and lists waiting chats without sending',async()=>{
+  const h=setup();h.receive('one','Is the pool heated?');h.receive('two','Thanks, all sorted.',true);h.receive('three','Can you send the gate code?',false,'34600000003@s.whatsapp.net','Mara');
+  let r=await h.workflow.handle('',{intent:h.parse('What’s my latest WhatsApp message?')});assert.equal(r.reading.messages.length,1);assert.match(r.reading.messages[0].text,/gate code/);
+  r=await h.workflow.handle('',{intent:h.parse('Who do I need to reply to?')});assert.deepEqual(Array.from(r.reading.candidates,c=>c.name),['Mara']);assert.equal(r.text,'One chat might need a reply.\nMara asked just now: “Can you send the gate code?”');
+  assert.equal(h.sends.length,0);assert.ok(!h.calls.includes('send')&&!h.calls.includes('review'));
+});
 test('awaiting is independent of unread, notices phone replies and includes groups only as candidates',async()=>{
   const h=setup();h.receive('a','Can you confirm ten?');let r=await h.workflow.handle('',{intent:{kind:'unread'}});await r.afterSpoken();
   let data=h.s.inbox({view:'awaiting'});assert.equal(data.page.total,1);assert.match(data.candidates[0].messages[0].text,/confirm/);
   h.receive('b','Yes, ten is confirmed.',true);assert.equal(h.s.inbox({view:'awaiting'}).page.total,0);
   h.receive('c','Thanks!');h.receive('g','Who can cover Friday?',false,'34600000002@g.us','Cleaner');
-  r=await h.workflow.handle('',{intent:{kind:'awaiting'}});assert.equal(r.reading.candidates.length,2);assert.equal(r.afterSpoken,null);assert.ok(r.reading.candidates.some(c=>c.kind==='group'));assert.match(r.reading.coverage.scope,/not a guaranteed/);assert.equal(h.sends.length,0);
+  r=await h.workflow.handle('',{intent:{kind:'awaiting'}});assert.equal(r.reading.candidates.length,1);assert.equal(r.afterSpoken,null);assert.equal(r.reading.candidates[0].kind,'group');assert.equal(r.reading.acknowledged.total,1);assert.match(r.reading.coverage.scope,/not a guaranteed/);assert.equal(h.sends.length,0);
+});
+test('acknowledgement detection is conservative: thanks/OK/emoji only, never questions, other words or attachments',()=>{
+  for(const text of ['Thanks!','thank you','Ok 👍','Thanks, all good!','Perfect, thank you','Gracias','Vale, perfecto','Muchas gracias!','No problem, thanks','Got it','👍','🙏🙏'])assert.equal(isAcknowledgement({text}),true,text);
+  for(const text of ['Thanks? Did you get my photo','Thanks! Can you send the code?','Ok, see you at 10','Thanks, the boiler is leaking again','No','¿Vale?','Gracias, ¿y la llave?'])assert.equal(isAcknowledgement({text}),false,text);
+  assert.equal(isAcknowledgement({text:'',media:{type:'sticker'}}),true);assert.equal(isAcknowledgement({text:'',media:{type:'image'}}),false);assert.equal(isAcknowledgement({text:'Thanks',media:{type:'document'}}),false);
+});
+test('waiting chats: acknowledgements are set aside, questions rank first, an earlier unanswered question is not hidden by a later thanks',async()=>{
+  const h=setup(),jid=n=>'346000000'+n+'@s.whatsapp.net';
+  h.receive('l1','Is the pool heated?',false,jid(11),'Luca');h.receive('l2','Yes, from 9am.',true,jid(11));h.receive('l3','Thanks!',false,jid(11),'Luca');
+  h.receive('n1','The keys are in the lockbox.',false,jid(12),'Nina');
+  h.receive('t1','Who can cover the Friday clean?',false,'34600000999@g.us','Ana');
+  h.receive('m1','Can you send me the gate code for tomorrow?',false,jid(13),'Mara');
+  h.receive('p1','Could you confirm the checkout time',false,jid(14),'Pau');h.receive('p2','Thanks',false,jid(14),'Pau');
+  const data=h.s.inbox({view:'awaiting'});
+  assert.deepEqual(data.candidates.map(c=>[c.name,c.reason]),[['Pau','asked'],['Mara','asked'],['Unnamed group','asked'],['Nina','last-message']]);
+  assert.deepEqual({...data.acknowledged,names:[...data.acknowledged.names]},{total:1,names:['Luca']});assert.equal(data.page.total,4);
+  assert.ok(data.candidates.every(c=>Number.isFinite(c.waitingSince)));assert.equal(data.candidates[0].messages.length,2);
+  const r=await h.workflow.handle('',{intent:h.parse('Who needs a reply?')});
+  assert.equal(r.text,['4 chats might need a reply.','Pau asked just now: “Could you confirm the checkout time”','Mara asked just now: “Can you send me the gate code for tomorrow?”','Ana in Unnamed group asked just now: “Who can cover the Friday clean?”','Nina wrote just now: “The keys are in the lockbox.”','I left out Luca, who only said thanks or OK.'].join('\n'));
+  assert.equal(r.reading.candidates[0].ago,'just now');assert.match(r.reading.candidates[0].highlight.text,/checkout time/);
+  const more=await h.workflow.handle('',{intent:{kind:'awaiting',limit:2,offset:2}});assert.doesNotMatch(more.text,/left out/);
+  assert.equal(h.sends.length,0);assert.ok(!h.calls.includes('send')&&!h.calls.includes('review'));
+});
+test('natural wording: one sentence per message with relative time, sent and group forms, and a calm empty answer',async()=>{
+  const h=setup(),say=async t=>(await h.workflow.handle('',{intent:h.parse(t)})).text;
+  assert.equal(await say('Who needs a reply?'),'Nobody seems to be waiting for a reply right now.');
+  h.receive('m1','¿Puedes enviarme el código de la puerta?',false,'34600000013@s.whatsapp.net','Mara');h.advance(15*60_000);
+  assert.equal(await say('What’s my latest WhatsApp message?'),'Your latest WhatsApp message is from Mara, 15 minutes ago: “¿Puedes enviarme el código de la puerta?”');
+  h.receive('m2','Sí, ahora te lo mando.',true,'34600000013@s.whatsapp.net');h.advance(2*3600_000);
+  assert.equal(await say('What was my last sent message?'),'Your last sent message was to Mara, 2 hours ago: “Sí, ahora te lo mando.”');
+  h.receive('g1','Who can cover the Friday clean?',false,'34600000999@g.us','Ana');h.advance(26*3600_000);
+  assert.equal(await say('Who needs a reply?'),'One chat might need a reply.\nAna in Unnamed group asked yesterday: “Who can cover the Friday clean?”');
+  const r=await h.workflow.handle('',{intent:{kind:'read',name:'Mara',limit:1}});assert.equal(r.text,'The latest message from Mara, yesterday: “¿Puedes enviarme el código de la puerta?”');assert.equal(r.reading.messages[0].ago,'yesterday');
+  assert.equal(h.sends.length,0);
 });
 test('history includes both speakers, searches and pages without repeating older windows; sent messages are distinct',async()=>{
   const h=setup();h.receive('a','Door is broken');h.receive('b','I will check the door.',true);h.receive('c','Gracias');

@@ -55,6 +55,15 @@ test('natural voice requests support read, recent, unread and two-turn dictation
   assert.equal(parse('Write a message to Bex').kind,'write');assert.equal(parse('Approve and send').kind,'approve');assert.equal(parse('Yes').kind,'ambiguousApproval');
   for(const t of ['Do not read Bex’s messages','Maybe write a message to Bex','"Write a message to Bex saying Hi"'])assert.equal(parse(t),null,t);
 });
+test('everyday latest and waiting-for-reply questions resolve locally; topics, named chats and dictated text do not',()=>{
+  const {parse}=harness();
+  for(const t of ['What’s my latest WhatsApp message?','What is my latest WhatsApp message?','Jarvis, what\'s the last message I got?','Who messaged me last on WhatsApp?','Who just texted me?','Who sent the latest message?','Who\'s my last message from?'])assert.deepEqual({...parse(t)},{kind:'recent',limit:1},t);
+  for(const t of ['What was my last sent message?','What was the last message I sent?'])assert.deepEqual({...parse(t)},{kind:'recent',limit:1,direction:'outgoing'},t);
+  assert.equal(parse('Any new WhatsApp messages?').kind,'unread');
+  for(const t of ['Which chats are waiting for my reply?','Who do I need to reply to?','Who needs a reply?','Who’s waiting for a reply from me?','Who\'s waiting on me?','Do I owe anyone a reply?','Which chats need a reply?','Is anyone waiting for my reply on WhatsApp?','Is there anything I need to respond to?','Hey Jarvis, who should I get back to?'])assert.equal(parse(t)?.kind,'awaiting',t);
+  for(const t of ['What\'s my latest message to Bex?','Who needs a reply about the Villa Rosa booking?','If anyone is waiting for a reply, tell me','Who messaged me?','What\'s the latest booking?','Who is cleaning Villa Rosa tomorrow?'])assert.equal(parse(t),null,t);
+  const draft=parse('Write a message to Bex saying who needs a reply?');assert.equal(draft.kind,'write');assert.equal(draft.text,'who needs a reply?');
+});
 test('dictate, read back, approve sends exactly once; early or vague approval never sends',async()=>{
   const h=harness();let r=await h.workflow.handle('Write a message to Bex');assert.match(r.text,/What should I say to Bex/);assert.equal(h.sent.length,0);
   r=await h.workflow.handle('Hello, the cleaning starts at ten.');assert.match(r.text,/Message to Bex/);assert.equal(h.workflow.snapshot().text,'Hello, the cleaning starts at ten.');

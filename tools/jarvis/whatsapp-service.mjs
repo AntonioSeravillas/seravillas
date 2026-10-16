@@ -26,6 +26,16 @@ function cleanMedia(media){
   return {type:media.type,mimetype:clip(media.mimetype,80),sizeBytes:Math.max(0,Math.min(Number(media.sizeBytes)||0,4e9)),seconds:Math.max(0,Math.min(Number(media.seconds)||0,86400)),fileName:clip(media.fileName,80)};
 }
 const mediaLabel=m=>m?({image:'Photo',video:'Video',audio:'Voice or audio message',document:'Document',sticker:'Sticker'})[m.type]+' (not downloaded)':'';
+/* Waiting-for-reply heuristics. Thanks/OK/emoji-only incoming text is an acknowledgement, not a request.
+   Conservative: a question mark, any other word or a non-sticker attachment keeps the chat as a candidate. */
+const ACK_WORDS=new Set('thanks thank you thx ty ta cheers ok okay okey k kk great perfect perfecto perfecta genial vale gracias muchas mil merci cool nice lovely brilliant awesome super noted received recibido got it sounds good all sorted fine bien todo muy de nada np sure'.split(' '));
+export function isAcknowledgement(m){
+  if(m?.media&&m.media.type!=='sticker')return false;
+  const t=String(m?.text||'').normalize('NFC').toLowerCase();if(/[?¿]/.test(t))return false;
+  const words=t.replace(/\bno (?:problem|problema|worries)\b/g,' ').replace(/[^\p{L}\p{N}\s]/gu,' ').split(/\s+/).filter(Boolean);
+  return words.length<=6&&words.every(w=>ACK_WORDS.has(w));
+}
+const ASKS=/[?¿]|^(?:can|could|would|will) you\b|\b(?:please|por favor|puedes|podr[ií]as|need you to|let me know)\b/i;
 
 /* In-memory store for tests and the sample flow. */
 export function createMemoryStore(initial=null){
@@ -236,14 +246,22 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
   }
   function voiceInbox({chat:key='',view,limit=5,offset=0,direction='incoming',query=''}={}){
     if(!['voice','recent','unread','history','awaiting'].includes(view)||!Number.isInteger(limit)||limit<1||limit>10||!Number.isInteger(offset)||offset<0||offset>100||!['incoming','outgoing','both'].includes(direction)||typeof query!=='string'||query.length>120)throw fail(400,'Invalid message window.');
-    const coverage={chats:Object.keys(state.chats).length,messagesPerChat:limits.messagesPerChat,scope:'Stored linked-device text only, up to '+limits.messagesPerChat+' messages per chat. Older phone history is not imported. Attachments are listed but not downloaded or transcribed. Waiting means a contact wrote after the last observed owner reply, not a guaranteed unanswered request.'};
+    const coverage={chats:Object.keys(state.chats).length,messagesPerChat:limits.messagesPerChat,scope:'Stored linked-device text only, up to '+limits.messagesPerChat+' messages per chat. Older phone history is not imported. Attachments are listed but not downloaded or transcribed. Waiting means a contact wrote after the last observed owner reply, not a guaranteed unanswered request. Chats ending only in thanks/OK/emoji are counted separately as acknowledgements.'};
     const project=(c,m,max=limits.text)=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,from:m.from,sender:m.sender,text:clip(m.text,max),truncated:(m.text||'').length>max,media:mediaLabel(m.media),at:m.at,receivedAt:m.receivedAt||m.at*1000,unread:m.unread===true});
     const chats=Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt),out={chats:chats.map(summary),coverage};
     if(view==='voice'){if(key)out.chat=summary(need(key));return out;}
     const page=all=>({total:all.length,offset,nextOffset:offset+limit<all.length?offset+limit:null});
     if(view==='awaiting'){
-      const waiting=chats.filter(c=>c.messages.at(-1)?.from==='contact');
-      out.page=page(waiting);out.candidates=waiting.slice(offset,offset+limit).map(c=>{const owner=c.messages.findLastIndex(m=>m.from==='owner');return {key:c.key,name:recipient(c).name,kind:c.kind,lastOwner:owner>=0?project(c,c.messages[owner],300):null,messages:c.messages.slice(owner+1).filter(m=>m.from==='contact').slice(-3).map(m=>project(c,m,700))};});return out;
+      const waiting=[],acknowledged=[];
+      for(const c of chats){
+        if(c.messages.at(-1)?.from!=='contact')continue;
+        const owner=c.messages.findLastIndex(m=>m.from==='owner'),unanswered=c.messages.slice(owner+1).filter(m=>m.from==='contact');
+        (unanswered.every(isAcknowledgement)?acknowledged:waiting).push({c,owner,unanswered,asks:unanswered.some(m=>ASKS.test(m.text||''))});
+      }
+      /* Questions/requests first, then direct chats before groups; newest first within each (stable sort). */
+      waiting.sort((a,b)=>b.asks-a.asks||(a.c.kind==='group')-(b.c.kind==='group'));
+      out.page=page(waiting);out.acknowledged={total:acknowledged.length,names:acknowledged.slice(0,5).map(x=>recipient(x.c).name)};
+      out.candidates=waiting.slice(offset,offset+limit).map(({c,owner,unanswered,asks})=>({key:c.key,name:recipient(c).name,kind:c.kind,reason:asks?'asked':'last-message',waitingSince:unanswered[0]?.at??null,highlight:project(c,unanswered.findLast(m=>ASKS.test(m.text||''))||unanswered.findLast(m=>!isAcknowledgement(m))||unanswered.at(-1),700),lastOwner:owner>=0?project(c,c.messages[owner],300):null,messages:unanswered.slice(-3).map(m=>project(c,m,700))}));return out;
     }
     if(view==='history'){
       const c=need(key),all=c.messages.filter(m=>(direction==='both'||m.from===(direction==='outgoing'?'owner':'contact'))&&(!query||normalSearch(m.text).includes(normalSearch(query))));

@@ -4,6 +4,23 @@
   const API='/api/jarvis/whatsapp/',KEY=/^[a-f0-9]{20}$/;
   const normal=s=>String(s||'').normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();
   const tidy=s=>String(s||'').trim().replace(/[.!?]+$/,'').replace(/^["“'‘]|["”'’]$/g,'').trim();
+  const REPLY='(?:a |my |an )?(?:reply|response|answer)(?: from me)?';
+  const AWAITING=[
+    new RegExp('^who(?: (?:still )?(?:needs|wants|is waiting (?:for|on))|[\'’]?s (?:still )?waiting (?:for|on)) '+REPLY+'$','i'),
+    /^who(?: is|['’]?s) (?:still )?waiting(?: (?:for|on) me)?$/i,
+    /^who (?:do|should|must) i (?:still )?(?:need to |have to )?(?:reply|respond|answer|get back)(?: to)?$/i,
+    new RegExp('^do i (?:still )?(?:owe anyone|owe anybody|need to (?:reply|respond) to anyone|have to (?:reply|respond) to anyone)(?: '+REPLY+')?$','i'),
+    new RegExp('^(?:which|what) (?:whats\\s?app )?(?:chats|messages|conversations|people|contacts) (?:still )?(?:need|needs|require|are waiting for|want) '+REPLY+'$','i'),
+    new RegExp('^(?:is|are) (?:anyone|anybody|there any (?:whats\\s?app )?(?:chats|messages|people)) (?:still )?waiting (?:for|on) '+REPLY+'$','i'),
+    /^(?:is there )?anything i (?:still )?(?:need|have) to (?:reply|respond) to$/i
+  ];
+  const LATEST=/^(?:what(?:['’]?s| is| was)|tell me|give me)(?: me)? (?:my|the) (?:last|latest|most recent|newest) (?:(sent|outgoing) |received |incoming )?(?:whats\s?app )?message(?: i (?:got|received|(sent)))?$/i;
+  const LAST_SENDER=[
+    /^who (?:last|just|most recently) (?:messaged|texted|wrote to|wrote|sent) me(?: a)?(?: whats\s?app)?(?: message)?$/i,
+    /^who (?:messaged|texted|wrote to|sent) me(?: a)?(?: whats\s?app)?(?: message)? (?:last|most recently)$/i,
+    /^who (?:sent|wrote) (?:me )?the (?:last|latest|most recent) (?:whats\s?app )?message$/i,
+    /^who(?: is|['’]?s|was) (?:my|the) (?:last|latest|most recent) (?:whats\s?app )?message from$/i
+  ];
   function parse(input){
     let t=String(input||'').trim();if(!t||t.length>2200)return null;
     t=t.replace(/^(?:okay|ok)[,.!\s]+/i,'').replace(/^(?:(?:hi|hey|hello)[,\s]+)?jarvis[,!.\s]+/i,'').replace(/^(?:good morning[,\s]+)?(?:please\s+)?(?:(?:can|could|would|will) you\s+|i (?:want|need) you to\s+|i(?:['’]d| would) like (?:you )?to\s+)?(?:please\s+)?/i,'');
@@ -18,8 +35,13 @@
     if(m)return {kind:'write',name:tidy(m[2]),group:!!m[1],text:split?split[2].trim():''};
     const readText=head.replace(/\s+(?:out loud|aloud|for me)[.!?]?$/i,'');
     if(!split&&/\b(?:unanswered|awaiting|waiting for (?:my|our|a) (?:reply|response)|(?:havent|haven['’]t|have not|didnt|didn['’]t|did not) (?:answered|answer|replied|reply))\b/i.test(t)&&/\b(?:whats\s?app|messages|requests|chats)\b/i.test(t))return {kind:'awaiting'};
+    /* Whole natural questions only: anything longer (a topic, a contact) is left to the reasoning path. */
+    const asked=readText.replace(/[.!?]+$/,'').replace(/\s+(?:on|in|from) whats\s?app$/i,'');
+    if(!split&&AWAITING.some(r=>r.test(asked)))return {kind:'awaiting'};
     if(!split&&/^(?:read|check|show)(?: me)? (?:my |the )?(?:last|latest|most recent) (?:received |incoming |whats\s?app )?message(?: (?:on|in|from) whats\s?app)?[.!?]?$/i.test(readText))return {kind:'recent',limit:1};
-    if(!split&&/\b(?:unread|new messages)\b/i.test(t)&&/\b(?:whats\s?app|messages)\b/i.test(t))return {kind:'unread'};
+    m=asked.match(LATEST);if(!split&&m)return {kind:'recent',limit:1,...(m[1]||m[2]?{direction:'outgoing'}:{})};
+    if(!split&&LAST_SENDER.some(r=>r.test(asked)))return {kind:'recent',limit:1};
+    if(!split&&/\b(?:unread|new (?:whats\s?app )?messages)\b/i.test(t)&&/\b(?:whats\s?app|messages)\b/i.test(t))return {kind:'unread'};
     if(!split&&/^(?:(?:do (?:we|i) have|are there) (?:any )?(?:whats\s?app )?messages|(?:read|read out|read aloud|read out loud|check|show)(?: me)? (?:my |the )?(?:latest |recent |last )?(?:whats\s?app )?messages|read (?:my )?whats\s?app)(?: (?:on|in|from) whats\s?app)?[.!?]?$/i.test(readText))return {kind:'recent'};
     m=readText.match(/^(?:read|read out|read out loud|read aloud|show|check|what (?:are|were))\s+(?:me\s+)?(?:the\s+|my\s+)?(?:last\s+|latest\s+|recent\s+)?(?:whats\s?app\s+)?messages?\s+(?:from|with|in|for)\s+(?:the\s+)?(group\s+)?(.+?)[.!?]?$/i);
     if(!m)m=readText.match(/^(?:read|read out|read out loud|read aloud|show|check)\s+(?:me\s+)?(?:the\s+)?(group\s+)?(.+?)(?:['’]s)?\s+(?:whats\s?app\s+)?messages?[.!?]?$/i);
@@ -27,9 +49,13 @@
     if(m)return {kind:'read',name:tidy(m[2]),group:!!m[1],...(/\b(?:last|latest)\s+(?:whats\s?app\s+)?message\b/i.test(readText)?{limit:1}:{})};
     return null;
   }
-  const words=m=>(m.kind==='group'?'In '+m.name+(m.sender?', '+m.sender:''):'From '+m.name)+': '+(m.text||m.media?.label||m.media||'Attachment, not downloaded.');
+  const quote=(m,max=2000)=>{const t=String(m?.text||'');return t?'“'+(t.length>max?t.slice(0,max).replace(/\s+\S*$/,'')+'…':t)+'”':(m?.media?.label||m?.media||'an attachment, not downloaded');};
   function create({fetchImpl,getToken=()=>'',now=()=>Date.now(),onChange=()=>{}}={}){
     let token='',pending=null,lastRecipient=null,lastRead=null,epoch=0,request=null,busy=false;
+    /* Spoken relative time from WhatsApp seconds; the same phrase is passed to the models so they never compute it. */
+    const ago=at=>{if(!(Number(at)>0))return '';const s=Math.max(0,now()/1000-Number(at));if(s<90)return 'just now';const m=Math.round(s/60);if(m<60)return m+' minutes ago';const h=Math.round(m/60);if(h<24)return h===1?'an hour ago':h+' hours ago';const d=Math.round(h/24);return d===1?'yesterday':d+' days ago';};
+    const when=m=>{const t=ago(m?.at);return t?', '+t:'';};
+    const line=m=>(m.from==='owner'?'You':m.kind==='group'?'In '+m.name+(m.sender?', '+m.sender:''):'From '+m.name)+when(m)+': '+quote(m);
     const snapshot=()=>pending?.stage==='review'?{stage:'review',name:pending.review.recipient.name,detail:pending.review.recipient.detail,text:pending.review.text,english:pending.english||'',language:pending.language||'',heard:pending.heard===true,understanding:pending.understanding===true}:pending?{stage:pending.stage,name:pending.name||''}:null;
     const changed=()=>onChange(snapshot());
     const reset=()=>{pending=null;changed();};
@@ -72,11 +98,17 @@
       const all=(data.chat?.messages||[]).filter(m=>(history||intent.direction==='both'||intent.direction==='outgoing'?intent.direction!=='outgoing'||m.from==='owner':m.from==='contact')&&(!intent.query||normal(m.text).includes(normal(intent.query))));
       const messages=data.page?all:offset>=all.length?[]:all.slice(Math.max(0,all.length-offset-limit),all.length-offset);
       if(!messages.length)return reply('There are no matching messages in this stored window for '+chat.name+'. Older WhatsApp history is not imported.');
-      reset();lastRead={kind:intent.kind,chat:chat.key,limit,offset,direction:intent.direction|| (history?'both':'incoming')};return readResult(messages.map(m=>({...m,name:chat.name,chat:chat.key,kind:chat.kind})),signal,history?'Here is part of your conversation with '+chat.name+'. ':'Here '+(messages.length===1?'is the latest message':'are the latest '+messages.length+' messages')+' from '+chat.name+'. ',{kind:intent.kind,total:data.page?.total??all.length,offset,nextOffset:data.page?data.page.nextOffset:offset+messages.length<all.length?offset+messages.length:null,coverage:data.coverage});
+      reset();lastRead={kind:intent.kind,chat:chat.key,limit,offset,direction:intent.direction|| (history?'both':'incoming')};return readResult(messages.map(m=>({...m,name:chat.name,chat:chat.key,kind:chat.kind})),signal,history?'Here is part of your conversation with '+chat.name+'. ':'Here '+(messages.length===1?'is the latest message':'are the latest '+messages.length+' messages')+' from '+chat.name+'. ',{kind:intent.kind,total:data.page?.total??all.length,offset,nextOffset:data.page?data.page.nextOffset:offset+messages.length<all.length?offset+messages.length:null,coverage:data.coverage},!history&&messages.length===1?single({...messages[0],name:chat.name,kind:chat.kind},'chat'):'');
     }
-    function readResult(messages,signal,prefix,metadata={}){
+    /* One message as a single natural sentence: "Your latest WhatsApp message is from Mara, 15 minutes ago: “…”". */
+    function single(m,scope){
+      if(m.from==='owner')return 'Your last sent message was to '+m.name+when(m)+': '+quote(m);
+      const who=m.kind==='group'&&m.sender?m.sender+' in '+m.name:m.name;
+      return (scope==='chat'?'The latest message from ':'Your latest WhatsApp message is from ')+who+when(m)+': '+quote(m);
+    }
+    function readResult(messages,signal,prefix,metadata={},spoken=''){
       const ids=messages.filter(m=>m.from!=='owner').map(m=>m.id).filter(id=>KEY.test(id||''));
-      return {...reply(prefix+messages.map(m=>m.from==='owner'?'You: '+m.text:words(m)).join('\n'),async()=>{if(ids.length)try{await api('read',{body:{messages:ids.slice(0,10)}},signal);}catch{}}),reading:{kind:'read',...metadata,messages:messages.map(m=>({name:m.name,chat:m.chat,kind:m.kind,from:m.from||'contact',sender:m.sender||'',text:m.text||'',media:typeof m.media==='object'?m.media?.label:m.media||'',at:m.at||0,truncated:m.truncated===true}))}};
+      return {...reply(spoken||prefix+messages.map(line).join('\n'),async()=>{if(ids.length)try{await api('read',{body:{messages:ids.slice(0,10)}},signal);}catch{}}),reading:{kind:'read',...metadata,messages:messages.map(m=>({name:m.name,chat:m.chat,kind:m.kind,from:m.from||'contact',sender:m.sender||'',text:m.text||'',media:typeof m.media==='object'?m.media?.label:m.media||'',at:m.at||0,ago:ago(m.at),truncated:m.truncated===true}))}};
     }
     async function handle(text,{screenApproval=false,intent:resolved}={}){
       const literal=parse(text);
@@ -125,7 +157,14 @@
             if(!Array.isArray(data.candidates)&&!Array.isArray(data.awaiting))return reply('The PC inbox needs the latest update before I can check unanswered chats.');
             const offset=intent.offset||0,limit=Math.min(8,intent.limit||5),candidates=data.candidates||data.awaiting.slice(offset,offset+limit);
             lastRecipient=candidates.length===1?{key:candidates[0].key,name:candidates[0].name,kind:candidates[0].kind}:null;
-            result={...reply(candidates.length?'These chats may need a reply: '+candidates.map(c=>c.name).join(', ')+'. A last incoming message is a candidate, not proof of an unanswered request.':'There are no chats awaiting a reply in this stored inbox window.'),reading:{kind:'awaiting',candidates,candidateCount:data.page?.total??data.awaitingCount??0,covered:candidates.length,offset,nextOffset:data.page?data.page.nextOffset:offset+candidates.length<data.awaiting.length?offset+candidates.length:null,coverage:data.coverage}};
+            const ack=!offset&&data.acknowledged?.total?data.acknowledged:null,names=ack?.names?.length?ack.names:null;
+            const acks=!ack?'':ack.total===1&&names?'I left out '+names[0]+', who only said thanks or OK.':'I left out '+ack.total+' chats that only said thanks or OK'+(names?': '+names.join(', '):'')+'.';
+            /* "Mara asked 15 minutes ago: “Can you send…”" — the PC's chosen request (else newest message), shortened for speech. */
+            const about=c=>{const m=c.highlight||(c.messages||[]).at(-1)||{},t=ago(m.at);return (c.kind==='group'&&m.sender?m.sender+' in '+c.name:c.name)+(c.reason==='asked'?' asked':' wrote')+(t?' '+t:'')+': '+quote(m,160);};
+            const total=data.page?.total??candidates.length,more=total-offset-candidates.length;
+            const opening=offset?'Here are more chats that might need a reply.':total===1?'One chat might need a reply.':total+' chats might need a reply.';
+            const spoken=candidates.length?[opening,...candidates.map(about),...(more>0?['There '+(more===1?'is 1 more.':'are '+more+' more.')]:[]),acks].filter(Boolean).join('\n'):'Nobody seems to be waiting for a reply right now.'+(acks?' '+acks:'');
+            result={...reply(spoken),reading:{kind:'awaiting',candidates:candidates.map(c=>({...c,ago:ago((c.highlight||(c.messages||[]).at(-1))?.at)})),acknowledged:data.acknowledged||null,candidateCount:data.page?.total??data.awaitingCount??0,covered:candidates.length,offset,nextOffset:data.page?data.page.nextOffset:offset+candidates.length<data.awaiting.length?offset+candidates.length:null,coverage:data.coverage}};
           }else{
             const limit=Math.min(10,intent.limit||(intent.kind==='recent'?1:5));
             const latest=intent.direction==='outgoing'?(data.latestOutgoing||data.latestMessages||[]).filter(m=>m.from==='owner'):intent.direction==='both'?(data.latestMessages||[]):(data.latestIncoming||data.recentMessages||data.recent||[]);
@@ -135,7 +174,7 @@
               if(intent.kind==='recent'&&(data.chats||[]).length){
                 const chat=(data.chats||[])[0];result=await selected({kind:'read'},chat,signal);
               }else result=reply('There are no '+(intent.kind==='unread'?'unread':'received')+' messages in the Jarvis inbox. Older WhatsApp history and phone read status are not synced.');
-            }else{if(messages.length===1){const m=messages[0];lastRecipient={key:m.chat,name:m.name,kind:m.kind};}result=readResult(messages,signal,intent.kind==='unread'?'You have '+(data.page?.total??data.unreadCount)+' unread messages in Jarvis. ':'Here '+(messages.length===1?'is your latest WhatsApp message. ':'are your recent WhatsApp messages. '),{kind:intent.kind,total:data.page?.total??(intent.kind==='unread'?data.unreadCount:messages.length),nextOffset:data.page?.nextOffset??null,coverage:data.coverage});}
+            }else{if(messages.length===1){const m=messages[0];lastRecipient={key:m.chat,name:m.name,kind:m.kind};}result=readResult(messages,signal,intent.kind==='unread'?'You have '+(data.page?.total??data.unreadCount)+' unread messages in Jarvis. ':'Here '+(messages.length===1?'is your latest WhatsApp message. ':'are your recent WhatsApp messages. '),{kind:intent.kind,total:data.page?.total??(intent.kind==='unread'?data.unreadCount:messages.length),nextOffset:data.page?.nextOffset??null,coverage:data.coverage},intent.kind==='recent'&&messages.length===1?single(messages[0],'inbox'):'');}
           }
         }
         return current()?result:null;
