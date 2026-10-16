@@ -89,7 +89,8 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null}={}){
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null,voiceChoice=liveSdk?'live':customSpeech?'elevenlabs':null,voiceStorage=null}={}){
+  const savedVoice=voiceStorage||new Map(voiceChoice?[['sv_jarvis_voice',voiceChoice]]:[]);
   const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
   /* Setting innerHTML registers every element that has an id, with its initial text and hidden state from the real markup. */
@@ -110,7 +111,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
     setTimeout(fn,ms){timers.set(++n,{fn,ms});return n;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(fn){rafs.push(fn);return rafs.length;},cancelAnimationFrame(){},
     addEventListener(t,f){(winListeners[t]=winListeners[t]||[]).push(f);},removeEventListener(t,f){winListeners[t]=(winListeners[t]||[]).filter(x=>x!==f);},
     matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(u){if(inGesture)speechUnlocked=true;if(speechGate&&!speechUnlocked)return;spoken.push(u);audioEvents.push(u.text.trim()?'reply':'prime');},cancel(){audioEvents.push('cancel');},getVoices:()=>[]},
-    D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>agent?{kind:'chat'}:{kind:'reply',message:reply})}};
+    SV_STORAGE:{getItem:k=>savedVoice.get(k)||null,setItem:(k,v)=>savedVoice.set(k,String(v))},D:{props:[],cleaners:[],sessions:[],bookings:[],tasks:[],issues:[]},SV_JARVIS_ACTIONS:{route:route||(()=>agent?{kind:'chat'}:{kind:'reply',message:reply})}};
   if(agent){sandbox.AbortSignal=AbortSignal;sandbox.fetch=async(url,init)=>{
     if(String(url).endsWith('/health')&&healthGate)await healthGate;
     await Promise.resolve();if(whatsappFetch&&String(url).includes('/whatsapp/'))return whatsappFetch(String(url),init);
@@ -137,6 +138,15 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 }
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+test('free voice defaults on desktop and phone, makes no paid speech/session call, and an explicit choice survives reload',async()=>{
+  for(const desktop of [true,false]){
+    const saved=new Map();let starts=0;const liveSdk={Conversation:{startSession:async()=>{starts++;}}};
+    const app=desktopRuntime({agent:true,desktop,customSpeech:true,liveSdk,voiceStorage:saved,understand:async()=>({kind:'reply',text:'Ready when you are.'})});app.run('openJarvis()');await flush();
+    assert.equal(app.el('jarvis-voice-choice').value,'device');app.submit('Hello');await flush();assert.equal(app.speechRequests.length,0);assert.equal(starts,0);assert.equal(app.utterances.length,1);app.finishSpeech();
+    app.el('jarvis-voice-choice').listeners.change({target:{value:'live'}});assert.equal(saved.get('sv_jarvis_voice'),'live');app.el('jarvis-voice-choice').listeners.change({target:{value:'device'}});app.click('close');
+    const reopened=desktopRuntime({agent:true,desktop,customSpeech:true,liveSdk,voiceStorage:saved});reopened.run('openJarvis()');await flush();assert.equal(reopened.el('jarvis-voice-choice').value,'device');reopened.click('close');
+  }
+});
 test('an early microphone tap waits for live health instead of silently entering the slow Hermes speech loop',async()=>{
   for(const desktop of [true,false]){
     let release,options,starts=0;const healthGate=new Promise(r=>{release=r;});

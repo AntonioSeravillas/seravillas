@@ -5,11 +5,13 @@
 (function(){
   let root=null,phase='idle',panel=null,mode='local',lines=[],lastReply='',recognizer=null,voice=null,micToken=0,waEmbedded=false;
   let generation=0,request=null,ringCleanup=null,micStream=null,meterFrame=0,audioContext=null;
-  let speechTimer=null,speechUtterance=null,speechChunks=[],customAudio=null,manualAudio=false,settings={language:'en-GB',muted:false,sounds:true,continuous:true,customVoice:true};
+  let speechTimer=null,speechUtterance=null,speechChunks=[],customAudio=null,manualAudio=false,settings={language:'en-GB',muted:false,sounds:true,continuous:true,customVoice:false};
   let health={ready:false,message:'Open the local Jarvis server to connect Hermes.'},requestToken='',sessionId='',returnFocus=null,background=null,wasInert=false;
   let inboxMonitor=null,inboxState=null,announcements=[],messageAudioArmed=false,speechCompletion=null;
   let waConversation=null,audioReady=Promise.resolve(),customFallback=false,customTurn=null,records=null,recordsView=null,live=null,liveHasReplied=false,liveOwnerText='';
-  settings.liveVoice=true;
+  // Free device speech is the default. Paid voice is an explicit, per-device choice.
+  settings.liveVoice=false;
+  try{const choice=SV_STORAGE.getItem('sv_jarvis_voice');settings.liveVoice=choice==='live';settings.customVoice=choice==='live'||choice==='elevenlabs';}catch{}
   let connectionCheck=null,appToolsSelected=false;
   let liveReading=null;
   const ios=()=>/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -605,7 +607,7 @@
     el('jarvis-input').addEventListener('focus',()=>{if(live?.active)live.muteInput();else if(voice?.active)pauseVoice('Paused while you type.');});
     root.addEventListener('focusin',event=>{if(event.target?.id==='wa-editor'&&(voice?.active||live?.active))pauseVoice('Paused while you edit the WhatsApp reply.');});
     el('jarvis-form').addEventListener('submit',e=>{e.preventDefault();if(live?.active){if(!live.ready){error('The live connection is still starting. Wait a moment, then send your message.');return;}const input=el('jarvis-input'),text=input.value.trim();if(text){input.value='';input.blur?.();live.sendText(text);}return;}cancelReply();prepareAudio();prepareSpeech();const text=el('jarvis-input').value;void send(text);});
-    el('jarvis-voice-choice').addEventListener('change',e=>{stop();customFallback=false;settings.liveVoice=e.target.value==='live';settings.customVoice=e.target.value!=='device';updateConnection();});
+    el('jarvis-voice-choice').addEventListener('change',e=>{stop();customFallback=false;const choice=['live','elevenlabs'].includes(e.target.value)?e.target.value:'device';settings.liveVoice=choice==='live';settings.customVoice=choice!=='device';try{SV_STORAGE.setItem('sv_jarvis_voice',choice);}catch{}updateConnection();});
     el('jarvis-mode-select').addEventListener('change',e=>{stop();mode=e.target.value==='hermes'&&health.ready?'hermes':'local';appToolsSelected=mode==='local';updateConnection();});el('jarvis-language').value=settings.language;el('jarvis-language').addEventListener('change',e=>{stop();settings.language=e.target.value;});el('jarvis-sounds').checked=settings.sounds;el('jarvis-sounds').addEventListener('change',e=>settings.sounds=e.target.checked);el('jarvis-muted').checked=settings.muted;el('jarvis-muted').addEventListener('change',e=>{settings.muted=e.target.checked;if(settings.muted&&live?.active)pauseVoice('Paused while replies are muted.');if(settings.muted&&(phase==='speaking'||customAudio?.active)){cancelReply();replyDone();}});
     el('jarvis-data-note').textContent=DEV_MODE?'This local preview uses fictional data until you restore your private app backup in Settings. Hermes receives a limited operations summary when you send an agent message.':'App tools read your current app data. Hermes runs on the Jarvis PC; other devices reach it through the live relay.';
     el('jarvis-message-alerts').checked=settings.messageAnnouncements;el('jarvis-message-alerts').addEventListener('change',e=>{settings.messageAnnouncements=e.target.checked;if(!settings.messageAnnouncements)announcements=[];});
