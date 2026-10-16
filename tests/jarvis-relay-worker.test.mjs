@@ -27,6 +27,13 @@ function setup(){
   return {env,sql,call,manager,device,tables,register,job,tick:ms=>{now+=ms;}};
 }
 test.after(()=>worker.setRelayClockForTests(null));
+test('new inbox views are read-only, authenticated and bounded on the cloud relay',async()=>{
+  const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
+  const params={view:'history',chat:'a'.repeat(20),limit:5,offset:10,direction:'both',query:'door'};
+  assert.equal((await h.call('/api/relay/jobs','POST',{op:'wa-inbox',params})).status,401);
+  for(const p of [{view:'send'},{view:'recent',limit:0},{view:'recent',limit:11},{view:'history',offset:101},{view:'history',query:'x'.repeat(121)},{view:'awaiting',url:'https://other.invalid'}])assert.equal((await h.job('wa-inbox',p)).status,400);
+  assert.equal((await h.job('wa-inbox',params)).status,202);const {job}=await(await h.device('/api/relay/device/claim',code)).json();assert.deepEqual(job.params,params);assert.equal(h.sql.sqlite.prepare('SELECT COUNT(*) AS n FROM app_state').get().n,0);
+});
 test('live voice connection requires the signed-in manager and accepts no client key, URL or agent ID',async()=>{
   const h=setup(),code=await h.register();await h.device('/api/relay/device/heartbeat',code);
   assert.equal((await h.call('/api/relay/jobs','POST',{op:'live-session',params:{}})).status,401);

@@ -36,6 +36,12 @@ test('app read-back mutes live input/output, ignores agent speech, and resumes o
   const h=harness();await h.player.start();const o=h.options();h.player.suspend();o.onModeChange({mode:'speaking'});o.onMessage({source:'ai',message:'Do not repeat',event_id:2});assert.equal(h.events.some(e=>e[1]==='Do not repeat'),false);assert.deepEqual(h.events.filter(e=>e[0]==='mic').at(-1),['mic',true]);
   h.player.resume();assert.deepEqual(h.events.filter(e=>e[0]==='volume').at(-1),['volume',0]);o.onModeChange({mode:'listening'});assert.deepEqual(h.events.filter(e=>e[0]==='volume').at(-1),['volume',1]);h.player.stop();
 });
+test('read-only live playback completion fires once; interruption or a newer turn revokes it, independently of draft approval',async()=>{
+  let completed=0,interrupted=0;const h=harness({onPlaybackDone:()=>completed++,onInterrupted:()=>interrupted++});await h.player.start();const o=h.options();
+  o.onMessage({source:'user',message:'Read my latest message',event_id:10});o.onMessage({source:'ai',message:'Bex asks whether ten works.',event_id:11});o.onModeChange({mode:'speaking'});o.onModeChange({mode:'listening'});o.onModeChange({mode:'listening'});assert.equal(completed,1);
+  o.onMessage({source:'ai',message:'A longer reading',event_id:12});o.onModeChange({mode:'speaking'});o.onInterruption();o.onModeChange({mode:'listening'});assert.equal(completed,1);assert.equal(interrupted,1);
+  o.onMessage({source:'ai',message:'An older reading',event_id:13});o.onModeChange({mode:'speaking'});o.onMessage({source:'user',message:'Actually stop',event_id:14});o.onModeChange({mode:'listening'});assert.equal(completed,1);h.player.stop();
+});
 test('native tool fields resolve bounded relative days, and typing keeps the microphone muted while replies can play',async()=>{
   const h=harness();const validate=h.sandbox.window.SV_JARVIS_LIVE.validateTool;
   const q=validate('lookup_records',{entity:'cleanings',view:'details',start:'tomorrow',end:'day after tomorrow'},{today:'2026-12-31'});assert.equal(q.start,'2027-01-01');assert.equal(q.end,'2027-01-02');

@@ -169,6 +169,19 @@ test('live overlay on desktop and phone: direct records, one voice, exact WhatsA
     assert.match(await options.clientTools.whatsapp_request({intent:'{"kind":"approve"}'}),/paused/);app.finishSpeech();await flush();app.click('close');assert.equal(ended,1);assert.equal(app.recs.length,0);
   }
 });
+test('live WhatsApp readings use the natural voice directly and only completed, uninterrupted audio marks them read',async()=>{
+  for(const outcome of ['complete','interrupt','new-turn']){
+    let options;const reads=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat',version:1};
+    const app=desktopRuntime({agent:true,liveSdk:{Conversation:{startSession:async o=>{options=o;return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0};}}},understand:async()=>{throw Error('Live reads must not call Hermes');},whatsappFetch:async(url,init={})=>({ok:true,json:async()=>{
+      if(url.includes('/inbox'))return {connection:{state:'open'},chats:[chat],messages:[{id:'b'.repeat(20),chat:key,name:'Bex',from:'contact',text:'¿Podemos empezar a las diez?'}],page:{total:1,nextOffset:null}};
+      if(url.endsWith('/read')){reads.push(JSON.parse(init.body));return {read:1};}throw Error('Unexpected endpoint');
+    }})});
+    app.run('openJarvis()');await flush();app.click('mic');await flush();options.onMessage({source:'user',message:'Check my last message on WhatsApp',event_id:1});
+    const result=JSON.parse(await options.clientTools.whatsapp_request({kind:'recent',limit:1}));assert.match(result.reading.messages[0].text,/diez/);assert.equal(app.utterances.length,0);assert.equal(app.speechRequests.length,0);assert.equal(reads.length,0);
+    options.onMessage({source:'ai',message:'Bex asks whether you can start at ten.',event_id:2});options.onModeChange({mode:'speaking'});
+    if(outcome==='interrupt')options.onInterruption();if(outcome==='new-turn')options.onMessage({source:'user',message:'Wait a moment',event_id:3});options.onModeChange({mode:'listening'});await flush();assert.equal(reads.length,outcome==='complete'?1:0);app.click('close');
+  }
+});
 test('Jarvis footer avoids workspace data-nav capture; Tasks and Cleanings close Jarvis and navigate on desktop and phone',async()=>{
   for(const desktop of [true,false])for(const [action,destination] of [['nav-tasks','tasks'],['nav-cleaning','cleaning']]){
     const app=desktopRuntime({desktop}),visited=[];app.context.workspaceNavigate=target=>visited.push(target);app.run('openJarvis()');await flush();

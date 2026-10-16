@@ -144,7 +144,7 @@ const RELAY_OPS = {
     if (!relayText(p.text, 2000).trim() || !/^[a-zA-Z0-9_-]{8,100}$/.test(p.sessionId || '') || !p.context || typeof p.context !== 'object' || Array.isArray(p.context)) fail(400, 'Invalid relay request');
     return {text:p.text, sessionId:p.sessionId, context:p.context};
   },
-  'wa-inbox': p => { assertKeys(p, ['chat']); if (p.chat !== undefined && !HEX20.test(p.chat)) fail(400, 'Invalid relay request'); return p.chat ? {chat:p.chat} : {}; },
+  'wa-inbox': p => { assertKeys(p, ['chat','view','limit','offset','direction','query']); if (p.chat !== undefined && !HEX20.test(p.chat)) fail(400, 'Invalid relay request'); if(p.view!==undefined&&!['voice','recent','unread','history','awaiting'].includes(p.view))fail(400,'Invalid message view');for(const k of ['limit','offset'])if(p[k]!==undefined&&(!Number.isInteger(p[k])||p[k]<(k==='limit'?1:0)||p[k]>(k==='limit'?10:100)))fail(400,'Invalid message window');if(p.direction!==undefined&&!['incoming','outgoing','both'].includes(p.direction))fail(400,'Invalid message direction');if(p.query!==undefined&&(typeof p.query!=='string'||p.query.length>120))fail(400,'Invalid message search');return {...p}; },
   'wa-read': p => { assertKeys(p, ['messages']); if(!Array.isArray(p.messages)||p.messages.length<1||p.messages.length>10||p.messages.some(id=>typeof id!=='string'||!HEX20.test(id)))fail(400,'Invalid relay request'); return {messages:p.messages}; },
   'wa-review': p => {
     assertKeys(p, ['chat','version','text','checkedPhone']);

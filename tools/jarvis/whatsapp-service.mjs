@@ -89,7 +89,7 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
     if(kind==='group'&&event.groupName)chat.name=clip(event.groupName,limits.name);
     if(kind==='direct'&&!fromMe&&event.senderName)chat.name=clip(event.senderName,limits.name);
     const at=Number(event.timestamp);
-    chat.messages=[...chat.messages,{id:providerId,live:event.live!==false,unread:!fromMe&&event.live!==false,receivedAt:now(),from:fromMe?'owner':'contact',sender:kind==='group'&&!fromMe?clip(event.senderName,limits.name)||'Group member':'',participantKey:kind==='group'&&!fromMe&&event.participant?sha('member:'+event.participant).slice(0,12):'',text,media,at:Number.isFinite(at)&&at>0?Math.floor(at):Math.floor(now()/1000),viaJarvis:false}].slice(-limits.messagesPerChat);
+    chat.messages=[...chat.messages,{id:providerId,live:event.live!==false,unread:!fromMe&&event.live!==false,receivedAt:now(),from:fromMe?'owner':'contact',sender:kind==='group'&&!fromMe?clip(event.senderName,limits.name)||'Group member':'',participantKey:kind==='group'&&!fromMe&&event.participant?sha('member:'+event.participant).slice(0,12):'',text,media,at:Number.isFinite(at)&&at>0?Math.floor(at):Math.floor(now()/1000),viaJarvis:false}].sort((a,b)=>a.at-b.at||(a.receivedAt||0)-(b.receivedAt||0)).slice(-limits.messagesPerChat);
     chat.version+=1;chat.updatedAt=now();
     invalidate(chat,fromMe?'owner_reply':'new_message');
     evict();persist();
@@ -232,9 +232,29 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
   }
   function summary(chat){
     const last=chat.messages.at(-1);
-    return {key:chat.key,...recipient(chat),version:chat.version,updatedAt:chat.updatedAt,unreadCount:chat.messages.filter(m=>m.unread===true).length,preview:last?(last.text||mediaLabel(last.media)).slice(0,140):'',lastFrom:last?.from||'',draftStatus:chat.draft?.status||'',sendStatus:chat.lastSend?.status||''};
+    return {key:chat.key,...recipient(chat),version:chat.version,updatedAt:chat.updatedAt,unreadCount:chat.messages.filter(m=>m.unread===true).length,preview:last?(last.text||mediaLabel(last.media)).slice(0,140):'',lastFrom:last?.from||'',awaitingReply:last?.from==='contact',draftStatus:chat.draft?.status||'',sendStatus:chat.lastSend?.status||''};
   }
-  function inbox({chat:key=''}={}){
+  function voiceInbox({chat:key='',view,limit=5,offset=0,direction='incoming',query=''}={}){
+    if(!['voice','recent','unread','history','awaiting'].includes(view)||!Number.isInteger(limit)||limit<1||limit>10||!Number.isInteger(offset)||offset<0||offset>100||!['incoming','outgoing','both'].includes(direction)||typeof query!=='string'||query.length>120)throw fail(400,'Invalid message window.');
+    const coverage={chats:Object.keys(state.chats).length,messagesPerChat:limits.messagesPerChat,scope:'Stored linked-device text only, up to '+limits.messagesPerChat+' messages per chat. Older phone history is not imported. Attachments are listed but not downloaded or transcribed. Waiting means a contact wrote after the last observed owner reply, not a guaranteed unanswered request.'};
+    const project=(c,m,max=limits.text)=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,from:m.from,sender:m.sender,text:clip(m.text,max),truncated:(m.text||'').length>max,media:mediaLabel(m.media),at:m.at,receivedAt:m.receivedAt||m.at*1000,unread:m.unread===true});
+    const chats=Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt),out={chats:chats.map(summary),coverage};
+    if(view==='voice'){if(key)out.chat=summary(need(key));return out;}
+    const page=all=>({total:all.length,offset,nextOffset:offset+limit<all.length?offset+limit:null});
+    if(view==='awaiting'){
+      const waiting=chats.filter(c=>c.messages.at(-1)?.from==='contact');
+      out.page=page(waiting);out.candidates=waiting.slice(offset,offset+limit).map(c=>{const owner=c.messages.findLastIndex(m=>m.from==='owner');return {key:c.key,name:recipient(c).name,kind:c.kind,lastOwner:owner>=0?project(c,c.messages[owner],300):null,messages:c.messages.slice(owner+1).filter(m=>m.from==='contact').slice(-3).map(m=>project(c,m,700))};});return out;
+    }
+    if(view==='history'){
+      const c=need(key),all=c.messages.filter(m=>(direction==='both'||m.from===(direction==='outgoing'?'owner':'contact'))&&(!query||normalSearch(m.text).includes(normalSearch(query))));
+      out.page=page(all);out.chat={...summary(c),messages:offset>=all.length?[]:all.slice(Math.max(0,all.length-offset-limit),all.length-offset).map(m=>project(c,m))};return out;
+    }
+    const all=chats.flatMap(c=>c.messages.filter(m=>view==='unread'?m.unread===true:direction==='both'||m.from===(direction==='outgoing'?'owner':'contact')).map(m=>project(c,m))).sort((a,b)=>b.at-a.at||b.receivedAt-a.receivedAt);
+    out.page=page(all);out.messages=all.slice(offset,offset+limit).reverse();return out;
+  }
+  const normalSearch=s=>String(s||'').normalize('NFC').toLowerCase();
+  function inbox({chat:key='',...options}={}){
+    if(options.view)return voiceInbox({chat:key,...options});
     const unread=Object.values(state.chats).flatMap(c=>c.messages.filter(m=>m.unread===true).map(m=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,sender:m.sender,text:m.text,media:mediaLabel(m.media),receivedAt:m.receivedAt||0}))).sort((a,b)=>a.receivedAt-b.receivedAt);
     const recent=Object.values(state.chats).flatMap(c=>c.messages.filter(m=>m.from==='contact'&&m.live===true).map(m=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,sender:m.sender,text:m.text,media:mediaLabel(m.media),receivedAt:m.receivedAt||0,unread:m.unread}))).sort((a,b)=>b.receivedAt-a.receivedAt).slice(0,10);
     const recentMessages=Object.values(state.chats).flatMap(c=>c.messages.filter(m=>m.from==='contact').map(m=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,sender:m.sender,text:m.text,media:mediaLabel(m.media),receivedAt:m.receivedAt||m.at*1000}))).sort((a,b)=>b.receivedAt-a.receivedAt).slice(0,5);

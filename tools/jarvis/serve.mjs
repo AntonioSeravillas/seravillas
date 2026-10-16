@@ -129,7 +129,7 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
     }
     try{
       const wa=await getWhatsApp(),chat=typeof body.chat==='string'?body.chat:'';
-      if(action==='inbox'){send(res,200,{connection:wa.connectionStatus(),...wa.inbox({chat:url.searchParams.get('chat')||''})});return;}
+      if(action==='inbox'){const p=url.searchParams,options={chat:p.get('chat')||''};for(const k of ['view','direction','query'])if(p.has(k))options[k]=p.get(k);for(const k of ['limit','offset'])if(p.has(k))options[k]=Number(p.get(k));send(res,200,{connection:wa.connectionStatus(),...wa.inbox(options)});return;}
       if(action==='read'){send(res,200,wa.markRead({messages:body.messages}));return;}
       if(action==='connect'){send(res,200,{connection:await wa.connect({acceptRisk:body.acceptRisk===true})});return;}
       if(action==='disconnect'){send(res,200,{connection:await wa.disconnect()});return;}
@@ -177,14 +177,15 @@ export function createJarvisServer({port=5500,apiKey='',route='hermes',hermesUrl
         busy=true;
         try{
           const ready=await readiness();if(!ready.ready){send(res,503,{error:ready.message});return;}
-          // The model sees contact summaries, never incoming message bodies or approval tokens.
+          // Normal planning sees contact summaries. Explicit read/translation turns additionally
+          // receive only the bounded requested source messages, never approval tokens.
           if(input.context?.dialogue){let contacts=[];if(typeof whatsapp==='function')try{contacts=(await getWhatsApp()).inbox().chats||[];}catch{}prepared=modelPayload(input,contacts);}
           const endpoint=route==='n8n'?workflow:new URL('v1/chat/completions',hermes);
           const headers={'Content-Type':'application/json',...(route==='n8n'?{'X-Jarvis-Key':n8nKey}:{Authorization:'Bearer '+apiKey,'X-Hermes-Session-Id':prepared.sessionId,'X-Hermes-Session-Key':'seravillas:antonio'})};
           const response=await fetchImpl(endpoint,{method:'POST',headers,body:JSON.stringify(route==='n8n'?prepared:prepared.payload),signal:AbortSignal.timeout(110000)});
           if(!response.ok){send(res,502,{error:response.status===401?'The agent credential was rejected. Check the server or n8n credentials.':route==='n8n'?'n8n could not complete the agent request. Check that the workflow is published and inspect its execution.':'Hermes could not complete the request. Check its configured model and gateway terminal.'});return;}
           const answer=replyText(await response.json());
-          if(input.context?.dialogue){let decision;try{decision=parseDecision(answer);}catch{decision={kind:'clarify',text:'I need a little more detail before doing anything. What would you like me to do?'};}send(res,200,{decision,route});}
+          if(input.context?.dialogue){let decision;try{decision=parseDecision(answer);if(input.context.dialogue.whatsappReading&&decision.kind!=='reply')throw Error('Read-only presentation');}catch{decision=input.context.dialogue.whatsappReading?{kind:'clarify',text:'I could not prepare that reading reliably. Please ask me to read it again.'}:{kind:'clarify',text:'I need a little more detail before doing anything. What would you like me to do?'};}send(res,200,{decision,route});}
           else send(res,200,{reply:answer,route});
         }catch(e){send(res,502,{error:e?.safe?e.message:'The agent connection failed or timed out. Check Hermes and n8n.'});}finally{busy=false;}
         return;

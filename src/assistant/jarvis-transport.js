@@ -24,7 +24,7 @@
     if(wa){
       const action=wa[1];
       if(action==='status'&&method==='GET')return {op:'wa-status',params:{}};
-      if(action==='inbox'&&method==='GET'){const chat=u.searchParams.get('chat')||'';return {op:'wa-inbox',params:chat?{chat}:{}};}
+      if(action==='inbox'&&method==='GET'){const params={};for(const k of ['chat','view','direction','query'])if(u.searchParams.has(k))params[k]=u.searchParams.get(k);for(const k of ['limit','offset'])if(u.searchParams.has(k))params[k]=Number(u.searchParams.get(k));return {op:'wa-inbox',params};}
       if(action==='read'&&method==='POST')return {op:'wa-read',params:{messages:body.messages}};
       if(action==='review'&&method==='POST')return {op:'wa-review',params:{chat:body.chat,version:body.version,text:body.text,checkedPhone:body.checkedPhone===true}};
       if(action==='send'&&method==='POST')return {op:'wa-send',params:{chat:body.chat,reviewToken:body.reviewToken,text:body.text}};

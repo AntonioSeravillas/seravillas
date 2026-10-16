@@ -25,6 +25,10 @@ function runtime({dev=false,results=[],postStatus=202,extra={}}={}){
   return {t:sandbox.SV_JARVIS_TRANSPORT,calls,context,sandbox,advance:ms=>{clock+=ms;},jobPosts:()=>calls.filter(c=>c.url.endsWith('/api/relay/jobs'))};
 }
 const done=body=>({body:{status:'done',result:{status:200,body}}});
+test('scoped WhatsApp reads retain bounded paging and literal search through the existing authenticated operation',async()=>{
+  const app=runtime({results:[done({messages:[]})]});await app.t.fetch('/api/jarvis/whatsapp/inbox?view=history&chat='+ 'a'.repeat(20)+'&limit=3&offset=2&direction=both&query=door%20%26%20window');
+  assert.deepEqual(JSON.parse(app.jobPosts()[0].init.body),{op:'wa-inbox',params:{chat:'a'.repeat(20),view:'history',direction:'both',query:'door & window',limit:3,offset:2}});
+});
 test('live voice obtains a short-lived credential through one authenticated relay job, without a key or agent override',async()=>{
   const app=runtime({results:[done({conversationToken:'EPHEMERAL_ONLY',maxDurationSeconds:600})]});const r=await app.t.fetch('/api/jarvis/live-session',{method:'POST',body:'{}'});assert.equal((await r.json()).conversationToken,'EPHEMERAL_ONLY');assert.deepEqual(JSON.parse(app.jobPosts()[0].init.body),{op:'live-session',params:{}});
   const rejected=runtime();assert.equal((await rejected.t.fetch('/api/jarvis/live-session',{method:'POST',body:'{"agentId":"OTHER"}'})).status,404);assert.equal(rejected.calls.length,0);
