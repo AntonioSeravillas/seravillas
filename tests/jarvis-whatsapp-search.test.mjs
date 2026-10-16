@@ -95,3 +95,28 @@ test('Hermes may request a search and receives the results with coverage for an 
   assert.equal(ctx.whatsappReading.kind,'search');assert.equal(ctx.whatsappReading.results[0].answered,true);assert.equal(ctx.whatsappReading.results[0].context[0].position,'after');
   assert.equal(ctx.whatsappReading.complete,false);assert.match(ctx.whatsappReading.coverageSummary,/Incomplete/);
 });
+
+test('regression: speech that drops the opening words is still a search; a time period is required for the loose forms',()=>{
+  const {parse}=setup(),plain=x=>x&&JSON.parse(JSON.stringify(x)),want={kind:'search',query:'private chef',days:7};
+  for(const t of ['Ask about the private chef in the last seven days.','Anyone ask about a private chef?','about the private chef in the last seven days','So, did anyone ask about a private chef in the last seven days?','Um, has anyone asked about a private chef this week?'])assert.deepEqual(plain(parse(t)),want,t);
+  for(const t of ['Ask Bex about the keys','Ask about the keys','Ask Bex if ten works tomorrow'])assert.equal(parse(t),null,t);
+  assert.equal(parse('Write a message to Bex saying ask about the chef this week').kind,'write');
+});
+
+test('regression: live tool requests become a cross-chat search instead of a contact lookup, and only then',()=>{
+  const sandbox={window:{},AbortController,setTimeout,clearTimeout,JSON,Promise,Map,Set};
+  for(const file of ['jarvis-records.js','jarvis-whatsapp-voice.js','jarvis-live.js'])vm.runInNewContext(fs.readFileSync(new URL('../src/assistant/'+file,import.meta.url),'utf8'),sandbox);
+  const validate=(args,ownerText)=>JSON.parse(JSON.stringify(sandbox.window.SV_JARVIS_LIVE.validateTool('whatsapp_request',args,{today:'2026-10-16',ownerText})));
+  /* 22:32 transcript: opening words lost, agent asked for a chat named "private chef". */
+  assert.deepEqual(validate({limit:10,kind:'history',name:'private chef',offset:0},'Ask about the private chef in the last seven days.'),{kind:'search',query:'private chef',days:7});
+  /* 22:31 transcript: agent asked for history with search words and no chat; also when the transcript is garbled. */
+  assert.deepEqual(validate({kind:'history',limit:10,offset:0,query:'private chef'},'Did anyone ask about a private chef in the last seven days?'),{kind:'search',query:'private chef',days:7});
+  assert.deepEqual(validate({kind:'history',limit:10,offset:0,query:'private chef'},'What is this? Did anyone ask about a private chef … social diversity'),{kind:'search',query:'private chef',days:7});
+  assert.deepEqual(validate({kind:'search',query:'boat trip',days:3,terms:['barco']},'search'),{kind:'search',query:'boat trip',days:3,terms:['barco']});
+  /* Ordinary chat requests are unchanged. */
+  assert.deepEqual(validate({kind:'history',name:'Bex',limit:10,offset:0,query:'door'},'What did Bex say about the door?'),{kind:'history',name:'Bex',limit:10,offset:0,query:'door'});
+  assert.equal(validate({kind:'write',name:'Bex',text:'Hello'},'Write to Bex saying hello').kind,'write');
+  assert.throws(()=>validate({kind:'history',limit:10},'anything'),/known chat/);
+  assert.throws(()=>validate({kind:'search',query:'chef',days:45},'x'),/between 1 and 30/);
+  assert.throws(()=>validate({kind:'search',query:'chef',send:true},'x'),/Unexpected/);
+});

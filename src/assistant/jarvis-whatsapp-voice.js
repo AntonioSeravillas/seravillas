@@ -25,7 +25,7 @@
      Asking-style verbs only, so business-record questions keep their existing route. */
   const NUM={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,fourteen:14,thirty:30,un:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,catorce:14,treinta:30};
   const SEARCH=[
-    /^(?:did|has|have) (?:anyone|anybody|someone|somebody|any (?:guests?|clients?|customers?)) (?:ask|asked|enquire|enquired|inquire|inquired|write|wrote|written|message|messaged|mention|mentioned|request|requested|say anything|said anything)(?: me| us)?(?: (?:about|for|regarding))? (.+)$/i,
+    /^(?:(?:did|has|have) )?(?:anyone|anybody|someone|somebody|any (?:guests?|clients?|customers?)) (?:ask|asked|enquire|enquired|inquire|inquired|write|wrote|written|message|messaged|mention|mentioned|request|requested|say anything|said anything)(?: me| us)?(?: (?:about|for|regarding))? (.+)$/i,
     /^(?:(?:were|are) there|have there been|any) (?:any )?(?:whats\s?app )?(?:messages|requests|questions|enquiries|inquiries|mentions)(?: on whats\s?app)? (?:about|for|regarding|mentioning|asking (?:about|for)) (.+)$/i,
     /^(?:search|look) (?:through )?(?:my |the )?(?:whats\s?app|messages|chats)(?: messages| chats)? for (.+)$/i,
     /^(?:search|find|look for)(?: (?:whats\s?app|messages|chats))? (?:messages |requests )?(?:about|mentioning|regarding) (.+)$/i,
@@ -33,12 +33,16 @@
     /^¿?(?:alguien|algún cliente|algun cliente|algún huésped|algun huesped) (?:me |nos )?(?:ha )?(?:preguntado|preguntó|pregunto|pedido|pidió|pidio|escrito|escribió|escribio|mencionado|mencionó|menciono)(?: (?:por|sobre|acerca de))? (.+)$/i,
     /^(?:busca|buscar)(?: en)?(?: (?:whats\s?app|los mensajes|mensajes))?(?: sobre| de| por)? (.+)$/i
   ];
+  /* Speech recognition can drop the opening words ("Ask about the private chef in the last seven days"). With an explicit
+     time period, an asking verb or a bare "about …" is still a search; without one these stay unrecognised. */
+  const CLIPPED=/^(?:(?:and|so|ok|okay|um|uh|well|anyone|anybody|someone|somebody)[,s]+)?(?:(?:ask|asked|asking|enquire|enquired|enquiring|inquire|inquired|mention|mentioned|message|messaged|request|requested|requesting)(?: me| us)? )?(?:about|for|regarding) (.+)$/i;
   function searchIntent(text){
-    let t=String(text||'').replace(/[?¿!.]+$/,'').trim(),days=7,m;
+    let t=String(text||'').replace(/[?¿!.]+$/,'').trim().replace(/^(?:(?:and|so|ok|okay|um|uh|erm|well|right|also)[,\s]+)+/i,''),days=7,m,ranged=false;
     const range=[[/\s+(?:in|over|during|within|from)?\s*(?:the )?(?:last|past|previous) (\d{1,2}|[a-z]+) days?$/i,n=>n],[/\s+(?:en )?(?:los )?(?:últimos|ultimos) (\d{1,2}|[a-z]+) d[ií]as?$/i,n=>n],[/\s+(?:in |over |during )?(?:the )?(?:last|past) (?:two|2) weeks$/i,()=>14],[/\s+(?:in |over |during )?(?:this|the last|the past|last|past) week$|\s+(?:esta|la última|la ultima) semana$/i,()=>7],[/\s+(?:in |over |during )?(?:this|the last|the past|last|past) month$|\s+(?:este|el último|el ultimo) mes$/i,()=>30],[/\s+(?:today|hoy)$/i,()=>1],[/\s+(?:yesterday|ayer)$/i,()=>2]];
-    for(const [re,f] of range){m=t.match(re);if(m){const raw=m[1],n=f(raw===undefined?undefined:/^\d+$/.test(raw)?Number(raw):NUM[raw.toLowerCase()]);if(!Number.isInteger(n))return null;days=n;t=t.slice(0,m.index).trim();break;}}
+    for(const [re,f] of range){m=t.match(re);if(m){const raw=m[1],n=f(raw===undefined?undefined:/^\d+$/.test(raw)?Number(raw):NUM[raw.toLowerCase()]);if(!Number.isInteger(n))return null;days=n;ranged=true;t=t.slice(0,m.index).trim();break;}}
     t=t.replace(/\s+(?:on|in|en) whats\s?app$/i,'');
     for(const re of SEARCH){m=t.match(re);if(m)break;}
+    if(!m&&ranged)m=t.match(CLIPPED);
     if(!m)return null;
     const topic=m[1].replace(/^(?:a|an|the|any|some|un|una|unos|unas|el|la|los|las)\s+/i,'').replace(/\s+(?:on|in|en) whats\s?app$/i,'').trim();
     if(topic.length<2||topic.length>60||days<1||days>30)return null;

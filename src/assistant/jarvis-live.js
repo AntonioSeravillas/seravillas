@@ -20,10 +20,19 @@
     }
     if(name==='ask_hermes'){if(!args||Object.keys(args).length!==1||typeof args.request!=='string'||!args.request.trim()||args.request.length>2000)throw Error('Invalid request.');return args.request.trim();}
     if(name!=='whatsapp_request')throw Error('Unsupported tool.');
-    let i=args&&Object.keys(args).length===1&&args.intent!==undefined?typeof args.intent==='object'?args.intent:parse('intent',5000):{...args};if(!i||typeof i!=='object'||Array.isArray(i)||!['write','read','recent','unread','history','awaiting','body','edit','choose','review','cancel'].includes(i.kind))throw Error('That WhatsApp action is not allowed.');
-    if(Object.keys(i).some(k=>!['kind','name','chat','group','text','option','limit','offset','direction','query','english','language'].includes(k)))throw Error('Unexpected WhatsApp arguments.');
+    let i=args&&Object.keys(args).length===1&&args.intent!==undefined?typeof args.intent==='object'?args.intent:parse('intent',5000):{...args};if(!i||typeof i!=='object'||Array.isArray(i)||!['write','read','recent','unread','history','awaiting','search','body','edit','choose','review','cancel'].includes(i.kind))throw Error('That WhatsApp action is not allowed.');
+    if(Object.keys(i).some(k=>!['kind','name','chat','group','text','option','limit','offset','direction','query','english','language','days','terms'].includes(k)))throw Error('Unexpected WhatsApp arguments.');
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(ownerText);
     if(i.kind==='read'&&/^(last|latest|recent|most recent)$/i.test(i.name||'')&&literal?.kind==='recent')i={kind:'recent',limit:literal.limit||1};
+    /* Topic search. The owner's recognised words win over a chat lookup (a topic is never a contact), and history with
+       search words but no chat is the agent asking for a cross-chat search. */
+    if(literal?.kind==='search'&&['read','history','recent','search'].includes(i.kind))i={kind:'search',query:literal.query,days:literal.days,...(Array.isArray(i.terms)?{terms:i.terms}:{})};
+    else if(i.kind==='history'&&!i.chat&&!(typeof i.name==='string'&&i.name.trim())&&typeof i.query==='string'&&i.query.trim())i={kind:'search',query:i.query.trim(),days:7};
+    if(i.kind==='search'){
+      if(typeof i.query!=='string'||!i.query.trim()||i.query.length>60)throw Error('Say what to search for.');i.query=i.query.trim();
+      if(i.days!==undefined&&(!Number.isInteger(i.days)||i.days<1||i.days>30))throw Error('Search between 1 and 30 days.');
+      if(i.terms!==undefined&&(!Array.isArray(i.terms)||i.terms.length>12||i.terms.some(t=>typeof t!=='string'||!t.trim()||t.length>60)))throw Error('Invalid search words.');
+    }
     if(['write','read','history'].includes(i.kind)&&!(/^[a-f0-9]{20}$/.test(i.chat||'')||typeof i.name==='string'&&i.name.trim()&&i.name.length<=80))throw Error('A known chat or contact name is required.');
     if(i.chat!==undefined&&!/^[a-f0-9]{20}$/.test(i.chat))throw Error('Invalid chat.');
     if(i.name!==undefined&&(typeof i.name!=='string'||i.name.length>80))throw Error('Invalid name.');
