@@ -25,7 +25,24 @@ function renderSettingsPreferences(){
     :'<button class="sv-btn sv-btn-secondary sv-btn-sm" onclick="requestNotif()">Enable day-before reminders</button>';
   return `<section class="sv-card settings-card" aria-labelledby="settings-appearance"><h2 id="settings-appearance">Appearance</h2><p class="settings-help">Choose the app theme for this device.</p>
     <div class="settings-actions">${[['light','Light'],['dark','Dark']].map(([key,label])=>`<button class="sv-btn ${theme===key?'sv-btn-primary':'sv-btn-secondary'}" aria-pressed="${theme===key}" onclick="setAppTheme('${key}')">${label}</button>`).join('')}</div></section>
-    <section class="sv-card settings-card" aria-labelledby="settings-reminders"><h2 id="settings-reminders">Cleaning reminders</h2><p class="settings-help">Day-before reminders for scheduled cleanings.</p>${notifHtml}</section>`;
+    <section class="sv-card settings-card" aria-labelledby="settings-reminders"><h2 id="settings-reminders">Cleaning reminders</h2><p class="settings-help">Day-before reminders for scheduled cleanings.</p>${notifHtml}</section>${renderSettingsVersion()}`;
+}
+let appVersionChecking=false;
+function renderSettingsVersion(){
+  const v=window.SV_APP_VERSION;if(!v)return '';const s=v.state();
+  const when=s.checkedAt?new Date(s.checkedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'';
+  const status=appVersionChecking?'<div class="settings-help">Checking…</div>'
+    :s.error?`<div class="settings-help">${esc(s.error)}</div>`
+    :s.updateAvailable?`<div class="settings-state">Version ${esc(s.latest)} is available. Reload to use it.</div>`
+    :s.latest?`<div class="settings-state">Up to date ✓ (checked ${esc(when)})</div>`:'';
+  return `<section class="sv-card settings-card" aria-labelledby="settings-version"><h2 id="settings-version">App version</h2>
+    <p class="settings-help">This device is running version <strong>${esc(s.loaded)}</strong>. Reloading ends any voice conversation and shows the newest published app straight away.</p>${status}
+    <div class="settings-actions"><button class="sv-btn sv-btn-secondary" onclick="checkAppVersion()"${appVersionChecking?' disabled':''}>Check for updates</button><button class="sv-btn ${s.updateAvailable?'sv-btn-primary':'sv-btn-secondary'}" onclick="SV_APP_VERSION.reload()">${s.updateAvailable?'Reload now':'Reload app'}</button></div></section>`;
+}
+async function checkAppVersion(){
+  if(!window.SV_APP_VERSION||appVersionChecking)return;
+  appVersionChecking=true;render();
+  try{await SV_APP_VERSION.check({force:true});}finally{appVersionChecking=false;render();}
 }
 function renderSettingsBackups(){
   const size=getDataSizeKB(),date=SV_STORAGE.getItem(BACKUP_DATE_KEY);
