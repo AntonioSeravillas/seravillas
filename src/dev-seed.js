@@ -69,3 +69,41 @@ function svDevOperationsDemo(){
     booking('dev-b10','dev-p4',nw(4),nw(6)),booking('dev-b11','dev-p2',nw(3),nw(5),{status:'cancelled'}));
   return data;
 }
+
+/* Fictional dashboard demo for the preview, loaded once from ?demo=dashboard: the operations demo plus a busy day,
+   crews in every state, tasks across Today / This week / Later and open issues, so every panel can be checked and scrolled. */
+function svDevDashboardDemo(){
+  var data=svDevOperationsDemo();
+  function pad(n){return String(n).padStart(2,'0');}
+  function day(n){var d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+  data.props.push({id:'dev-p6',name:'Casa Sample Norte',notes:'Sample property.',photos:[]});
+  data.cleaners.push({id:'dev-c3',name:'Sample Cleaner C',phone:'+34 600 000 003'},{id:'dev-c4',name:'Sample Cleaner D',phone:'+34 600 000 004'});
+  data.bookings.push(
+    {id:'dev-b12',propId:'dev-p2',platform:'airbnb',agencyName:'',checkIn:day(-6),checkOut:day(0),checkOutTime:'10:00',guestName:'Sample Guest Twelve',guestCount:6,totalPrice:2100,notes:'',status:'confirmed',linkedCleaningId:'dev-s12'},
+    {id:'dev-b13',propId:'dev-p4',platform:'booking',agencyName:'',checkIn:day(0),checkOut:day(6),checkInTime:'16:00',guestName:'Sample Guest Thirteen',guestCount:5,totalPrice:2600,notes:'',status:'confirmed',linkedCleaningId:''},
+    {id:'dev-b14',propId:'dev-p6',platform:'airbnb',agencyName:'',checkIn:day(1),checkOut:day(4),guestName:'Sample Guest Fourteen',guestCount:3,totalPrice:900,notes:'',status:'confirmed',linkedCleaningId:''});
+  data.sessions.push(
+    {id:'dev-s12',propId:'dev-p2',date:day(0),time:'11:00',cleanerIds:[],status:'scheduled',note:'Checkout cleaning'},
+    {id:'dev-s13',propId:'dev-p5',date:day(1),time:'10:00',crew:{main:[{cleanerId:'dev-c3',name:'Sample Cleaner C',status:'offered'}],alinaSpots:0,alinaStatus:'offered'},status:'scheduled',note:'Checkout cleaning'},
+    {id:'dev-s14',propId:'dev-p4',date:day(2),time:'10:00',crew:{main:[{cleanerId:'dev-c1',name:'Sample Cleaner A',status:'confirmed'},{cleanerId:'dev-c4',name:'Sample Cleaner D',status:'confirmed'}],alinaSpots:0,alinaStatus:'offered'},status:'scheduled',note:'Deep clean'},
+    {id:'dev-s15',propId:'dev-p6',date:day(4),time:'12:00',crew:{main:[{cleanerId:'dev-c2',name:'Sample Cleaner B',status:'confirmed'},{cleanerId:'dev-c3',name:'Sample Cleaner C',status:'offered'}],alinaSpots:0,alinaStatus:'offered'},status:'scheduled',note:'Checkout cleaning'});
+  function task(id,text,o){var r={id:id,text:text,propId:'',priority:'medium',urgent:false,done:false,pinned:false,inFocus:false,note:'',dueDate:'',timeEst:'',photo:null,completedAt:'',createdAt:day(-2),status:'inbox',type:'ops',projectId:'',waitingFor:''};for(var k in o)r[k]=o[k];return r;}
+  data.tasks.push(
+    task('dev-t7','Order cleaning supplies (sample)',{dueDate:day(0),status:'today'}),
+    task('dev-t8','Assign a team for Casa Ejemplo (sample)',{propId:'dev-p2',dueDate:day(0),priority:'high'}),
+    task('dev-t9','Review sample guest request',{dueDate:day(1)}),
+    task('dev-t10','Prepare checkout schedule (sample)',{dueDate:day(1)}),
+    task('dev-t11','Restock villa towels (sample)',{propId:'dev-p4',dueDate:day(2)}),
+    task('dev-t12','Update welcome book (sample)',{propId:'dev-p6',dueDate:day(3)}),
+    task('dev-t13','Service garden irrigation (sample)',{propId:'dev-p5',dueDate:day(9)}),
+    task('dev-t14','Renew pool chemicals (sample)',{propId:'dev-p1',dueDate:day(12)}),
+    task('dev-t15','Photograph new terrace furniture (sample)',{propId:'dev-p3'}),
+    task('dev-t16','Key handover note (sample, overdue)',{propId:'dev-p2',dueDate:day(-1)}));
+  function issue(id,title,o){var r={id:id,title:title,propId:'',note:'',status:'open',createdAt:day(0),resolvedAt:'',photos:[],resolveBy:'',priority:'medium',category:'other',waitingFor:''};for(var k in o)r[k]=o[k];return r;}
+  data.issues.push(
+    issue('dev-i4','Pool pump noise (sample issue)',{propId:'dev-p6',priority:'high'}),
+    issue('dev-i5','Air-conditioning check (sample issue)',{propId:'dev-p4',priority:'high',createdAt:day(-1)}),
+    issue('dev-i6','Lockbox battery (sample issue)',{propId:'dev-p5',priority:'low',createdAt:day(-4)}),
+    issue('dev-i7','Missing linen (sample issue)',{propId:'dev-p1',priority:'medium',createdAt:day(-2)}));
+  return data;
+}

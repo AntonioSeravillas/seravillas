@@ -28,9 +28,9 @@ function addSessFromModal(){
   const time=(document.getElementById('f-time')||{}).value||'';
   const note=(document.getElementById('f-note')||{}).value||'';
   const cids=[...selCleaners];
-  if(!propId){alert('Please select a property.');return;}
-  if(!date){alert('Please pick a date.');return;}
-  if(!cids.length){alert('Please select at least one cleaner.');return;}
+  if(!propId){toast('Please select a property');return;}
+  if(!date){toast('Please pick a date');return;}
+  if(!cids.length){toast('Please select at least one cleaner');return;}
   D.sessions.push({id:uid(),propId,cleanerIds:cids,date,time,note,status:'scheduled'});
   selCleaners=[];save();closeModal();render();toast('Session saved!');
 }

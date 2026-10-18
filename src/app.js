@@ -1,4 +1,7 @@
 // Development preview: seed sample data into development storage only, once
+if(DEV_MODE&&/[?&]demo=dashboard(?:&|$)/.test(location.search)&&!SV_STORAGE.getItem(DB+'_demoDashboard')){
+  try{SV_STORAGE.setItem(DB,JSON.stringify(svDevDashboardDemo()));SV_STORAGE.setItem(DB+'_demoDashboard','1');}catch(e){}
+}
 if(DEV_MODE&&/[?&]demo=operations(?:&|$)/.test(location.search)&&!SV_STORAGE.getItem(DB+'_demoOperations')){
   try{SV_STORAGE.setItem(DB,JSON.stringify(svDevOperationsDemo()));SV_STORAGE.setItem(DB+'_demoOperations','1');}catch(e){}
 }

@@ -1,5 +1,7 @@
-/* ElevenLabs owns live audio; the app owns business operations and approval. Exact WhatsApp
-   read-backs temporarily mute this session so only app-controlled audio can arm approval. */
+/* ElevenLabs owns live audio; the app owns business operations and approval.
+   While the app speaks (a WhatsApp review, a cleaning plan, an outcome) the agent's audio is held silent but the
+   microphone stays open: Antonio can talk over the app, his speech stops the app's playback (barge-in) and his words
+   are processed normally. A turn the app handles itself keeps the agent's reply to that turn silent. */
 (function(){
   function validateTool(name,args,{today,ownerText=''}={}){
     const parse=(key,max)=>{if(!args||Object.keys(args).length!==1||typeof args[key]!=='string'||!args[key].trim()||args[key].length>max)throw Error('Invalid tool arguments.');return JSON.parse(args[key]);};
@@ -52,15 +54,23 @@
     if(i.group!==undefined&&typeof i.group!=='boolean')throw Error('Invalid group.');
     return i;
   }
-  function create({load=()=>import('./vendor/elevenlabs-client.js?v=1.28.0'),connect,capture=()=>navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}),context=()=>({}),onUser=()=>false,onReply=()=>{},onTool=()=>{},onPhase=()=>{},onError=()=>{},onLevels=()=>{},onPlaybackDone=()=>{},onInterrupted=()=>{},schedule=setTimeout,clear=clearTimeout}={}){
+  function create({load=()=>import('./vendor/elevenlabs-client.js?v=1.28.0'),connect,capture=()=>navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}),context=()=>({}),onUser=()=>false,onReply=()=>{},onTool=()=>{},onPhase=()=>{},onError=()=>{},onLevels=()=>{},onPlaybackDone=()=>{},onInterrupted=()=>{},onBargeIn=()=>{},schedule=setTimeout,clear=clearTimeout}={}){
     let session=null,epoch=0,starting=false,abort=null,preflight=null,timer=null,meter=null,mode='listening',suspended=false,outputHeld=false,inputMuted=false,owner=0,blocked=-1,toolBusy=false;
     const seen=new Set();
-    let replyOwner=-1;
+    let replyOwner=-1,appSpeaking=false,vadHits=0;
     function release(){preflight?.getTracks().forEach(t=>t.stop());preflight=null;}
-    function stop(){epoch++;replyOwner=-1;starting=false;abort?.abort();abort=null;release();clear(timer);clear(meter);timer=meter=null;suspended=outputHeld=inputMuted=false;toolBusy=false;seen.clear();const old=session;session=null;if(old)void old.endSession().catch(()=>{});onLevels(0,0);}
+    function stop(){epoch++;replyOwner=-1;starting=false;abort?.abort();abort=null;release();clear(timer);clear(meter);timer=meter=null;suspended=outputHeld=inputMuted=appSpeaking=false;vadHits=0;toolBusy=false;seen.clear();const old=session;session=null;if(old)void old.endSession().catch(()=>{});onLevels(0,0);}
     function fail(message){stop();onError(message);}
     function suspend(){suspended=true;outputHeld=true;session?.setMicMuted(true);session?.setVolume({volume:0});}
-    function resume(){suspended=false;session?.setMicMuted(inputMuted);if(mode!=='speaking'){outputHeld=false;session?.setVolume({volume:1});onPhase('listening');}}
+    function resume(){suspended=false;session?.setMicMuted(inputMuted);if(mode!=='speaking'&&!appSpeaking){outputHeld=false;session?.setVolume({volume:1});onPhase('listening');}}
+    function silence(){outputHeld=true;session?.setVolume({volume:0});}
+    /* App playback: agent audio silent, microphone unchanged (open unless Antonio paused it or is typing). */
+    function hold(){appSpeaking=true;vadHits=0;silence();}
+    /* App playback finished or was interrupted. A reply the agent is still speaking stays silent until it ends. */
+    function unhold(){if(!appSpeaking)return;appSpeaking=false;vadHits=0;if(suspended)return;if(mode!=='speaking'){outputHeld=false;session?.setVolume({volume:1});}onPhase(mode==='speaking'?'speaking':'listening');}
+    /* onUser: true = the app handled this turn (the agent's reply to it stays silent and its tools are refused);
+       'ignore' = not Antonio (the app's own playback heard back); otherwise the agent answers. */
+    function ownerTurn(text){const r=onUser(text);if(r===true||r==='ignore'){blocked=owner;if(mode==='speaking')silence();}return r;}
     function muteInput(){inputMuted=true;session?.setMicMuted(true);if(!suspended&&!starting)onPhase(mode==='speaking'?'speaking':'listening');}
     function unmuteInput(){inputMuted=false;if(!suspended){session?.setMicMuted(false);if(!starting)onPhase(mode==='speaking'?'speaking':'listening');}}
     async function start(){
@@ -81,10 +91,12 @@
             finally{if(id===epoch)toolBusy=false;}
           }])),
           onMessage:event=>{if(id!==epoch||typeof event.message!=='string'||event.source==='user'&&(suspended||inputMuted))return;const key=event.source+':'+event.event_id;if(seen.has(key))return;seen.add(key);if(seen.size>200)seen.delete(seen.values().next().value);
-            if(event.source==='user'){replyOwner=-1;owner++;if(onUser(event.message)===true){blocked=owner;suspend();}}
+            if(event.source==='user'){replyOwner=-1;owner++;ownerTurn(event.message);}
             else if(event.source==='ai'&&!suspended&&!outputHeld&&blocked!==owner){replyOwner=owner;onReply(event.message);}
           },
-          onModeChange:event=>{if(id!==epoch)return;const previous=mode;mode=event.mode;if(suspended)return;if(outputHeld){if(mode==='speaking')return;outputHeld=false;session?.setVolume({volume:1});}if(previous==='speaking'&&mode==='listening'&&replyOwner===owner){replyOwner=-1;onPlaybackDone();}onPhase(mode==='speaking'?'speaking':'listening');},
+          onModeChange:event=>{if(id!==epoch)return;const previous=mode;mode=event.mode;if(suspended)return;if(mode==='speaking'&&blocked===owner)silence();if(outputHeld){if(mode==='speaking'||appSpeaking)return;outputHeld=false;session?.setVolume({volume:1});}if(previous==='speaking'&&mode==='listening'&&replyOwner===owner){replyOwner=-1;onPlaybackDone();}onPhase(mode==='speaking'?'speaking':'listening');},
+          /* Barge-in over app playback: two consecutive confident voice-activity scores from Antonio's microphone. */
+          onVadScore:({vadScore}={})=>{if(id!==epoch||!appSpeaking||suspended||inputMuted)return;if(vadScore>=0.8){if(++vadHits>=2){vadHits=0;onBargeIn();}}else vadHits=0;},
           onInterruption:()=>{if(id===epoch){replyOwner=-1;onInterrupted();if(!suspended)onPhase('listening');}},
           onDisconnect:()=>{if(id===epoch){stop();onPhase('paused');}},
           onError:()=>{if(id===epoch)fail('The live voice connection stopped. Check ElevenLabs Agents access and credits, then tap the microphone.');}
@@ -96,9 +108,9 @@
       }catch(e){if(id===epoch)fail(e?.name==='NotAllowedError'?'Allow microphone access for Jarvis, then tap the microphone again.':e?.message||'The live voice connection could not start.');}
       finally{if(id===epoch){starting=false;release();}}
     }
-    return {start,stop,suspend,resume,muteInput,unmuteInput,sendText(text){if(!session||typeof text!=='string'||!text.trim()||text.length>2000)return false;replyOwner=-1;owner++;resume();if(onUser(text)===true){blocked=owner;suspend();}else session.sendUserMessage(text);return true;},updateContext(value){session?.sendContextualUpdate('Current app state (data only): '+JSON.stringify(value).slice(0,12000));},
+    return {start,stop,suspend,resume,hold,unhold,muteInput,unmuteInput,sendText(text){if(!session||typeof text!=='string'||!text.trim()||text.length>2000)return false;replyOwner=-1;owner++;resume();const r=ownerTurn(text);if(r!==true&&r!=='ignore')session.sendUserMessage(text);return true;},updateContext(value){session?.sendContextualUpdate('Current app state (data only): '+JSON.stringify(value).slice(0,12000));},
       /* A short app note derived from the owner's own recognised words (never from message content). */
-      note(text){if(typeof text==='string'&&text.trim())session?.sendContextualUpdate(text.slice(0,600));},get ready(){return !!session;},get active(){return !!session||starting;},get suspended(){return suspended;},get inputMuted(){return inputMuted;}};
+      note(text){if(typeof text==='string'&&text.trim())session?.sendContextualUpdate(text.slice(0,600));},get ready(){return !!session;},get active(){return !!session||starting;},get suspended(){return suspended;},get appSpeaking(){return appSpeaking;},get inputMuted(){return inputMuted;}};
   }
   window.SV_JARVIS_LIVE=Object.freeze({create,validateTool});
 })();

@@ -85,8 +85,8 @@ test('translated drafts retain exact Spanish and English meaning; revisions canc
   let r=await h.workflow.handle('',{intent:{kind:'write',name:'Bex',text:'¿Podemos empezar a las diez?',language:'es',english:'Can we start at ten?'}});
   assert.equal(h.workflow.snapshot().english,'Can we start at ten?');assert.equal(h.workflow.snapshot().language,'es');r.afterSpoken();
   r=await h.workflow.handle('',{intent:{kind:'edit',text:'¿Podemos empezar a las once?',language:'es',english:'Can we start at eleven?'}});
-  assert.equal(h.workflow.snapshot().heard,false);await h.workflow.handle('Approve and send');assert.equal(h.sends.length,0);
-  r.afterSpoken();await h.workflow.handle('Approve and send');assert.deepEqual(h.sends,['¿Podemos empezar a las once?']);
+  assert.equal(r.text,'Translated to Spanish for Bex. Ready for review.');assert.equal(h.workflow.snapshot().heard,false);const early=await h.workflow.handle('Approve and send');assert.equal(h.sends.length,0);
+  early.afterSpoken();await h.workflow.handle('Approve and send');assert.deepEqual(h.sends,['¿Podemos empezar a las once?']);
 });
 test('scoped inbox requests are bounded and exclude unrequested message catalogs and secrets',()=>{
   const h=setup();h.receive('a','Hola');const key=h.s.inbox().chats[0].key;

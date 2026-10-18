@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#191E21">
 <!-- App version shown in Settings and compared by “Check for updates”. Change it on every publish. -->
-<meta name="sv-app-version" content="2026-10-18.4">
+<meta name="sv-app-version" content="2026-10-18.5">
 <script src="./src/config.js?v=20260930-1"></script>
 <script src="./src/storage.js?v=20261016-appversion"></script>
 <script src="./src/app-version.js?v=20261016-appversion"></script>
@@ -20,6 +20,8 @@
 <link rel="stylesheet" href="./assets/css/workspace.css?v=20261016-appversion">
 <link rel="stylesheet" href="./assets/css/jarvis.css?v=20261018-operations1">
 <link rel="stylesheet" href="./assets/css/jarvis-whatsapp.css?v=20261016-desktop">
+<link rel="stylesheet" href="./assets/css/jarvis-dashboard.css?v=20261018-release5">
+<link rel="stylesheet" href="./assets/css/jarvis-theme.css?v=20261018-release5">
 </head>
 <body class="workspace">
 <!-- ── Setup screen (shown on first open / no secret saved) ── -->
@@ -73,25 +75,27 @@
 <input type="file" id="photo-file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
 <input type="file" id="issue-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleIssuePhoto(event)">
 <input type="file" id="task-photo-file" accept="image/*" capture="environment" style="display:none" onchange="handleTaskPhoto(event)">
-<script src="./src/dev-seed.js?v=20261018-operations1"></script>
+<script src="./src/dev-seed.js?v=20261018-release5"></script>
 <script src="./src/state/store.js?v=20261002-categories"></script>
 <script src="./src/data/local-data.js?v=20261016-appversion"></script>
 <script src="./src/utils/dates.js?v=20261016-appversion"></script>
-<script src="./src/ui/shell.js?v=20261004-mobile-menu"></script>
+<script src="./src/ui/shell.js?v=20261018-release5"></script>
 <script src="./src/ui/workspace.js?v=20261004-mobile-menu"></script>
 <script src="./src/features/home.js?v=20261016-appversion"></script>
 <script src="./src/ui/voice.js?v=20261016-appversion"></script>
 <script src="./src/features/reports.js?v=20261005-reports"></script>
 <script src="./src/features/revenue-reports.js?v=20261005-revenue-overview"></script>
-<script src="./src/features/calendar.js?v=20261004-operations"></script>
+<script src="./src/features/calendar.js?v=20261018-release5"></script>
+<script src="./src/features/booking-timeline.js?v=20261018-release5"></script>
 <script src="./src/features/booking-operations.js?v=20261004-operations"></script>
 <script src="./src/features/booking-tools.js?v=20261002-categories"></script>
 <script src="./src/features/tasks.js?v=20261016-appversion"></script>
 <script src="./src/features/cleaning-planner.js?v=20261001-cleaning"></script>
-<script src="./src/features/cleanings.js?v=20261001-cleaning"></script>
+<script src="./src/features/cleanings.js?v=20261018-release5"></script>
+<script src="./src/features/cleaning-board.js?v=20261018-release5"></script>
 <script src="./src/features/issues.js?v=20261016-appversion"></script>
-<script src="./src/features/manage.js?v=20261002-categories"></script>
-<script src="./src/features/properties.js?v=20261002-categories"></script>
+<script src="./src/features/manage.js?v=20261018-release5"></script>
+<script src="./src/features/properties.js?v=20261018-release5"></script>
 <script src="./src/features/settings.js?v=20261016-appversion"></script>
 <script src="./src/ui/actions.js?v=20261002-top-tabs"></script>
 <script src="./src/data/sync-merge.js?v=20261001-team"></script>
@@ -100,20 +104,21 @@
 <script src="./src/auth/session.js?v=20261002-top-tabs"></script>
 <script src="./src/assistant/jarvis-data.js?v=20261017-attention2"></script>
 <script src="./src/assistant/jarvis-records.js?v=20261018-whatsapp1"></script>
-<script src="./src/assistant/jarvis-operations.js?v=20261018-operations1"></script>
+<script src="./src/assistant/jarvis-operations.js?v=20261018-release5"></script>
+<script src="./src/assistant/jarvis-dashboard.js?v=20261018-release5"></script>
 <script src="./src/assistant/jarvis-ring.js?v=20261018-particles1"></script>
 <script src="./src/assistant/jarvis-actions.js?v=20261014-drafts"></script>
 <script src="./src/assistant/jarvis-transport.js?v=20261016-fish2"></script>
-<script src="./src/assistant/jarvis-whatsapp.js?v=20261015-inbox1"></script>
-<script src="./src/assistant/jarvis-whatsapp-voice.js?v=20261018-whatsapp1"></script>
+<script src="./src/assistant/jarvis-whatsapp.js?v=20261018-release5"></script>
+<script src="./src/assistant/jarvis-whatsapp-voice.js?v=20261018-release5"></script>
 <script src="./src/assistant/jarvis-voice.js?v=20261015-voice-recovery1"></script>
 <script src="./src/assistant/jarvis-audio.js?v=20261016-fish2"></script>
-<script src="./src/assistant/jarvis-live.js?v=20261018-whatsapp1"></script>
-<script src="./src/assistant/jarvis.js?v=20261018-whatsapp1"></script>
+<script src="./src/assistant/jarvis-live.js?v=20261018-release5"></script>
+<script src="./src/assistant/jarvis.js?v=20261018-release5"></script>
 <script src="./src/data/legacy-booking-migrations.js?v=20261001-retired"></script>
 <script src="./assets/vendor/sheetjs/xlsx-0.20.3.min.js?v=0.20.3"></script>
 <script src="./src/imports/excel-bookings.js?v=20261001-2027"></script>
 <script src="./src/ui/excel-import.js?v=20261001-2027"></script>
-<script src="./src/app.js?v=20261018-operations1"></script>
+<script src="./src/app.js?v=20261018-release5"></script>
 </body>
 </html>

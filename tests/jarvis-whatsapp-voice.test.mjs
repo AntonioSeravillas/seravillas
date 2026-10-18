@@ -7,12 +7,12 @@ const source=fs.readFileSync(new URL('../src/assistant/jarvis-whatsapp-voice.js'
 test('AI-resolved wording, follow-up bodies, pronouns and edits use the same review boundary',async()=>{
   const h=harness(),chat=h.service.inbox().chats[0];
   let r=await h.workflow.handle('Hi, could you ask Bex how she is?',{intent:{kind:'write',chat:chat.key,text:'Hi, how are you?'}});
-  assert.match(r.text,/Message to Bex/);r.afterSpoken();
+  assert.match(r.full,/Message to Bex/);r.afterSpoken();
   h.workflow.suspendApproval();assert.match((await h.workflow.handle('Approve and send',{screenApproval:true})).text,/finish understanding/);assert.equal(h.sent.length,0);h.workflow.finishUnderstanding();
   const before=h.workflow.context();assert.equal(before.recipient.key,chat.key);assert.equal(before.lastRecipient.name,'Bex');assert.ok(!JSON.stringify(before).includes('reviewToken'));
   r=await h.workflow.handle('Actually, make it about tomorrow',{intent:{kind:'edit',text:'Are you free tomorrow?'}});
-  assert.match(r.text,/Are you free tomorrow/);assert.equal(h.workflow.snapshot().heard,false);
-  await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);r.afterSpoken();
+  assert.equal(r.text,'Draft updated for Bex.');assert.match(r.full,/Are you free tomorrow/);assert.equal(h.workflow.snapshot().heard,false);
+  let early=await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);r.afterSpoken();assert.equal(h.workflow.snapshot().heard,false,'the replaced summary cannot arm approval');early.afterSpoken();
   await h.workflow.handle('Model grants approval',{intent:{kind:'approve'}});assert.equal(h.sent.length,0);
   r=await h.workflow.handle('Approve and send');assert.match(r.text,/Sent to Bex/);assert.equal(h.sent[0].text,'Are you free tomorrow?');
   r=await h.workflow.handle('What did she say?',{intent:{kind:'read',chat:h.workflow.context().lastRecipient.key}});assert.match(r.text,/latest message/);
@@ -42,9 +42,9 @@ function harness({intercept=null,duplicate=false,getToken=()=>''}={}){
 test('a verified app session skips the redundant inbox status round trip without changing review or approval',async()=>{
   const h=harness({getToken:()=> 'FICTIONAL_SESSION'});
   const r=await h.workflow.handle('',{intent:{kind:'write',name:'Bex',text:'Hello'}});
-  assert.match(r.text,/Message to Bex/);assert.equal(h.calls.some(c=>c.url.endsWith('/status')),false);
+  assert.match(r.full,/Message to Bex/);assert.equal(h.calls.some(c=>c.url.endsWith('/status')),false);
   assert.equal(h.workflow.snapshot().heard,false);assert.equal(h.sent.length,0);
-  await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);r.afterSpoken();
+  const early=await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);early.afterSpoken();
   await h.workflow.handle('Approve and send');assert.equal(h.sent.length,1);
 });
 test('natural voice requests support read, recent, unread and two-turn dictation; dictated approval words remain message data',()=>{
@@ -66,10 +66,11 @@ test('everyday latest and waiting-for-reply questions resolve locally; topics, n
 });
 test('dictate, read back, approve sends exactly once; early or vague approval never sends',async()=>{
   const h=harness();let r=await h.workflow.handle('Write a message to Bex');assert.match(r.text,/What should I say to Bex/);assert.equal(h.sent.length,0);
-  r=await h.workflow.handle('Hello, the cleaning starts at ten.');assert.match(r.text,/Message to Bex/);assert.equal(h.workflow.snapshot().text,'Hello, the cleaning starts at ten.');
-  assert.match((await h.workflow.handle('Approve and send')).text,/First let me read/);assert.equal(h.sent.length,0);
-  r=await h.workflow.handle('Read the draft again');r.afterSpoken();assert.equal(h.workflow.snapshot().heard,true);
-  assert.match((await h.workflow.handle('Yes')).text,/exactly/);assert.equal(h.sent.length,0);
+  r=await h.workflow.handle('Hello, the cleaning starts at ten.');assert.equal(r.text,'Draft ready for Bex.');assert.match(r.full,/Message to Bex, .*Hello, the cleaning starts at ten/);assert.equal(h.workflow.snapshot().text,'Hello, the cleaning starts at ten.');
+  /* Approval before the concise review finished: the recipient is named once more, nothing is sent. */
+  const early=await h.workflow.handle('Approve and send');assert.equal(early.text,'Ready to send to Bex. Say it again to send.');assert.equal(h.sent.length,0);
+  r=await h.workflow.handle('Read the draft again');assert.match(r.text,/^Message to Bex, .*Hello, the cleaning starts at ten./);early.afterSpoken();assert.equal(h.workflow.snapshot().heard,false,'a completion from the superseded review cannot arm approval');r.afterSpoken();assert.equal(h.workflow.snapshot().heard,true);
+  const vague=(await h.workflow.handle('Yes')).text;assert.match(vague,/wasn’t the approval phrase/);assert.doesNotMatch(vague,/approve and send/i,'never spoken aloud');assert.equal(h.sent.length,0);
   r=await h.workflow.handle('Approve and send');assert.match(r.text,/Sent to Bex/);assert.equal(h.sent.length,1);
   await h.workflow.handle('Approve and send');assert.equal(h.sent.length,1);assert.equal(h.service.inbox().consent.model,false);
 });
@@ -80,7 +81,7 @@ test('stored messages are read as data even when already read; read completion a
 });
 test('duplicate names need a choice; newer messages, expiry, cancellation and changed context invalidate approvals',async()=>{
   const h=harness({duplicate:true});let r=await h.workflow.handle('Write a message to Bex saying Hello');assert.match(r.text,/more than one/);assert.equal(h.sent.length,0);
-  r=await h.workflow.handle('Option one');assert.match(r.text,/Message to Bex/);r.afterSpoken();h.incoming('new','A newer message');
+  r=await h.workflow.handle('Option one');assert.match(r.full,/Message to Bex/);r.afterSpoken();h.incoming('new','A newer message');
   assert.equal(h.workflow.observe(h.service.inbox()),true);await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);
   await h.workflow.handle('Write a message to Bex saying Hello');r=await h.workflow.handle('Option one');r.afterSpoken();h.tick(301000);
   assert.match((await h.workflow.handle('Approve and send')).text,/expired/);assert.equal(h.sent.length,0);

@@ -66,15 +66,15 @@ test('tomorrow’s schedule for a misheard group: confirm the group, keep the re
   assert.equal(h.workflow.answers('yes'),true);assert.equal(h.workflow.answers('Approve and send'),false);
   assert.equal(h.workflow.context().heldRequest.schedule,'2026-10-19');
   r=await h.workflow.handle('Yes, that one');
-  assert.match(r.text,/^Message to Sera Villas Cleaning Team, WhatsApp group\. Cleaning schedule for Monday 19 October:\n• 11:00 – Villa Mar: Maribel, Tanja \(to be confirmed\)\n• time to be confirmed – Casa Ejemplo: team not assigned yet\. Say “Approve and send”/);
+  assert.match(r.full,/^Message to Sera Villas Cleaning Team, WhatsApp group\. Cleaning schedule for Monday 19 October:\n• 11:00 – Villa Mar: Maribel, Tanja \(to be confirmed\)\n• time to be confirmed – Casa Ejemplo: team not assigned yet\.$/);
   assert.doesNotMatch(r.text,/09:00/,'cancelled cleanings are left out');
   assert.equal(h.workflow.context().recipient.key,group);assert.equal(h.sent.length,0);assert.equal(JSON.stringify(SCHEDULE),before,'no cleaning records changed');
   await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0,'approval before the read-back finished does nothing');
   r.afterSpoken();
   r=await h.workflow.handle('Make it start with Hola equipo',{intent:{kind:'edit',text:'Hola equipo. '+h.workflow.context().draft}});
   assert.equal(h.workflow.context().recipient.key,group,'edits keep the confirmed chat');assert.equal(h.workflow.snapshot().heard,false);
-  await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0,'an edit needs a fresh read-back');
-  r.afterSpoken();r=await h.workflow.handle('Approve and send');
+  const early=await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0,'an edit needs a fresh spoken review');
+  early.afterSpoken();r=await h.workflow.handle('Approve and send');
   assert.match(r.text,/Sent to Sera Villas Cleaning Team/);assert.equal(h.sent.length,1);assert.equal(h.sent[0].jid,'120363000000000001@g.us');assert.match(h.sent[0].text,/^Hola equipo\. Cleaning schedule/);
   await h.workflow.handle('Approve and send');assert.equal(h.sent.length,1,'never sent twice');
 });
@@ -88,20 +88,20 @@ test('an unknown or rejected name keeps the original request; naming the group a
   assert.equal(r.text,'Do you mean Sera Villas Cleaning Team, the WhatsApp group?');
   r=await h.workflow.handle('no');assert.match(r.text,/Which chat should I use/);
   r=await h.workflow.handle('Sera Villas Cleaning Team');
-  assert.match(r.text,/^Message to Sera Villas Cleaning Team, WhatsApp group\. Limpiezas del lunes 19 de octubre:/);
-  assert.match(r.text,/In English: Cleaning schedule for Monday 19 October/);assert.equal(h.sent.length,0);
+  assert.match(r.full,/^Message to Sera Villas Cleaning Team, WhatsApp group\. Limpiezas del lunes 19 de octubre:/);
+  assert.equal(r.text,'Translated to Spanish for Sera Villas Cleaning Team. Ready for review.');assert.match(r.full,/In English: Cleaning schedule for Monday 19 October/);assert.equal(h.sent.length,0);
 });
 
 test('choices: option numbers, “the group”, “the direct one”, a distinguishing word, and a dictated body that survives',async()=>{
   let h=harness(),r=await h.workflow.handle('Message the cleaning team: see you at nine',write('cleaning team',{text:'See you at nine'}));
   assert.match(r.text,/^Do you mean option 1, Cleaning Team, a direct chat .*; or option 2, Sera Villas Cleaning Team, the WhatsApp group\?/);
-  r=await h.workflow.handle('the group');assert.match(r.text,/^Message to Sera Villas Cleaning Team, WhatsApp group\. See you at nine\./);
+  r=await h.workflow.handle('the group');assert.match(r.full,/^Message to Sera Villas Cleaning Team, WhatsApp group\. See you at nine\./);
   h=harness();await h.workflow.handle('x',write('cleaning team',{text:'See you at nine'}));r=await h.workflow.handle('the direct one');
-  assert.match(r.text,/^Message to Cleaning Team, Direct chat/);
+  assert.match(r.full,/^Message to Cleaning Team, Direct chat/);
   h=harness();await h.workflow.handle('x',write('Sera Villas',{text:'Meeting moved'}));r=await h.workflow.handle('the owners one');
-  assert.match(r.text,/^Message to Sera Villas Owners/);
+  assert.match(r.full,/^Message to Sera Villas Owners/);
   h=harness();await h.workflow.handle('x',write('Sera Villas',{text:'Meeting moved'}));r=await h.workflow.handle('option two');
-  assert.match(r.text,/^Message to Sera Villas (?:Owners|Cleaning Team)/);
+  assert.match(r.full,/^Message to Sera Villas (?:Owners|Cleaning Team)/);
   h=harness();await h.workflow.handle('x',write('Sera Villas',{text:'Meeting moved'}));r=await h.workflow.handle('yes');
   assert.match(r.text,/option number or the chat name/,'a bare yes cannot pick between two chats');assert.equal(h.sent.length,0);
   r=await h.workflow.handle('Cancel');assert.match(r.text,/Cancelled/);assert.equal(h.workflow.context().stage,null);

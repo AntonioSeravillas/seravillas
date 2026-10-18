@@ -944,6 +944,8 @@ function saveNewBooking(){
 }
 function openBookingDetail(id){
   const b=D.bookings.find(x=>x.id===id);if(!b)return;
+  /* Inside Jarvis the same actions are presented in the Jarvis theme. */
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_BOOKINGS_VIEW&&SV_BOOKINGS_VIEW.detail){showModal(SV_BOOKINGS_VIEW.detail(b));return;}
   const prop=D.props.find(x=>x.id===b.propId);
   const clr=propBarColor(b.propId);
   const nights=nightsBetween(b.checkIn,b.checkOut);

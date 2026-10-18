@@ -1,5 +1,9 @@
 /* Conversational WhatsApp tools. The AI may resolve an owner's request into a bounded intent.
-   Only explicit owner words can approve sending. Incoming-message AI drafting remains off. */
+   Only explicit owner words can approve sending. Incoming-message AI drafting remains off.
+   Spoken review is concise ("Draft ready for Bex."); the full recipient, message and translation stay on screen and are
+   read aloud only on request. Voice approval is bound to the current review after its concise spoken summary finished.
+   With the live microphone open during app speech, spoken text never contains an approval or cancel phrase, so the
+   app's own voice heard back can never approve anything; those phrases are shown on screen instead. */
 (function(){
   const API='/api/jarvis/whatsapp/',KEY=/^[a-f0-9]{20}$/;
   const normal=s=>String(s||'').normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();
@@ -54,6 +58,7 @@
     if(/^(?:yes[,\s]+)?(?:please\s+)?approve and send(?: (?:it|the message|the reply))?[.!]?$/i.test(t))return {kind:'approve'};
     if(/^(?:cancel|discard)(?: (?:it|that|the (?:draft|message|reply)))?[.!]?$/i.test(t))return {kind:'cancel'};
     if(/^(?:read (?:the |my )?draft(?: again)?|repeat (?:the |my )?draft|review (?:it|the draft|the message)(?: again)?)[.!]?$/i.test(t))return {kind:'review'};
+    if(/^(?:(?:can you |could you |please )?read (?:me )?(?:it|the (?:whole |full )?(?:message|draft|text)|what (?:it|you) (?:says|wrote))(?: (?:out|again|to me|in full|aloud))*(?: please)?|what does (?:it|the (?:message|draft)) say|what(?:'s| is) (?:in )?the (?:message|draft)|let me hear (?:it|the (?:message|draft)))[.!?]?$/i.test(t))return {kind:'readDraft'};
     if(/^(?:yes[,\s]*)?(?:send (?:it|that|now|the message)|confirm|approved?|yes)[.!]?$/i.test(t))return {kind:'ambiguousApproval'};
     /* Split before interpreting intent: even "approve and send" inside a dictated message is just text. */
     const split=t.match(/^(.*?)(?:\s+saying\s*:?\s*|\s+that says\s*:?\s*|\s*:\s*)([\s\S]*)$/i),head=(split?split[1]:t).replace(/\s+(?:on|in) whats\s?app[.!?]?$/i,'');
@@ -190,14 +195,23 @@
       const data=await res.json();if(signal?.aborted)throw Object.assign(Error('Cancelled'),{name:'AbortError'});if(!res.ok){if(res.status===403)token='';throw Object.assign(Error(data.error||'WhatsApp could not complete that.'),{status:res.status});}return data;
     }
     const reply=(text,afterSpoken=null)=>({handled:true,text,afterSpoken});
-    function describe(){
+    const LANGUAGES={es:'Spanish',ca:'Catalan',de:'German',fr:'French',hr:'Croatian',it:'Italian',nl:'Dutch',pt:'Portuguese',en:'English'};
+    /* The full text is always available for the screen; speech is the concise result unless Antonio asks to hear it. */
+    /* Keep the message's own ending so a question is read as a question. */
+    const sentence=t=>{const v=String(t).trim();return /[.!?]$/.test(v)?v:v+'.';};
+    const fullText=p=>'Message to '+p.review.recipient.name+', '+p.review.recipient.detail+'. '+sentence(p.review.text)+(p.english?' In English: '+sentence(p.english):'');
+    function describe(full=false){
       if(!pending||pending.stage!=='review')return reply('There is no message ready to approve. Say “Write a message to Bex.”');
-      const p=pending;p.heard=false;p.understanding=false;changed();
-      return reply('Message to '+p.review.recipient.name+', '+p.review.recipient.detail+'. '+p.review.text.replace(/[.!?]+$/,'')+'. '+(p.english?'In English: '+p.english.replace(/[.!?]+$/,'')+'. ':'')+'Say “Approve and send” to send this exact message, or “Cancel.”',()=>{if(pending===p&&now()<p.review.expiresAt){p.heard=true;changed();}});
+      const p=pending;p.heard=false;p.understanding=false;const said=p.said=(p.said||0)+1;changed();
+      const name=p.review.recipient.name,language=String(p.language||'').slice(0,2).toLowerCase();
+      const brief=language&&language!=='en'&&p.english?'Translated to '+(LANGUAGES[language]||'the requested language')+' for '+name+'. Ready for review.':p.revised?'Draft updated for '+name+'.':'Draft ready for '+name+'.';
+      /* Only the latest spoken summary of this exact review can arm voice approval. */
+      return {...reply(full?fullText(p):brief,()=>{if(pending===p&&p.said===said&&now()<p.review.expiresAt){p.heard=true;changed();}}),full:fullText(p)};
     }
     async function review(chat,text,signal,translation={}){
       const r=await api('review',{body:{chat:chat.key,version:chat.version,text,checkedPhone:false}},signal);
-      pending={stage:'review',name:chat.name,key:chat.key,version:chat.version,review:r,heard:false,english:String(translation.english||'').slice(0,2000),language:String(translation.language||'').slice(0,12)};changed();return describe();
+      const revised=pending?.stage==='review'&&pending.key===chat.key;
+      pending={stage:'review',name:chat.name,key:chat.key,version:chat.version,review:r,heard:false,revised,english:String(translation.english||'').slice(0,2000),language:String(translation.language||'').slice(0,12)};changed();return describe();
     }
     /* The original request (body, schedule, language) stays in pending.intent while the recipient is clarified. */
     async function find(intent,data){
@@ -254,6 +268,8 @@
       const control=['approve','cancel'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&pending?.stage==='review';
       let intent=control?literal:resolved||literal;
       if(resolved&&!control&&!['write','read','recent','unread','history','awaiting','search','body','edit','choose','review','cancel'].includes(resolved.kind))return reply('I could not interpret that action safely. What would you like to do?');
+      /* "Read the message" means the pending draft only when there is one; otherwise it is an ordinary request. */
+      if(intent?.kind==='readDraft'){if(pending?.stage!=='review')return {handled:false};intent={kind:'review'};}
       if(!intent&&!pending)return {handled:false};
       if(busy)return reply('I am still completing the previous WhatsApp request. Please wait.');
       const myEpoch=++epoch;request?.abort();const controller=new AbortController();request=controller;const signal=controller.signal;
@@ -262,19 +278,19 @@
       try{
         let result;
         if(intent?.kind==='cancel'){reset();result=reply('Cancelled. Nothing was sent.');}
-        else if(intent?.kind==='review')result=describe();
+        else if(intent?.kind==='review')result=describe(true);
         else if(intent?.kind==='approve'){
           const p=pending;
           if(!p||p.stage!=='review')return reply('There is no reviewed message to send. Say “Write a message to Bex.”');
           if(p.understanding)return reply('First let me finish understanding your latest request, then review the message again. Nothing was sent.');
           if(now()>=p.review.expiresAt){reset();return reply('This review expired. Please dictate the message again. Nothing was sent.');}
-          if(!screenApproval&&!p.heard)return reply('First let me read the recipient and draft completely. Say “Read the draft again,” or review and approve it on screen.');
+          if(!screenApproval&&!p.heard){p.understanding=false;const said=p.said=(p.said||0)+1;return reply('Ready to send to '+p.review.recipient.name+'. Say it again to send.',()=>{if(pending===p&&p.said===said&&now()<p.review.expiresAt){p.heard=true;changed();}});}
           /* Consume before making the single send call. Even an uncertain result can never be replayed. */
           reset();let r;
           try{r=await api('send',{body:{chat:p.key,reviewToken:p.review.reviewToken,text:p.review.text}},signal);}
           catch(err){return myEpoch===epoch?reply([400,403,404,409,415,429].includes(err.status)?'Not sent. '+err.message:'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.'):null;}
           result=reply(r.status==='sent'?'Sent to '+p.review.recipient.name+'.':r.status==='uncertain'?'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.':r.message||'The message was not sent.');
-        }else if(intent?.kind==='ambiguousApproval'&&!['confirm','choose','name'].includes(pending?.stage))result=reply(pending?.stage==='review'?'To send the reviewed message, say exactly “Approve and send,” or say “Cancel.”':'There is no reviewed message to send.');
+        }else if(intent?.kind==='ambiguousApproval'&&!['confirm','choose','name'].includes(pending?.stage))result=reply(pending?.stage==='review'?'That wasn’t the approval phrase. It’s shown on screen, or tap the button.':'There is no reviewed message to send.');
         else if(intent?.kind==='body'||intent?.kind==='edit'||!intent&&pending?.stage==='body'){
           if(!pending||!(intent?.kind==='edit'?pending.stage==='review':pending.stage==='body'))return reply('Who should I write to, and what would you like to say?');
           let body=String(intent?.text??text).replace(/^(?:say|saying)\s+/i,'').trim();

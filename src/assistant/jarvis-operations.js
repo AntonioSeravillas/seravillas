@@ -211,9 +211,26 @@
       parts.push(blocked.length?'Nothing is saved yet.':'Nothing is saved yet. Say “confirm these cleanings”, tap Confirm, or tell me what to change.');
       return parts.join(' ');
     }
+    /* Spoken version: the essential facts only (what will be created, by number, plus anything needing attention).
+       The full summary is shown on screen and read on request ("read it again"). */
+    function brief(p){
+      const make=p.items.filter(i=>i.action==='create'),link=p.items.filter(i=>i.action==='link'),blocked=p.items.filter(i=>i.action==='blocked');
+      if(!make.length&&!link.length&&!blocked.length)return summary(p);
+      const wd=v=>LONG[new Date(v+'T12:00:00Z').getUTCDay()],parts=[];
+      for(const a of p.assumed||[])parts.push('I took “'+a.spoken+'” as '+a.name+'.');
+      if(make.length&&make.length<=3)parts.push('Plan ready: '+make.map(i=>(make.length>1?shownOf(p,i)+', ':'')+i.property+' '+wd(i.date)+' at '+i.time+(i.cleaners.length?' with '+i.cleaners.map(c=>c.name).join(' and ')+' offered':'')).join('; ')+'.');
+      else if(make.length)parts.push('Plan ready: '+make.length+' new checkout cleanings, '+shortDay(make[0].date)+' to '+shortDay(make[make.length-1].date)+'.');
+      else parts.push('Plan ready.');
+      if(link.length)parts.push(link.length===1?'One existing cleaning will be linked.':link.length+' existing cleanings will be linked.');
+      const turn=make.filter(i=>i.sameDayArrival);if(turn.length)parts.push(turn.length===1?'Number '+shownOf(p,turn[0])+' has guests arriving the same day.':turn.length+' have guests arriving the same day.');
+      const outside=p.items.filter(i=>i.outside&&(i.action==='create'||i.action==='link'));if(outside.length)parts.push(outside.length===1?'One checks out after those dates.':outside.length+' check out after those dates.');
+      if(blocked.length)parts.push('Number '+blocked.map(i=>shownOf(p,i)).join(' and ')+' needs a change: '+blocked[0].reason);
+      parts.push(blocked.length?'Nothing is saved yet.':'Details are on screen.');
+      return parts.join(' ');
+    }
     function publish(p,note=''){
       p.version=++seq;p.presented=false;p.heard=false;p.expires=now()+TTL;p.text=(note?note+' ':'')+summary(p);plan=p;partial=null;
-      return {kind:'plan',text:p.text,plan:view()};
+      return {kind:'plan',text:p.text,spoken:(note==='Updated.'?'Updated. ':note?note+' ':'')+brief(p),plan:view()};
     }
     const freshEdits=()=>({removed:[],only:null,removedProps:[],time:'',times:{},allCleaners:null,cleaners:{}});
 
@@ -269,7 +286,8 @@
       const next=copy(plan);return revise_(next,op);
     }
     function cancel(){const had=!!plan&&!plan.committed;plan=null;partial=null;return {kind:'reply',text:had?'Okay, I’ve dropped that plan. Nothing was saved.':'There’s nothing pending, and nothing was saved.'};}
-    function repeat(){if(!plan)return {kind:'reply',text:'There’s no cleaning plan waiting.'};return publish(copy(plan));}
+    /* “Read it again”: the full plan, spoken in full. */
+    function repeat(){if(!plan)return {kind:'reply',text:'There’s no cleaning plan waiting.'};const r=publish(copy(plan));r.spoken=r.text.replace(/ Say “confirm these cleanings”, tap Confirm, or tell me what to change.$/,'');return r;}
 
     /* Commit. Requires: the current plan version, completed read-back (voice) or display (typed/screen), and Antonio's
        own explicit words (voice/typed). Rechecks every item against current records; all-or-nothing; never twice. */
@@ -277,12 +295,12 @@
       if(!plan)return lastCommit&&now()-lastCommit.at<TTL?{kind:'reply',text:'Those were already saved. Nothing more was changed.',duplicate:true}:{kind:'reply',text:'There’s no cleaning plan waiting to confirm.',refused:true};
       if(now()>plan.expires){plan=null;return {kind:'reply',text:'That plan expired, so nothing was saved. Ask me again and I’ll recheck the bookings.',refused:true};}
       if(version!==undefined&&version!==plan.version)return {kind:'reply',text:'The plan changed after that. Please review the latest plan before confirming.',refused:true};
-      if(channel==='voice'&&!plan.heard)return {kind:'reply',text:'Please listen to the whole plan first, or tap Confirm on screen. Nothing is saved yet.',refused:true,needsReadback:true};
+      if(channel==='voice'&&!plan.heard)return {kind:'reply',text:'Let me finish the plan first, or use the button on screen. Nothing is saved yet.',refused:true,needsReadback:true};
       if(!plan.presented)return {kind:'reply',text:'Please review the plan on screen first. Nothing is saved yet.',refused:true};
       if(channel!=='screen'){
         const c=confirmation(ownerText,actionable(plan).length,nameWords());
         if(c==='mismatch')return {kind:'reply',text:'The plan has '+actionable(plan).length+' to save, not the number you said. Please check it and confirm again. Nothing is saved yet.',refused:true};
-        if(c!=='confirm')return {kind:'reply',text:'To save the plan, say “confirm these cleanings” or tap Confirm. Nothing is saved yet.',refused:true};
+        if(c!=='confirm')return {kind:'reply',text:'That wasn’t a clear yes, so nothing is saved yet. The options are on screen.',refused:true};
       }
       const blocked=plan.items.filter(i=>i.action==='blocked');
       if(blocked.length)return {kind:'reply',text:'Number '+blocked.map(i=>shownOf(plan,i)).join(' and ')+' needs a change first: '+blocked[0].reason+' Nothing is saved yet.',refused:true};
@@ -309,7 +327,8 @@
         const done=plan;plan=null;
         const cloud=saved.cloud==='disabled'?'Saved in this preview; cloud sync is off here.':saved.cloud==='queued'?'Saved on this device and syncing to the cloud now.':'Saved.';
         const text=(created.length?'Scheduled '+(created.length===1?'one checkout cleaning':created.length+' checkout cleanings')+': '+created.map(c=>c.property+' on '+day(c.date)+' at '+c.time).join('; ')+'.':'')+(linkedOnly.length?' Linked '+linkedOnly.length+' existing cleaning'+(linkedOnly.length===1?'':'s')+'.':'')+' '+cloud+(created.length&&done.items.every(i=>!i.cleaners.length)?' The team still needs assigning.':'');
-        return {kind:'committed',text:text.trim(),created:copy(created),linked:copy(lastCommit.linked),cloud:saved.cloud};
+        const spoken=(created.length?'Scheduled '+(created.length===1?'one checkout cleaning':created.length+' checkout cleanings')+'.':'')+(linkedOnly.length?' Linked '+linkedOnly.length+'.':'')+(saved.cloud==='queued'?' Syncing to the cloud.':saved.cloud==='disabled'?' Saved in this preview.':'');
+        return {kind:'committed',text:text.trim(),spoken:spoken.trim(),created:copy(created),linked:copy(lastCommit.linked),cloud:saved.cloud};
       }catch(e){
         d.sessions.splice(0,d.sessions.length,...sessionsBefore);for(const [b,old] of links.reverse())b.linkedCleaningId=old;
         try{persist({rollback:true});}catch{}

@@ -129,7 +129,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
-  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
+  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-operations.js','src/assistant/jarvis-dashboard.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
   const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,pcmSources,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
     click(j,extra={}){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j,...extra}})}});}finally{inGesture=false;}},
@@ -181,8 +181,8 @@ test('closing during the initial live health check cannot start late recording o
 });
 test('live overlay on desktop and phone: direct records, one voice, exact WhatsApp read-back and owner-only approval',async()=>{
   for(const desktop of [true,false]){
-    let options,ended=0;const mic=[],sends=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1};
-    const liveSdk={Conversation:{startSession:async opts=>{options=opts;return {endSession:async()=>{ended++;},setMicMuted:v=>mic.push(v),setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){},sendUserMessage(){}};}}};
+    let options,ended=0;const mic=[],vol=[],sends=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1};
+    const liveSdk={Conversation:{startSession:async opts=>{options=opts;return {endSession:async()=>{ended++;},setMicMuted:v=>mic.push(v),setVolume:v=>vol.push(v.volume),getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){},sendUserMessage(){}};}}};
     const app=desktopRuntime({agent:true,desktop,liveSdk,understand:async()=>{throw Error('Direct live tools should not call Hermes');},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
       if(url.endsWith('/status'))return {available:true,requestToken:'FICTIONAL_SESSION'};
       if(url.includes('/inbox'))return {connection:{state:'open'},chats:[chat],chat,unreadCount:0};
@@ -192,8 +192,8 @@ test('live overlay on desktop and phone: direct records, one voice, exact WhatsA
     app.run(`D.props=[{id:'p',name:'Villa Test'}];D.sessions=[{id:'s',propId:'p',date:addDays(today(),1)}];openJarvis()`);await flush();app.click('mic');await flush();assert.equal(options.connectionType,'webrtc');assert.equal(app.recs.length,0);
     options.onMessage({source:'user',message:'Who cleans Villa Test tomorrow?',event_id:1});const result=JSON.parse(await options.clientTools.lookup_records({entity:'cleanings',property:'Villa Test',view:'details',field:'crew',start:'tomorrow',end:'tomorrow'}));assert.equal(result.rows[0].title,'Villa Test');assert.match(result.text,/No one is assigned/);assert.equal(app.utterances.length,0);
     options.onMessage({source:'ai',message:'No one is assigned yet. We still need one cleaner.',event_id:2});options.onModeChange({mode:'speaking'});assert.equal(app.phase(),'speaking');assert.equal(app.utterances.length,0);
-    options.onMessage({source:'user',message:'Ask Bex if ten works tomorrow',event_id:3});await options.clientTools.whatsapp_request({kind:'write',name:'Bex',text:'Does ten work tomorrow?'});assert.equal(app.el('jarvis-voice-review').hidden,false);assert.equal(mic.at(-1),true);assert.equal(sends.length,0);
-    options.onModeChange({mode:'listening'});app.finishSpeech();await flush();assert.equal(mic.at(-1),false);assert.equal(app.el('jarvis-review-note').textContent,'Say “Approve and send”, or approve below.');
+    options.onMessage({source:'user',message:'Ask Bex if ten works tomorrow',event_id:3});await options.clientTools.whatsapp_request({kind:'write',name:'Bex',text:'Does ten work tomorrow?'});assert.equal(app.el('jarvis-voice-review').hidden,false);assert.notEqual(mic.at(-1),true,'the microphone stays open while the app speaks');assert.equal(vol.at(-1),0,'the agent is silent while the app speaks');assert.equal(sends.length,0);
+    options.onModeChange({mode:'listening'});app.finishSpeech();await flush();assert.notEqual(mic.at(-1),true);assert.equal(vol.at(-1),1);assert.equal(app.el('jarvis-review-note').textContent,'Say “Approve and send”, or approve below. Say “Read the message” to hear it in full.');
     options.onMessage({source:'user',message:'Approve and send',event_id:4});await flush();assert.equal(sends.length,1);assert.equal(sends[0].text,'Does ten work tomorrow?');options.onMessage({source:'user',message:'Approve and send',event_id:4});await flush();assert.equal(sends.length,1);
     assert.match(await options.clientTools.whatsapp_request({intent:'{"kind":"approve"}'}),/paused/);app.finishSpeech();await flush();app.click('close');assert.equal(ended,1);assert.equal(app.recs.length,0);
   }
@@ -272,8 +272,8 @@ test('live WhatsApp readings use the natural voice directly and only completed, 
     if(outcome==='interrupt')options.onInterruption();if(outcome==='new-turn')options.onMessage({source:'user',message:'Wait a moment',event_id:3});options.onModeChange({mode:'listening'});await flush();assert.equal(reads.length,outcome==='complete'?1:0);app.click('close');
   }
 });
-test('Jarvis footer avoids workspace data-nav capture; Tasks and Cleanings close Jarvis and navigate on desktop and phone',async()=>{
-  for(const desktop of [true,false])for(const [action,destination] of [['nav-tasks','tasks'],['nav-cleaning','cleaning']]){
+test('Jarvis navigation avoids workspace data-nav capture; Tasks (not yet themed) closes Jarvis and navigates on desktop and phone',async()=>{
+  for(const desktop of [true,false])for(const [action,destination] of [['nav-tasks','tasks']]){
     const app=desktopRuntime({desktop}),visited=[];app.context.workspaceNavigate=target=>visited.push(target);app.run('openJarvis()');await flush();
     assert.doesNotMatch(app.root().innerHTML,/\sdata-nav=/);assert.match(app.root().innerHTML,/data-jarvis-nav="whatsapp"/);
     app.click(action);assert.deepEqual(visited,[destination]);assert.equal(app.root().removed,true);assert.equal(app.background.hasAttribute('inert'),false);
@@ -467,8 +467,24 @@ test('AI app lookup speaks current booking facts, keeps context without amounts 
 test('Bookings navigation and numbered record choices work locally without a model call or mutation',async()=>{
   const app=desktopRuntime(),visited=[];app.context.workspaceNavigate=d=>visited.push(d);
   app.run(`D.bookings=[{id:'b1',guestName:'First Example',checkIn:addDays(today(),1),checkOut:addDays(today(),3),totalPrice:20},{id:'b2',guestName:'Second Example',checkIn:addDays(today(),5),checkOut:addDays(today(),8),totalPrice:30}];openJarvis()`);await flush();const before=app.run('JSON.stringify(D)');
-  app.click('nav-bookings');assert.equal(app.el('jarvis-records').hidden,false);assert.equal(app.el('jarvis-record-list').children.length,2);app.click('records-option',{option:'2'});assert.match(app.utterances.at(-1).text,/Second Example/);assert.equal(app.el('jarvis-record-list').children.length,1);assert.equal(app.run('JSON.stringify(D)'),before);assert.deepEqual(visited,[]);
+  await app.context.SV_JARVIS.preview.tool('lookup_records',{entity:'bookings',view:'list',start:app.run('today()')});assert.equal(app.el('jarvis-records').hidden,false);assert.equal(app.el('jarvis-record-list').children.length,2);app.click('records-option',{option:'2'});assert.match(app.utterances.at(-1).text,/Second Example/);assert.equal(app.el('jarvis-record-list').children.length,1);assert.equal(app.run('JSON.stringify(D)'),before);assert.deepEqual(visited,[]);
   app.click('nav-overview');assert.equal(app.el('jarvis-records').hidden,true);app.click('close');
+});
+test('rail/top Cleanings opens the themed Cleanings page inside Jarvis without navigating, stopping or starting voice',async()=>{
+  for(const desktop of [true,false]){
+    const app=desktopRuntime({desktop}),visited=[];app.context.workspaceNavigate=d=>visited.push(d);app.run('openJarvis()');await flush();
+    app.click('nav-cleaning');assert.equal(app.root().dataset.page,'cleanings');assert.equal(app.el('jarvis-cleanings-page').hidden,false);assert.equal(app.el('jarvis-bookings-page').hidden,true);
+    assert.equal(app.root().classList.contains('is-workpage'),true);assert.deepEqual(visited,[]);assert.equal(app.root().removed,false);assert.equal(app.phase(),'idle');assert.equal(app.recs.length,0);
+    app.click('nav-bookings');assert.equal(app.root().dataset.page,'bookings');assert.equal(app.el('jarvis-cleanings-page').hidden,true);
+    app.click('nav-overview');assert.equal(app.root().classList.contains('is-workpage'),false);app.click('close');
+  }
+});
+test('rail/top Bookings opens the themed Bookings page inside Jarvis: no page change, no microphone, overview returns',async()=>{
+  const app=desktopRuntime(),visited=[];app.context.workspaceNavigate=d=>visited.push(d);app.run('openJarvis()');await flush();
+  app.click('nav-bookings');assert.equal(app.root().dataset.page,'bookings');assert.equal(app.el('jarvis-bookings-page').hidden,false);assert.equal(app.el('jarvis-records').hidden,true);
+  assert.deepEqual(visited,[]);assert.equal(app.root().removed,false);assert.equal(app.phase(),'idle');assert.equal(app.recs.length,0);assert.equal(app.context.SV_JARVIS.preview.page(),'bookings');
+  app.click('nav-overview');assert.equal(app.root().dataset.page,'overview');assert.equal(app.el('jarvis-bookings-page').hidden,true);assert.equal(app.context.svAfterRender===null,false);
+  app.click('close');assert.equal(app.context.svAfterRender,null);
 });
 test('explicit AI page navigation opens only a known app destination and stops the microphone',async()=>{
   const app=desktopRuntime({agent:true,understand:async()=>({kind:'navigate',destination:'reports'})}),visited=[];app.context.workspaceNavigate=d=>visited.push(d);app.run('openJarvis()');await flush();app.click('mic');app.hear('Take me to reports please');await flush();assert.deepEqual(visited,['booking-report']);assert.equal(app.root().removed,true);assert.equal(app.recs[0].aborted,true);
@@ -476,7 +492,7 @@ test('explicit AI page navigation opens only a known app destination and stops t
 test('record attention connects to the verified results on the right and closes without stale animation',async()=>{
   const app=desktopRuntime({reduced:false,geometry:{left:60,top:200,width:300,height:40,right:360,bottom:240}});app.run(`D.bookings=[{id:'b',guestName:'Example Guest',checkIn:today(),checkOut:addDays(today(),3),totalPrice:20}];openJarvis()`);await flush();
   app.el('jarvis-ring').getBoundingClientRect=()=>({left:600,top:100,width:400,height:400,right:1000,bottom:500});app.el('jarvis-record-title').getBoundingClientRect=()=>({left:1300,top:300,width:250,height:24,right:1550,bottom:324});
-  app.click('nav-bookings');assert.equal(app.el('jarvis-link').hasAttribute('hidden'),false);assert.match(app.el('jarvis-link-path').attrs.d,/ 1286\.0 312\.0$/);assert.equal(app.el('jarvis-records').classList.contains('is-attention'),true);
+  await app.context.SV_JARVIS.preview.tool('lookup_records',{entity:'bookings',view:'list',start:app.run('today()')});assert.equal(app.el('jarvis-link').hasAttribute('hidden'),false);assert.match(app.el('jarvis-link-path').attrs.d,/ 1286\.0 312\.0$/);assert.equal(app.el('jarvis-records').classList.contains('is-attention'),true);
   app.click('records-close');assert.equal(app.el('jarvis-link').hasAttribute('hidden'),true);assert.equal(app.el('jarvis-records').classList.contains('is-attention'),false);assert.deepEqual(app.winListeners.resize,[]);app.click('close');
 });
 test('single-reply mode, the spoken stop phrase and every explicit pause cancel the loop and any queued resume',()=>{
@@ -559,14 +575,14 @@ const focusRows=app=>app.el('jarvis-today-list').children.filter(li=>/\bis-focus
 const ask=(app,text)=>app.run('SV_JARVIS.send('+JSON.stringify(text)+')');
 test('attention: a cleanings question focuses only the requested rows, holds after the reply, then restores Today',async()=>{
   const app=focusApp();await flush();
-  assert.equal(app.el('jarvis-today-title').textContent,'Today');assert.deepEqual(focusRows(app),[]);
+  assert.equal(app.el('jarvis-today-title').textContent,'Calendar');assert.deepEqual(focusRows(app),[]);
   await ask(app,'What cleanings are scheduled today?');
   assert.equal(app.el('jarvis-today-title').textContent,'Cleanings');assert.ok(app.el('jarvis-today-section').classList.contains('is-attention'));assert.ok(app.root().classList.contains('has-focus'));
   const rows=focusRows(app);assert.equal(rows.length,1);assert.match(rows[0],/09:00/);assert.match(rows[0],/Casa Ejemplo/);assert.doesNotMatch(rows.join(' '),/Villa Mar/);
   app.finishSpeech();
   assert.ok(app.root().classList.contains('focus-hold'));assert.equal(app.el('jarvis-today-title').textContent,'Cleanings');
   app.runDelay(6000);
-  assert.equal(app.el('jarvis-today-title').textContent,'Today');assert.equal(app.el('jarvis-today-section').classList.contains('is-attention'),false);
+  assert.equal(app.el('jarvis-today-title').textContent,'Calendar');assert.equal(app.el('jarvis-today-section').classList.contains('is-attention'),false);
   assert.equal(app.root().classList.contains('has-focus'),false);assert.deepEqual(focusRows(app),[]);
   await ask(app,'How many cleanings next week?');
   const week=focusRows(app);assert.equal(week.length,1);assert.match(week[0],/Villa Mar/);assert.ok(week[0].includes(app.run(`fmtDate(addDays(startOfWeek(today()),8))`)));assert.doesNotMatch(week.join(' '),/Casa Ejemplo/);
@@ -575,22 +591,22 @@ test('attention: a cleanings question focuses only the requested rows, holds aft
 test('attention: only the latest turn owns focus; unrelated turns, tasks, settings, Overview, voice errors and close all clean up',async()=>{
   const app=focusApp();await flush();
   await ask(app,'What cleanings are scheduled today?');app.finishSpeech();
-  await ask(app,'Hello there');assert.equal(app.el('jarvis-today-title').textContent,'Today');assert.equal(app.root().classList.contains('has-focus'),false);
+  await ask(app,'Hello there');assert.equal(app.el('jarvis-today-title').textContent,'Calendar');assert.equal(app.root().classList.contains('has-focus'),false);
   await ask(app,'What tasks are due today?');
-  assert.ok(app.root().classList.contains('has-focus'));assert.ok(app.el('jarvis-tasks-section').classList.contains('is-attention'));assert.equal(app.el('jarvis-today-section').classList.contains('is-attention'),false);assert.equal(app.el('jarvis-today-title').textContent,'Today');
+  assert.ok(app.root().classList.contains('has-focus'));assert.ok(app.el('jarvis-tasks-section').classList.contains('is-attention'));assert.equal(app.el('jarvis-today-section').classList.contains('is-attention'),false);assert.equal(app.el('jarvis-today-title').textContent,'Calendar');
   app.finishSpeech();
   await ask(app,'Cleanings tomorrow');assert.equal(app.el('jarvis-tasks-section').classList.contains('is-attention'),false);
   app.utterances.find(u=>!u.done)?.onstart();app.runDelay(6000);
   assert.equal(app.el('jarvis-today-title').textContent,'Cleanings');assert.match(app.el('jarvis-today-date').textContent,/^Tomorrow · /);
-  app.click('settings');assert.equal(app.el('jarvis-today-title').textContent,'Today');
+  app.click('settings');assert.equal(app.el('jarvis-today-title').textContent,'Calendar');
   await ask(app,'Cleanings today');app.click('nav-overview');
-  assert.equal(app.el('jarvis-today-title').textContent,'Today');assert.deepEqual(focusRows(app),[]);
+  assert.equal(app.el('jarvis-today-title').textContent,'Calendar');assert.deepEqual(focusRows(app),[]);
   await ask(app,'Write a WhatsApp message to Bex saying hi');assert.equal(app.root().classList.contains('has-focus'),false);app.click('nav-overview');
   app.click('mic');app.hear('What cleanings are scheduled today?');await flush();
   assert.equal(app.el('jarvis-today-title').textContent,'Cleanings');
   app.finishSpeech();app.runDelay(450);assert.equal(app.phase(),'listening');assert.equal(app.el('jarvis-today-title').textContent,'Cleanings');
   app.recs.at(-1).onerror({error:'not-allowed'});
-  assert.equal(app.el('jarvis-today-title').textContent,'Today');assert.equal(app.el('jarvis-keep').attrs['aria-pressed'],'true');
+  assert.equal(app.el('jarvis-today-title').textContent,'Calendar');assert.equal(app.el('jarvis-keep').attrs['aria-pressed'],'true');
   await ask(app,'Cleanings today');app.finishSpeech();app.click('close');
   assert.equal([...app.timers.values()].filter(t=>t.ms===6000).length,0);assert.equal(app.el('jarvis-link').hasAttribute('hidden'),true);assert.deepEqual(app.winListeners.resize,[]);
 });
@@ -613,4 +629,68 @@ test('connector: drawn from the ring membrane to the focused row on desktop, red
   const narrow=focusApp({desktop:false,geometry:{left:60,top:200,width:300,height:40,right:360,bottom:240}});await flush();
   await ask(narrow,'What cleanings are scheduled today?');
   assert.equal(narrow.el('jarvis-link').hasAttribute('hidden'),true);assert.ok(!narrow.el('jarvis-link-path').attrs.d);assert.equal(focusRows(narrow).length,1);
+});
+/* Live interruption with fictional chats and records. The live SDK, WhatsApp API and Hermes decisions are fakes; nothing is sent. */
+function liveInterruptRuntime({desktop,decisions=[]}){
+  let options;const mic=[],vol=[],sends=[],reviews=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1};
+  const liveSdk={Conversation:{startSession:async o=>{options=o;return {endSession:async()=>{},setMicMuted:v=>mic.push(v),setVolume:v=>vol.push(v.volume),getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){},sendUserMessage(){}};}}};
+  const app=desktopRuntime({agent:true,desktop,liveSdk,understand:async()=>decisions.shift()||{kind:'reply',text:'Okay.'},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
+    if(url.endsWith('/status'))return {available:true,requestToken:'FICTIONAL_SESSION'};
+    if(url.includes('/inbox'))return {connection:{state:'open'},chats:[chat],chat,unreadCount:0};
+    const body=JSON.parse(init.body);if(url.endsWith('/review')){reviews.push(body.text);return {reviewToken:'R'.repeat(24),version:1,text:body.text,recipient:chat,expiresAt:Date.now()+300000};}
+    if(url.endsWith('/send')){sends.push(body);return {status:'sent'};}throw Error('Unexpected call');}})});
+  let id=100;const user=async text=>{options.onMessage({source:'user',message:text,event_id:++id});await flush();};
+  const said=()=>app.spoken.filter(u=>u.text.trim()).map(u=>u.text);
+  /* Everything spoken after a mark, joined (the device voice speaks sentence by sentence). */
+  const since=mark=>said().slice(mark).join(' ');
+  /* The device voice plays one sentence at a time, so the whole spoken text is checked in the conversation panel. */
+  const lastLine=()=>texts(app.el('jarvis-transcript')).at(-1);
+  return {app,mic,vol,sends,reviews,user,said,spokenSince:since,lastLine,options:()=>options};
+}
+test('interrupting app-spoken WhatsApp reviews: barge-in, stale completions, echo, stop, Spanish revision and cancellation',async()=>{
+  for(const desktop of [true,false]){
+    const h=liveInterruptRuntime({desktop});h.app.run('openJarvis()');await flush();h.app.click('mic');await flush();const o=h.options();
+    const note=()=>h.app.el('jarvis-review-note').textContent,heardNote='Say “Approve and send”, or approve below. Say “Read the message” to hear it in full.';
+    let m=h.said().length;await h.user('Ask Bex if ten works tomorrow');await o.clientTools.whatsapp_request({kind:'write',name:'Bex',text:'Does ten work tomorrow?'});await flush();
+    assert.equal(h.spokenSince(m),'Draft ready for Bex.','a short spoken result, not the whole message');
+    assert.equal(h.app.el('jarvis-review-text').textContent,'Does ten work tomorrow?','the exact message is on screen');assert.equal(h.vol.at(-1),0);assert.notEqual(h.mic.at(-1),true);
+    // Its own voice heard back is not a request.
+    await h.user('Draft ready for Bex');assert.ok(!texts(h.app.el('jarvis-transcript')).includes('Draft ready for Bex'));
+    // Antonio starts talking: playback stops at once; the cancelled utterance finishing later cannot arm approval.
+    o.onVadScore({vadScore:.9});o.onVadScore({vadScore:.9});assert.equal(h.vol.at(-1),1);h.app.finishSpeech();await flush();assert.notEqual(note(),heardNote);
+    m=h.said().length;await h.user('Approve and send');assert.equal(h.sends.length,0);assert.match(h.spokenSince(m),/^Ready to send to Bex\./);assert.equal(h.lastLine(),'Ready to send to Bex. Say it again to send.');
+    // "Stop": playback stops, the draft stays.
+    await h.user('Stop');h.app.finishSpeech();await flush();assert.equal(h.app.el('jarvis-voice-review').hidden,false);assert.notEqual(note(),heardNote);assert.equal(h.sends.length,0);
+    // "No, make it Spanish": goes to the agent, revises the same draft, needs a fresh review.
+    m=h.said().length;await h.user('No, make it Spanish');await o.clientTools.whatsapp_request({kind:'edit',text:'¿Te va bien a las diez mañana?',language:'es',english:'Does ten work tomorrow?'});await flush();
+    assert.match(h.spokenSince(m),/^Translated to Spanish for Bex\./);assert.equal(h.lastLine(),'Translated to Spanish for Bex. Ready for review.');assert.equal(h.app.el('jarvis-review-text').textContent,'¿Te va bien a las diez mañana?');
+    assert.match(h.app.el('jarvis-review-english').textContent,/Does ten work tomorrow/);
+    m=h.said().length;await h.user('What does it say?');assert.match(h.spokenSince(m),/^Message to Bex,/,'full reading on request');assert.match(h.lastLine(),/^Message to Bex, .*¿Te va bien a las diez mañana\?.*In English: Does ten work tomorrow/);
+    h.app.finishSpeech();await flush();assert.equal(note(),heardNote);
+    await h.user('Approve and send');assert.equal(h.sends.length,1);assert.equal(h.sends[0].text,'¿Te va bien a las diez mañana?');
+    await h.user('Approve and send');assert.equal(h.sends.length,1,'never sent twice');
+    // A new draft, then "Cancel the message" discards it.
+    await h.user('Tell Bex thanks');await o.clientTools.whatsapp_request({kind:'write',name:'Bex',text:'Thanks!'});await flush();
+    await h.user('Cancel the message');assert.equal(h.app.el('jarvis-voice-review').hidden,true);h.app.finishSpeech();await flush();
+    await h.user('Approve and send');assert.equal(h.sends.length,1);
+    /* With the microphone open, Jarvis must never say an approval or confirmation phrase aloud. */
+    assert.ok(!h.said().some(t=>/approve and send|confirm these cleanings|\bconfirm\b/i.test(t)),JSON.stringify(h.said()));h.app.click('close');
+  }
+});
+test('interrupting a spoken cleaning plan: the plan stays, an interrupted read-back cannot be confirmed, nothing saves until heard',async()=>{
+  const decisions=[{kind:'operation',operation:{action:'plan_checkout_cleanings',scope:'results'}},{kind:'operation',operation:{action:'repeat'}}];
+  const h=liveInterruptRuntime({desktop:true,decisions});
+  /* The app's own save path, stubbed in memory: save() writes D where the operation reads its saved copy back. */
+  h.app.run("var __store={};var DB='seravillas_v1';SV_STORAGE={getItem:k=>__store[k]||null,setItem:(k,v)=>{__store[k]=String(v);},removeItem:k=>{delete __store[k];}};save=function(){SV_STORAGE.setItem(DB,JSON.stringify(D));};uid=function(){return 'u'+Math.random().toString(36).slice(2);};render=function(){};D.props=[{id:'p',name:'Villa Test'}];D.cleaners=[];D.sessions=[];D.bookings=[{id:'b',propId:'p',guestName:'Fictional Guest',checkIn:addDays(today(),-3),checkOut:addDays(today(),1),status:'confirmed',linkedCleaningId:''}];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  await h.user('Who leaves tomorrow?');await o.clientTools.lookup_records({entity:'bookings',view:'list',period:'tomorrow',dateBy:'departure'});
+  let m=h.said().length;await h.user('Put cleaning when they leave');await o.clientTools.ask_hermes({request:'plan cleaning'});await flush();
+  assert.match(h.spokenSince(m),/^Plan ready: Villa Test \w+ at 10:00\.$/,'a brief spoken plan');assert.match(h.lastLine(),/^For tomorrow’s departures .*Nothing is saved yet/,'the full plan is on screen');assert.equal(h.vol.at(-1),0);
+  o.onVadScore({vadScore:.95});o.onVadScore({vadScore:.95});h.app.finishSpeech();await flush();
+  await h.user('Go ahead and schedule it');assert.equal(h.app.run('D.sessions.length'),0,'an interrupted read-back cannot be confirmed by voice');
+  assert.equal(h.app.el('jarvis-plan').hidden,false,'the plan stays after interruption');
+  m=h.said().length;await h.user('Read the plan again');await o.clientTools.ask_hermes({request:'repeat'});await flush();assert.match(h.spokenSince(m),/^For tomorrow’s departures/,'read again: the full plan');
+  h.app.finishSpeech();await flush();
+  assert.ok(!h.said().some(t=>/approve and send|confirm these cleanings|\bgo ahead\b|\bconfirm\b/i.test(t)),'no spoken control phrases: '+JSON.stringify(h.said()));
+  m=h.said().length;await h.user('Go ahead and schedule it');assert.equal(h.app.run('D.sessions.length'),1);assert.match(h.spokenSince(m),/^Scheduled one checkout cleaning\./);
+  h.app.click('close');
 });

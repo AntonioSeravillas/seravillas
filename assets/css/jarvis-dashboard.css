@@ -1,0 +1,405 @@
+/* Jarvis premium dashboard (approved reference docs/design/jarvis-premium-dashboard-reference.png, 1672 × 941).
+   Desktop: section rail · left panels · ring with insights and ask bar · right panels, floating over a decorative
+   space layer. Measurements are expressed as responsive tokens rather than a scaled screenshot. Phones and tablets keep
+   a stacked layout (bottom of this file). The ring itself is styled only by size and position. */
+@font-face{font-family:'Jarvis Sans';font-style:normal;font-weight:200 800;font-display:swap;src:url('../fonts/manrope-latin-variable.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Jarvis Sans';font-style:normal;font-weight:200 800;font-display:swap;src:url('../fonts/manrope-latin-ext-variable.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
+.jarvis-root{--j-bg:#040404;--j-text:#ededed;--j-soft:#bdbdbd;--j-muted:#8e8e8e;--j-faint:#4c4c4c;--j-line:#202022;--j-accent:#ef7a2e;--j-accent-soft:rgba(239,122,46,.14);
+  --j-panel:linear-gradient(180deg,rgba(23,23,25,.92) 0%,rgba(14,14,15,.93) 40%,rgba(10,10,11,.95) 100%);--j-border:rgba(255,255,255,.075);--j-ease:cubic-bezier(.22,.8,.26,1);
+  font-family:'Jarvis Sans','Manrope',"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;font-weight:400;background:var(--j-bg)}
+.jarvis-root button,.jarvis-root input,.jarvis-root select{font-weight:400}
+.jarvis-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.jarvis-root svg{flex:none}
+
+/* ── Decorative layer: never interactive. The GPU canvas fades in over a CSS horizon fallback. ── */
+.jarvis-atmos{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;background:radial-gradient(120% 70% at 50% 0%,#0b0a0a 0%,#050505 55%,#030303 100%)}
+.jarvis-atmos canvas{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:0;transition:opacity .9s ease}
+.jarvis-atmos.is-gl canvas{opacity:1}
+.jarvis-atmos::after{content:"";position:absolute;left:50%;top:calc(100% - 15vh);width:150vw;height:150vw;transform:translateX(-50%);border-radius:50%;
+  background:radial-gradient(closest-side,#020202 98.4%,rgba(255,170,110,.75) 99.2%,rgba(239,122,46,.28) 99.6%,transparent 100%);box-shadow:0 -6px 40px rgba(239,122,46,.25),0 -40px 120px rgba(239,122,46,.08);transition:opacity .9s}
+.jarvis-atmos.is-gl::after{opacity:0}
+
+/* ── Shared panel surface ── */
+.jp-panel{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;padding:0 clamp(14px,1.2vw,20px) 12px;border:1px solid var(--j-border);border-radius:9px;background:var(--j-panel);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 26px 50px -26px rgba(0,0,0,.95),0 8px 20px -12px rgba(0,0,0,.85);
+  transition:transform .4s var(--j-ease),box-shadow .4s var(--j-ease),border-color .4s,opacity .4s}
+.jp-panel[hidden]{display:none!important}
+.jp-panel::before{content:"";position:absolute;left:12%;right:12%;top:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);pointer-events:none}
+.jp-head{display:flex;align-items:center;gap:12px;flex:none;min-height:clamp(42px,5.1vh,50px);padding-top:2px}
+.jp-icon{display:grid;place-items:center;color:var(--j-accent)}
+.jp-head .jarvis-kicker{flex:1;margin:0;font-size:12.5px;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:#efefef;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jp-link{display:inline-flex;align-items:center;gap:8px;min-height:30px;font-size:12px;color:#d2d2d2;white-space:nowrap}.jp-link:hover{color:#fff}
+.jp-new{color:var(--j-muted)}
+.jp-collapse{display:none;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:1px solid rgba(255,255,255,.14)!important;border-radius:15px;font-size:11.5px;color:#ddd}
+.jp-scroll{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#2c2c2c transparent}
+.jp-row-btn{display:flex;align-items:center;gap:12px;width:100%;min-width:0;text-align:left;border-radius:6px;transition:background .2s}
+.jp-row-btn:hover{background:rgba(255,255,255,.035)}
+.jp-panel .jarvis-row-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.jp-panel .jarvis-row-body>span{font-size:13px;font-weight:500;color:#eaeaea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.jp-panel .jarvis-row-body small{font-size:11.5px;color:var(--j-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.jp-panel .jarvis-row-body em{font-style:normal;color:var(--j-muted);font-weight:400}
+.jp-panel .jarvis-row-empty{padding:10px 2px;font-size:12px;line-height:1.5;color:var(--j-muted)}
+.jp-filters{display:flex;gap:8px;flex:none;margin:2px 0 10px}
+.jp-filter{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex:1 1 0;min-width:0;height:30px;padding:0 10px;border:1px solid rgba(255,255,255,.11)!important;border-radius:15px;font-size:12px;color:#cfcfcf;white-space:nowrap;transition:border-color .25s,background .25s,color .25s}
+.jp-filter b{min-width:20px;padding:1px 6px;border-radius:9px;background:#29292b;font-size:10.5px;font-weight:600;color:#cfcfcf}
+.jp-filter:hover{border-color:rgba(255,255,255,.22)!important;color:#fff}
+.jp-filter[aria-selected="true"]{border-color:rgba(239,122,46,.6)!important;background:rgba(239,122,46,.07);color:#fff}
+.jp-filter[aria-selected="true"] b{background:var(--j-accent);color:#fff}
+.jp-dot{width:7px;height:7px;border-radius:50%;background:#555}.jp-dot.is-alert{background:var(--j-accent);box-shadow:0 0 8px rgba(239,122,46,.6)}
+.jp-meta{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}.jp-meta small{font-size:11.5px;color:var(--j-muted)}
+
+/* Calendar */
+.jp-select{position:relative;display:inline-flex;align-items:center;height:30px;border:1px solid rgba(255,255,255,.12);border-radius:7px;color:#ddd}
+.jarvis-root .jp-select select{appearance:none;-webkit-appearance:none;width:auto;height:100%;min-height:0;margin:0;padding:0 30px 0 12px;border:0!important;border-radius:7px;background:transparent!important;color:#e2e2e2!important;font:inherit;font-size:12px;box-shadow:none!important;cursor:pointer;color-scheme:dark}
+.jp-select select option{background:#111;color:#eee}
+.jp-select svg{position:absolute;right:9px;pointer-events:none;color:#bbb}
+.jp-add{display:grid;place-items:center;width:30px;height:30px;margin-left:2px;border-left:1px solid rgba(255,255,255,.1)!important;color:var(--j-accent)}.jp-add:hover{color:#fff}
+.jp-cal-body{display:grid;grid-template-columns:clamp(46px,4vw,66px) minmax(0,1fr);flex:1;min-height:0}
+.jp-cal-date{display:flex;flex-direction:column;align-items:center;padding-top:clamp(14px,2.8vh,26px);gap:3px}
+.jp-cal-date small{font-size:11px;letter-spacing:.22em;color:#b4b4b4}
+.jp-cal-date b{font-size:clamp(24px,2.1vw,31px);font-weight:300;line-height:1.15;color:#f5f5f5}
+.jp-calendar .jp-scroll{position:relative;padding-left:4px}
+.jp-calendar .jarvis-date{display:none}
+.jp-calendar.is-attention .jarvis-date{display:block;margin:0 0 4px 18px;font-size:11.5px;color:var(--j-accent);letter-spacing:.06em}
+.jp-timeline{position:relative;margin:0;padding:6px 0 4px}
+.jp-timeline::before,.jp-timeline::after{content:"";position:absolute;top:10px;bottom:10px;width:1px}
+.jp-timeline::before{left:12px;background:rgba(255,255,255,.12)}
+.jp-timeline::after{left:79px;background:linear-gradient(180deg,rgba(239,122,46,.5),rgba(239,122,46,.18))}
+.jp-panel .jp-timeline .jarvis-row{display:block;padding:0;border:0}
+.jp-timeline .jp-row-btn,.jp-timeline .jarvis-row.is-focus,.jp-timeline .jarvis-row:not(.jp-event){display:grid;grid-template-columns:62px 20px minmax(0,1fr) 20px;align-items:start;gap:0;min-height:clamp(36px,4.8vh,45px);padding:3px 0}
+.jp-timeline .jarvis-row-time{position:relative;padding-left:24px;padding-top:1px;font-size:11.5px;color:#a6a6a6;font-variant-numeric:tabular-nums;flex:none}
+.jp-timeline .jarvis-row-time::before{content:"";position:absolute;left:10px;top:7px;width:5px;height:5px;border-radius:50%;background:#7b7b7b}
+.jp-timeline li:first-child .jarvis-row-time::before{background:var(--j-accent)}
+.jp-node{position:relative;display:block;height:18px}
+.jp-node::before{content:"";position:absolute;left:3px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--j-accent);box-shadow:0 0 0 3px #0e0e0f}
+.jp-event.is-arrival .jp-node::before{background:#f2f2f2}.jp-event.is-task .jp-node::before{background:#8a8a8a}
+.jp-event.is-alert .jp-node::before{box-shadow:0 0 0 3px #0e0e0f,0 0 10px 2px rgba(239,122,46,.55)}
+.jp-more{color:#bdbdbd;letter-spacing:1px;font-size:13px;line-height:1;padding-top:2px;text-align:center}
+.jp-timeline .jarvis-row:not(.jp-event)>.jarvis-row-body{grid-column:3}
+
+/* Tasks */
+.jp-task-list{margin:0;padding:0 0 2px}
+.jp-panel .jp-task{display:flex;align-items:center;gap:10px;padding:0;border:0;min-height:clamp(24px,2.85vh,27px)}
+.jp-task .jp-row-btn{padding:2px 2px}
+.jp-check{display:grid;place-items:center;flex:none;width:17px;height:17px;margin-left:2px;border:1.4px solid #cfcfcf!important;border-radius:50%;color:#160c05;transition:border-color .2s,background .2s}
+button.jp-check:hover{border-color:var(--j-accent)!important;background:rgba(239,122,46,.15)}
+.jp-check.is-checked{background:var(--j-accent);border-color:var(--j-accent)!important}
+.jp-task .jarvis-row-body>span{font-weight:400;font-size:13px}
+.jp-due{flex:none;font-size:12px;color:#9a9a9a}.jp-due.is-now{color:var(--j-accent)}
+.jp-task.is-done .jarvis-row-body>span{color:#7d7d7d;text-decoration:line-through;text-decoration-color:#555}
+.jp-undo{font-size:12px;color:var(--j-accent);min-height:24px}
+
+/* Cleanings */
+.jp-clean-list{margin:0;padding:0}
+.jp-clean .jp-row-btn{padding:clamp(1px,.35vh,3px) 2px}
+.jp-thumb{position:relative;display:grid;place-items:center;flex:none;width:clamp(52px,3.7vw,62px);height:clamp(30px,3.6vh,34px);border-radius:4px;overflow:hidden;background:#151516}
+.jp-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.jp-thumb.is-fallback{background:linear-gradient(180deg,#2a2622 0%,#1a1817 55%,#121212 56%,#171615 100%);border:1px solid rgba(255,255,255,.07);color:rgba(230,215,200,.55)}
+.jp-crew{flex:none;width:17px;height:17px;margin-right:4px;border:1.5px solid #8b8b8b;border-radius:50%}
+.jp-crew.is-needed,.jp-crew.is-offered,.jp-crew.is-partial{border-color:var(--j-accent)}
+.jp-crew.is-needed{box-shadow:0 0 8px rgba(239,122,46,.45)}
+.jp-crew.is-offered{border-style:solid;background:radial-gradient(circle,rgba(239,122,46,.25) 0 2px,transparent 3px)}
+.jp-crew.is-none{border-style:dashed;border-color:#5a5a5a}
+.jp-clean.is-none .jarvis-row-body>span{color:#cfcfcf}
+
+/* Conversation */
+.jarvis-root .jp-panel .jarvis-transcript{flex:1 1 auto;min-height:0;max-height:none;margin:0;padding:2px 2px 4px;overflow:auto;scrollbar-width:thin;scrollbar-color:#2c2c2c transparent}
+.jp-panel .jarvis-line{display:flex;gap:12px;align-items:flex-start;margin:0;padding:6px 0}
+.jarvis-avatar{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;background:#3a3a3c;font-size:13.5px;font-weight:500;color:#e7e7e7}
+.jarvis-line:not(.you) .jarvis-avatar{background:#303032}
+.jarvis-line-body{flex:1;min-width:0}
+.jarvis-line-head{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.jp-panel .jarvis-line small{font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#f1f1f1}
+.jarvis-line-head time{font-size:11.5px;color:var(--j-muted);font-variant-numeric:tabular-nums}
+.jp-panel .jarvis-line p{margin:3px 0 0;font-size:12.5px;line-height:1.45;color:#b8b8b8;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
+.jp-panel.is-expanded .jarvis-line p,.jarvis-root.review-open .jarvis-line:last-child p{-webkit-line-clamp:unset;display:block}
+.jp-panel .jarvis-empty{margin:8px 0;font-size:12.5px;color:var(--j-muted)}
+.jp-panel .jarvis-voice-review{flex:none;margin:8px 0 2px;padding:12px 14px;border:1px solid rgba(239,122,46,.32);border-left:2px solid var(--j-accent);border-radius:8px;background:rgba(239,122,46,.045)}
+.jp-panel .jarvis-voice-review p{margin:6px 0}
+.jp-panel .jarvis-voice-review .jarvis-review-message{font-size:14px;line-height:1.55}
+.jp-panel .jarvis-voice-review>div{gap:16px}
+.jp-panel .jarvis-voice-review button{min-height:34px;font-size:12px;color:#ddd}.jp-panel .jarvis-voice-review button:first-child{color:var(--j-accent);font-weight:600}
+
+/* WhatsApp */
+.jp-wa-list,.jp-issue-list{margin:0;padding:0}
+.jp-chat .jp-row-btn{padding:clamp(2px,.55vh,5px) 2px}
+.jp-avatar{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:50%;background:#3a3a3c;font-size:12px;font-weight:600;letter-spacing:.04em;color:#e8e8e8}
+.jp-avatar.is-group{color:#f0f0f0}
+.jp-badge{display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--j-accent);font-size:10.5px;font-weight:700;color:#fff;box-shadow:0 0 10px rgba(239,122,46,.45)}
+.jp-wa .jarvis-inbox-status{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:auto;padding-top:6px;font-size:10.5px;color:#6c6c6c}
+.jp-wa .jarvis-inbox-status button{font-size:10.5px;min-height:22px;color:#8d8d8d}.jp-wa .jarvis-inbox-status button:hover{color:#ddd}
+
+/* Issues */
+.jp-issue .jp-row-btn{padding:clamp(1px,.45vh,4px) 2px}
+.jp-issue .jp-meta{flex-direction:row;align-items:center;gap:10px;align-self:flex-start;padding-top:2px}
+.jp-doc{display:grid;place-items:center;flex:none;width:34px;height:34px;color:#d6d6d6}
+
+/* Records and embedded WhatsApp in the right column */
+.jp-panel.jarvis-records,.jp-panel.jarvis-context{padding-top:12px;overflow:auto;border-top:1px solid var(--j-border)}
+.jp-panel.jarvis-records .jarvis-kicker,.jp-panel.jarvis-context .jarvis-kicker{font-size:12.5px;font-weight:600;letter-spacing:.24em;color:#efefef}
+
+/* ── Floating behaviour: a small lift on hover; real Jarvis work brings a panel forward and toward the ring. ── */
+@media(hover:hover) and (pointer:fine){
+  .jp-panel:hover{transform:translate3d(0,-3px,0);border-color:rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 34px 60px -28px rgba(0,0,0,1),0 12px 26px -14px rgba(0,0,0,.9)}
+}
+.jarvis-today .jp-panel{--toward:clamp(6px,.9vw,16px);transform-origin:0 50%}
+.jarvis-side .jp-panel{--toward:calc(-1 * clamp(6px,.9vw,16px));transform-origin:100% 50%}
+.jarvis-root .jp-panel.is-attention{z-index:4;border-color:rgba(239,122,46,.45);transform:translate3d(var(--toward),-2px,0) scale(1.02);
+  box-shadow:inset 0 1px 0 rgba(255,190,140,.08),0 0 0 1px rgba(239,122,46,.1),0 36px 70px -28px #000,0 0 48px -14px rgba(239,122,46,.34)}
+.jarvis-root .jp-panel.is-attention .jp-head .jarvis-kicker{color:#fff}
+.jarvis-root.has-focus .jp-panel:not(.is-attention){opacity:.8}
+.jarvis-root.focus-hold .jp-panel.is-attention{transition-duration:1.4s}
+/* Expanded view (Show tasks, View all): the column's other panels shrink to their headings. */
+.jarvis-col.has-expanded>.jp-panel:not(.is-expanded){flex:0 0 auto!important}
+.jarvis-col.has-expanded>.jp-panel:not(.is-expanded)>:not(.jp-head){display:none!important}
+.jarvis-col>.jp-panel.is-expanded{flex:1 1 auto!important}
+.jp-panel.is-expanded .jp-collapse{display:inline-flex}
+.jp-panel.is-expanded .jp-link:not(.jp-new){display:none}
+/* Pending review: the conversation panel stays open; WhatsApp and Issues shrink to their headings. */
+.jarvis-root.review-open .jarvis-side>.jp-panel:not(#jarvis-chat-body):not(.jarvis-records):not(.jarvis-context){flex:0 0 auto!important}
+.jarvis-root.review-open .jarvis-side>.jp-panel:not(#jarvis-chat-body):not(.jarvis-records):not(.jarvis-context)>:not(.jp-head){display:none!important}
+.jarvis-root.review-open #jarvis-chat-body{flex:3 1 0!important;overflow:auto}
+.jarvis-root.review-open #jarvis-chat-body .jarvis-transcript{flex:0 1 auto;max-height:34%}
+/* Record results or the embedded inbox: they take the column; conversation stays visible above. */
+.jarvis-root.has-context .jarvis-side>#jarvis-wa-section,.jarvis-root.has-context .jarvis-side>#jarvis-issues-section{flex:0 0 auto!important}
+.jarvis-root.has-context .jarvis-side>#jarvis-wa-section>:not(.jp-head),.jarvis-root.has-context .jarvis-side>#jarvis-issues-section>:not(.jp-head){display:none!important}
+.jarvis-root.has-context .jarvis-side>#jarvis-chat-body{flex:0 1 auto!important;max-height:38%}
+.jarvis-root.has-context .jarvis-side>.jarvis-records,.jarvis-root.has-context .jarvis-side>.jarvis-context{flex:1 1 0!important}
+
+/* ── Desktop composition ── */
+@media(min-width:1100px){
+  .jarvis-root{--rail:clamp(92px,6.95vw,118px);--left:clamp(292px,22vw,430px);--right:clamp(326px,24.8vw,470px);--head:clamp(66px,9.1vh,92px);--pad-r:clamp(12px,1.32vw,26px);--pad-b:clamp(12px,2.45vh,26px);--gap:clamp(9px,1.5vh,16px);overflow:hidden}
+  .jarvis-shell{position:relative;z-index:1;max-width:none;height:100dvh;min-height:0;margin:0;padding:0 var(--pad-r) var(--pad-b) 0;display:grid;
+    grid-template-columns:var(--rail) var(--left) minmax(0,1fr) var(--right);grid-template-rows:var(--head) minmax(0,1fr);column-gap:0;row-gap:0}
+
+  /* Rail */
+  .jarvis-rail{grid-column:1;grid-row:1/-1;display:flex;flex-direction:column;align-items:center;gap:clamp(0px,.6vh,7px);padding:clamp(16px,2.1vh,20px) calc(var(--rail) - 103px) clamp(12px,2.3vh,22px) 0;min-height:0}
+  .jarvis-mark{flex:none;align-self:flex-start;width:30px;height:30px;margin:0 0 clamp(18px,4.3vh,42px) 25px;border:1.5px solid var(--j-accent);border-radius:50%;box-shadow:0 0 14px rgba(239,122,46,.35),inset 0 0 8px rgba(239,122,46,.25)}
+  .jarvis-rail-item{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(4px,.7vh,7px);width:84px;min-height:clamp(50px,7.1vh,67px);border:1px solid transparent!important;border-radius:9px;color:#d8d8d8;font-size:12px;letter-spacing:.01em;transition:color .25s,background .25s,border-color .25s}
+  .jarvis-rail-item svg{color:#e8e8e8;transition:color .25s}
+  .jarvis-rail-item:hover{color:#fff;background:rgba(255,255,255,.03)}
+  .jarvis-rail-item[aria-current="page"]{color:var(--j-accent);border-color:rgba(239,122,46,.32)!important;background:linear-gradient(180deg,rgba(239,122,46,.2),rgba(239,122,46,.07));box-shadow:inset 0 1px 0 rgba(255,190,140,.12),0 10px 24px -14px rgba(239,122,46,.5)}
+  .jarvis-rail-item[aria-current="page"] svg{color:var(--j-accent)}
+  .jarvis-rail-dot{position:absolute;top:clamp(4px,1vh,10px);right:22px;width:6px;height:6px;border-radius:50%;background:var(--j-accent);box-shadow:0 0 8px rgba(239,122,46,.7)}
+  .jarvis-rail-dot[hidden]{display:none}
+  .jarvis-rail-settings{margin-top:auto}
+
+  /* Header */
+  .jarvis-header{grid-column:2/-1;grid-row:1;display:grid;grid-template-columns:var(--left) minmax(0,1fr) var(--right);align-items:center;gap:0}
+  .jarvis-brand{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .jarvis-wordmark{font-size:17px;font-weight:400;letter-spacing:.56em;color:#f3f3f3}
+  .jarvis-brand small{font-size:10.5px;font-weight:500;letter-spacing:.34em;text-transform:uppercase;color:#a2a2a2}
+  .jarvis-header .jarvis-nav{grid-column:auto;justify-self:center;display:flex;align-items:center;gap:clamp(14px,1.85vw,32px);flex-wrap:nowrap;align-self:start;margin-top:clamp(10px,1.95vh,20px)}
+  .jarvis-top-item{position:relative;display:inline-flex;align-items:center;gap:9px;min-height:36px;font-size:10.5px;font-weight:500;letter-spacing:.13em;text-transform:uppercase;color:#a9a9a9;white-space:nowrap}
+  .jarvis-top-item:hover{color:#fff}
+  .jarvis-top-item[aria-current="page"]{color:#fff}
+  .jarvis-top-item[aria-current="page"]::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--j-accent);box-shadow:0 0 8px rgba(239,122,46,.8)}
+  .jarvis-header .jarvis-nav .jarvis-top-item[aria-current="page"]::after{content:"";position:absolute;left:-12px;right:-12px;bottom:-6px;height:2px;border-radius:2px;background:var(--j-accent);opacity:1;box-shadow:0 0 10px rgba(239,122,46,.6)}
+  .jarvis-header-right{justify-self:end;display:flex;align-items:center;gap:clamp(12px,1.4vw,22px);padding-right:clamp(0px,.4vw,8px)}
+  .jarvis-connection{gap:9px;min-height:34px;padding-right:clamp(12px,1.4vw,22px);border-right:1px solid rgba(255,255,255,.12)!important;font-size:12px;color:#c9c9c9;white-space:nowrap}
+  .jarvis-when{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding-right:clamp(12px,1.4vw,22px);border-right:1px solid rgba(255,255,255,.12);white-space:nowrap}
+  .jarvis-when small{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:#a3a3a3}
+  .jarvis-when span{font-size:12.5px;color:#dedede}
+  .jarvis-clock{font-size:17px;font-weight:400;color:#f2f2f2;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+  .jarvis-close{width:36px;height:36px;margin-left:clamp(4px,1vw,14px);border:1.5px solid var(--j-accent)!important;border-radius:50%;color:#f0c6a8;box-shadow:0 0 14px rgba(239,122,46,.3)}
+  .jarvis-close:hover{color:#fff;background:rgba(239,122,46,.15)}
+
+  /* Columns */
+  .jarvis-today,.jarvis-side{display:flex;flex-direction:column;gap:var(--gap);padding:0;min-height:0;overflow:visible}
+  .jarvis-today{grid-column:2;grid-row:2}
+  .jarvis-side{grid-column:4;grid-row:2;padding-right:0}
+  .jp-calendar{flex:280 1 0}.jp-tasks{flex:280 1 0}.jp-cleanings{flex:244 1 0}
+  #jarvis-chat-body{flex:262 1 0}.jp-wa{flex:298 1 0}.jp-issues{flex:244 1 0}
+  .jarvis-side>section{border-top:1px solid var(--j-border);padding-top:0}
+  .jp-panel>.jp-scroll,.jp-panel>.jp-cal-body{flex:1 1 auto}
+
+  /* Centre */
+  .jarvis-presence{grid-column:3;grid-row:2;position:relative;z-index:2;display:grid;grid-template-columns:100%;grid-template-rows:auto minmax(0,1fr) 0 auto auto;justify-items:center;align-items:start;min-height:0;padding:0 0 clamp(70px,14.3vh,150px);border:0;overflow:visible}
+  .jarvis-greeting{display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.75vh,8px);padding-top:clamp(2px,.75vh,8px);text-align:center;pointer-events:none}
+  .jarvis-greeting small{font-size:11.5px;font-weight:500;letter-spacing:.42em;text-transform:uppercase;color:#d0d0d0}
+  .jarvis-greeting h1{margin:0;font-size:clamp(20px,1.6vw,27px);font-weight:300;letter-spacing:.58em;text-indent:.58em;text-transform:uppercase;color:#f6f6f6;line-height:1.15}
+  .jarvis-greeting p{margin:0;font-size:11px;font-weight:500;letter-spacing:.28em;text-transform:uppercase;color:#a9a9a9}
+  .jarvis-stage{position:relative;width:100%;height:100%;min-height:0;container-type:size}
+  .jarvis-orbit{position:absolute;inset:-14px 0 14px;--ring:min(clamp(360px,49vh,560px),93cqh,61cqw)}
+  .jarvis-ring,.jarvis-guides{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+  .jarvis-presence .jarvis-ring{width:var(--ring);height:var(--ring);margin:0}
+  .jarvis-guides{width:calc(var(--ring) * 1.82);height:calc(var(--ring) * 1.82);overflow:visible;pointer-events:none}
+  .jarvis-guides circle{fill:none;stroke:rgba(255,255,255,.07);stroke-width:.14}
+  .jarvis-guides circle.mid{stroke:rgba(255,255,255,.045);stroke-dasharray:.6 1.4}
+  .jarvis-guides circle.dot{fill:rgba(255,255,255,.75);stroke:none}
+  .jarvis-guides circle.dot.warm{fill:var(--j-accent);opacity:.85}
+  .jarvis-core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:calc(var(--ring) * .46);display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;pointer-events:none}
+  .jarvis-presence .jarvis-status{margin:0;font-size:11px;font-weight:500;letter-spacing:.3em;text-transform:uppercase;color:rgba(235,235,235,.55);transition:color .3s}
+  .jarvis-root[data-phase="listening"] .jarvis-status,.jarvis-root[data-phase="speaking"] .jarvis-status,.jarvis-root[data-phase="thinking"] .jarvis-status{color:#f3f3f3}
+  .jarvis-presence .jarvis-hint{margin:0;font-size:10.5px;letter-spacing:.04em;color:rgba(200,200,200,.42);line-height:1.45}
+  .jarvis-insight{position:absolute;left:calc(50% + var(--ring) * var(--x));top:calc(50% + var(--ring) * var(--y));transform:translate(-50%,-50%);z-index:3;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 10px;border-radius:10px;color:#e8e8e8;text-align:center;transition:background .25s,color .25s}
+  .jarvis-insight:hover{background:rgba(255,255,255,.035);color:#fff}
+  .jarvis-insight svg{margin-bottom:2px}
+  .jarvis-insight span{font-size:11.5px;font-weight:600;letter-spacing:.2em;text-transform:uppercase}
+  .jarvis-insight b{font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--j-accent);white-space:nowrap}
+  .jarvis-insight small{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#7f7f7f;min-height:11px}
+  .jarvis-insight.is-reports b{color:#a8a8a8}
+  .is-properties{--x:-.567;--y:-.385}.is-bookings{--x:.557;--y:-.385}.is-tasks{--x:-.607;--y:-.01}.is-cleanings{--x:.607;--y:-.01}.is-reports{--x:-.561;--y:.385}.is-whatsapp{--x:.567;--y:.375}
+  .jarvis-notes{position:relative;width:min(560px,92%);height:0}
+  .jarvis-notes .jarvis-caption,.jarvis-notes .jarvis-error{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);width:100%;max-width:none;margin:0;text-align:center}
+  .jarvis-notes .jarvis-error{background:rgba(20,14,10,.9);backdrop-filter:blur(6px)}
+  .jarvis-ask{position:relative;display:flex;align-items:center;gap:6px;width:min(512px,72%);height:clamp(46px,5.8vh,55px);margin:0;padding:0 8px 0 10px;border:1px solid rgba(255,255,255,.17)!important;border-radius:28px;
+    background:linear-gradient(180deg,rgba(18,18,19,.88),rgba(8,8,9,.92));box-shadow:0 18px 40px -18px #000,inset 0 1px 0 rgba(255,255,255,.05)}
+  .jarvis-ask:focus-within{border-color:rgba(239,122,46,.5)!important}
+  .jarvis-ask .jarvis-mic{flex:none;width:44px;height:40px;border:0!important;border-radius:20px;color:#f2b386;box-shadow:none;background:none}
+  .jarvis-ask .jarvis-mic:hover{background:rgba(239,122,46,.1)}
+  .jarvis-ask .jarvis-mic.active,.jarvis-root[data-phase="listening"] .jarvis-ask .jarvis-mic{color:var(--j-accent);background:rgba(239,122,46,.14);box-shadow:0 0 18px rgba(239,122,46,.3)}
+  .jarvis-ask input{flex:1;min-width:0;height:100%;padding:0 8px;border:0;background:none;color:#ededed;font:inherit;font-size:14px;outline:none}
+  .jarvis-ask input::placeholder{color:#9a9a9a}
+  .jarvis-send{display:grid;place-items:center;flex:none;width:38px!important;height:38px!important;border-radius:50%;background:var(--j-accent)!important;color:#fff!important;box-shadow:0 0 22px rgba(239,122,46,.5)}
+  .jarvis-send:hover{background:#ff8a3c!important}
+  .jarvis-shortcuts{display:flex;flex-wrap:nowrap;justify-content:center;gap:8px;margin-top:clamp(9px,1.4vh,13px);max-width:100%}
+  .jarvis-shortcuts>button,.jarvis-more-btn{display:inline-flex;align-items:center;gap:9px;height:clamp(32px,3.85vh,36px);padding:0 clamp(10px,.95vw,16px);border:1px solid rgba(255,255,255,.14)!important;border-radius:18px;background:rgba(12,12,13,.72);font-size:12px;color:#dadada;white-space:nowrap;transition:border-color .25s,color .25s,background .25s}
+  .jarvis-shortcuts>button:hover,.jarvis-more-btn:hover{border-color:rgba(239,122,46,.45)!important;color:#fff}
+  .jarvis-more{position:relative}
+  .jarvis-more-btn{padding:0 14px}
+}
+
+/* More menu (all sizes) */
+.jarvis-more{position:relative}
+.jarvis-menu{position:absolute;right:0;bottom:calc(100% + 10px);z-index:20;display:flex;flex-direction:column;min-width:220px;padding:6px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:#0f0f10;box-shadow:0 24px 50px -16px #000}
+.jarvis-menu[hidden]{display:none}
+.jarvis-menu>button{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;margin:0;padding:0 12px;border-radius:7px;font-size:13px;color:#dcdcdc;text-align:left}
+.jarvis-menu>button:hover,.jarvis-menu>button:focus-visible{background:rgba(255,255,255,.05);color:#fff}
+.jarvis-menu .jarvis-keep i{width:7px;height:7px;border-radius:50%;background:var(--j-faint)}.jarvis-menu .jarvis-keep[aria-pressed="true"] i{background:var(--j-accent)}
+
+/* Laptop heights: tighter rows before anything becomes unreadable. */
+@media(min-width:1100px) and (max-height:820px){
+  .jp-head{min-height:40px}
+  .jp-filters{margin-bottom:6px}.jp-filter{height:27px}
+  .jarvis-greeting small{font-size:10.5px}.jarvis-greeting p{font-size:10px}
+  .jarvis-insight{gap:4px;padding:6px 8px}.jarvis-insight small{display:none}
+  .jp-wa .jarvis-inbox-status{display:none}
+}
+@media(min-width:1100px) and (max-width:1400px){
+  .jarvis-header .jarvis-nav{gap:clamp(12px,1.6vw,24px)}
+  .jarvis-top-item{letter-spacing:.12em;font-size:11px}
+  .jarvis-connection span{display:none}
+  .jarvis-shortcuts>button span{display:none}.jarvis-shortcuts>button{padding:0 11px}
+  .jarvis-shortcuts>button[data-j="sc-schedule"] span,.jarvis-shortcuts>button[data-j="sc-plan"] span{display:inline}
+}
+@media(min-width:1100px) and (max-width:1500px){.jp-calendar .jp-head .jarvis-kicker{flex:none;letter-spacing:.16em}.jp-calendar .jp-select{margin-left:auto}}
+@media(min-width:1100px) and (max-width:1250px){.jarvis-when{display:none}.jarvis-insight span{letter-spacing:.12em}}
+
+/* ── Phones and tablets: stacked, no rail, no decorative GPU layer. ── */
+@media(max-width:1099px){
+  .jarvis-atmos{display:none}
+  .jarvis-rail{display:none}
+  .jarvis-shell{grid-template-columns:minmax(0,1fr)}
+  .jarvis-shell>*,.jarvis-presence>*,.jarvis-header>*{min-width:0;max-width:100%}
+  .jarvis-header-right{margin-left:auto}
+  .jarvis-header{flex-wrap:wrap;row-gap:6px}
+  .jarvis-brand{display:flex;flex-direction:column;gap:3px}.jarvis-brand small{font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--j-muted)}
+  .jarvis-header .jarvis-nav{order:3;flex-basis:100%;flex-wrap:nowrap;overflow-x:auto;gap:18px;scrollbar-width:none;padding-bottom:4px}
+  .jarvis-top-item{min-height:36px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--j-muted);white-space:nowrap}
+  .jarvis-top-item[aria-current="page"]{color:var(--j-text);box-shadow:inset 0 -1px 0 var(--j-accent)}
+  .jarvis-when,.jarvis-clock{display:none}
+  .jarvis-greeting{text-align:center}.jarvis-greeting small{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--j-soft)}.jarvis-greeting h1{margin:4px 0;font-size:20px;font-weight:300;letter-spacing:.4em;text-indent:.4em;text-transform:uppercase}.jarvis-greeting p{margin:0;font-size:11px;color:var(--j-muted);letter-spacing:.14em;text-transform:uppercase}
+  .jarvis-stage{position:relative;width:100%;display:flex;flex-direction:column;align-items:center}
+  .jarvis-orbit{display:flex;flex-direction:column;align-items:center;width:100%}
+  .jarvis-guides{display:none}
+  .jarvis-core{display:flex;flex-direction:column;align-items:center;margin-top:6px}
+  .jarvis-orbit{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));justify-items:center;gap:6px 4px}
+  .jarvis-orbit>.jarvis-ring,.jarvis-orbit>.jarvis-core{grid-column:1/-1}
+  .jarvis-insight{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;min-height:44px;color:var(--j-soft);text-align:center}
+  .jarvis-insight svg{width:18px;height:18px}
+  .jarvis-insight span{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}.jarvis-insight b{font-size:11px;color:var(--j-accent);font-weight:500}.jarvis-insight small{display:none}
+  .jarvis-notes{width:100%}
+  .jarvis-ask{display:flex;align-items:center;gap:8px;width:100%;margin-top:14px;padding:6px 6px 6px 8px;border:1px solid #2a2a2a!important;border-radius:30px}
+  .jarvis-ask input{flex:1;min-width:0;border:0;background:none;color:var(--j-text);font-size:16px;outline:none;padding:10px 4px}
+  .jarvis-ask .jarvis-mic{width:56px;height:56px;flex:none}
+  .jarvis-send{width:44px;height:44px;border-radius:50%;background:var(--j-accent)!important;color:#fff!important;display:grid;place-items:center}
+  .jarvis-shortcuts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+  .jarvis-shortcuts>button,.jarvis-more-btn{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border:1px solid #2a2a2a!important;border-radius:20px;font-size:13px;color:var(--j-soft)}
+  .jarvis-today,.jarvis-side{gap:16px}
+  .jp-panel{box-shadow:none}
+  .jp-panel .jp-scroll{max-height:52dvh}
+  .jarvis-side>#jarvis-chat-body .jarvis-transcript{max-height:46dvh}
+  .jarvis-menu{left:auto;right:0}
+}
+@media(prefers-reduced-motion:reduce){
+  .jp-panel,.jp-panel:hover,.jarvis-root .jp-panel.is-attention{transition:none;transform:none}
+  .jarvis-atmos canvas,.jarvis-atmos::after{transition:none}
+}
+@media(pointer:coarse){.jp-row-btn,.jp-filter,.jp-check{min-height:40px}.jp-check{width:22px;height:22px;min-height:22px}}
+/* Review actions stay in view while a long plan or message scrolls inside the conversation panel. */
+.jp-panel .jarvis-voice-review>div:last-child{position:sticky;bottom:-12px;z-index:1;margin:8px -14px -12px;padding:8px 14px 10px;background:linear-gradient(180deg,rgba(18,14,12,.6),rgba(16,13,11,.98) 40%);border-radius:0 0 8px 8px}
+/* Development preview only: labels simulated graphics states (never created outside the DEV preview hook). */
+.jarvis-sim-badge{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:30;padding:5px 12px;border:1px dashed rgba(239,122,46,.6);border-radius:14px;background:rgba(10,8,6,.85);font-size:11px;letter-spacing:.08em;color:#f0b48a;pointer-events:none}
+/* Ask bar message field: the shared input focus rules (app.css glow, workspace.css and jarvis.css outlines) drew a
+   rectangle inside the rounded bar. Only this field opts out; its focus is shown on the rounded bar itself, for mouse
+   and keyboard alike. Every other control keeps the shared focus indicators. */
+.jarvis-root .jarvis-ask #jarvis-input,.jarvis-root .jarvis-ask #jarvis-input:focus,.jarvis-root .jarvis-ask #jarvis-input:focus-visible{outline:none;border:0;border-radius:0;box-shadow:none;background:none}
+.jarvis-root .jarvis-ask:focus-within{border-color:rgba(239,122,46,.55)!important;box-shadow:0 18px 40px -18px #000,inset 0 1px 0 rgba(255,255,255,.05),0 0 0 1px rgba(239,122,46,.22),0 0 18px -6px rgba(239,122,46,.35)}
+/* Rail on short windows (high browser zoom, small laptops): items compact instead of falling off-screen; if even that
+   is not enough the rail scrolls. Labels and icons are never clipped, and the rail keeps its width. */
+@media(min-width:1100px){
+  .jarvis-rail{overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+  .jarvis-rail::-webkit-scrollbar{display:none}
+  .jarvis-rail-item{flex:none}
+}
+@media(min-width:1100px) and (max-height:760px){
+  .jarvis-mark{margin-bottom:clamp(6px,2vh,18px)}
+  .jarvis-rail{gap:0;padding-top:12px;padding-bottom:10px}
+  .jarvis-rail-item{min-height:clamp(40px,6.6vh,52px);gap:3px;font-size:11px}
+  .jarvis-rail-item svg{width:19px;height:19px}
+}
+/* Large screens (e.g. 4K at 125 % ≈ 3072 CSS px): the shared rail and header grow with the viewport. Each minimum equals
+   the accepted size, so laptop and 1920 px desktops are unchanged; only wide CSS viewports scale up. */
+@media(min-width:1100px){
+  .jarvis-root{--rail:clamp(92px,6.95vw,176px);--head:clamp(66px,min(9.1vh,5.2vw),132px)}
+  .jarvis-rail{padding-right:clamp(0px,calc(var(--rail) - 103px),36px)}
+  .jarvis-mark{width:clamp(30px,1.8vw,48px);height:clamp(30px,1.8vw,48px);margin-left:clamp(25px,1.5vw,40px)}
+  .jarvis-rail-item{width:clamp(84px,5.02vw,140px);font-size:clamp(12px,.72vw,17.5px)}
+  .jarvis-rail-item svg{width:clamp(22px,1.32vw,34px);height:clamp(22px,1.32vw,34px)}
+  .jarvis-rail-dot{right:clamp(22px,1.3vw,36px)}
+  .jarvis-wordmark{font-size:clamp(17px,1.02vw,26px)}
+  .jarvis-brand small{font-size:clamp(10.5px,.63vw,15px)}
+  .jarvis-top-item{font-size:clamp(10.5px,.63vw,15.5px)}
+  .jarvis-connection{font-size:clamp(12px,.72vw,17px)}
+  .jarvis-when small{font-size:clamp(10.5px,.63vw,15px)}.jarvis-when span{font-size:clamp(12.5px,.75vw,18px)}
+  .jarvis-clock{font-size:clamp(17px,1.02vw,26px)}
+  .jarvis-close{width:clamp(36px,2.15vw,54px);height:clamp(36px,2.15vw,54px)}
+}
+@media(min-width:1100px) and (min-height:761px){.jarvis-rail-item{min-height:clamp(50px,min(7.1vh,4vw),100px)}}
+
+/* ── Desktop scale for large screens (overview). The ring follows the available height and centre width instead of a
+   560 px ceiling; text and controls around it scale with the viewport. Every minimum equals the accepted size, so
+   laptop and 1920 px layouts are unchanged. The ring canvas is resized (its renderer re-rasterises at a bounded pixel
+   ratio through its ResizeObserver); nothing is stretched with a transform. ── */
+@media(min-width:1100px){
+  .jarvis-root{--left:clamp(292px,22vw,640px);--right:clamp(326px,24.8vw,700px)}
+  .jarvis-root:not(.is-workpage) .jarvis-orbit{--ring:min(clamp(360px,49vh,980px),93cqh,61cqw)}
+  /* Guide circles fit the stage height rather than growing 1:1 with the ring, so the outer orbit never reaches the
+     greeting or the ask bar; the inner circle stays outside the ring's filaments. */
+  .jarvis-root:not(.is-workpage) .jarvis-guides{width:min(calc(var(--ring) * 1.82),118cqh);height:min(calc(var(--ring) * 1.82),118cqh)}
+  .jarvis-greeting small{font-size:clamp(11.5px,.62vw,18px)}
+  .jarvis-greeting h1{font-size:clamp(20px,min(1.6vw,2.9vh),46px)}
+  .jarvis-greeting p{font-size:clamp(11px,.6vw,17px)}
+  .jarvis-insight svg{width:clamp(22px,1.2vw,36px);height:clamp(22px,1.2vw,36px)}
+  .jarvis-insight span,.jarvis-insight b{font-size:clamp(11.5px,.62vw,19px)}
+  .jarvis-insight small{font-size:clamp(9.5px,.5vw,15px)}
+  .jarvis-presence .jarvis-status{font-size:clamp(11px,.6vw,18px)}
+  .jarvis-presence .jarvis-hint{font-size:clamp(10.5px,.55vw,16px)}
+  .jarvis-root:not(.is-workpage) .jarvis-ask{width:min(clamp(512px,26vw,860px),72%);height:clamp(46px,min(5.8vh,3.2vw),80px)}
+  .jarvis-root:not(.is-workpage) .jarvis-ask input{font-size:clamp(14px,.8vw,21px)}
+  .jarvis-root:not(.is-workpage) .jarvis-send{width:clamp(38px,2.2vw,58px)!important;height:clamp(38px,2.2vw,58px)!important}
+  .jarvis-root:not(.is-workpage) .jarvis-ask .jarvis-mic{width:clamp(44px,2.5vw,64px);height:clamp(40px,2.3vw,58px)}
+  .jarvis-root:not(.is-workpage) .jarvis-ask .jarvis-mic svg{width:clamp(22px,1.2vw,32px);height:clamp(22px,1.2vw,32px)}
+  .jarvis-shortcuts{gap:clamp(8px,.5vw,14px);margin-top:clamp(9px,min(1.4vh,.8vw),22px)}
+  .jarvis-shortcuts>button,.jarvis-more-btn{height:clamp(32px,min(3.85vh,2.15vw),54px);padding:0 clamp(10px,.95vw,22px);font-size:clamp(12px,.66vw,17px)}
+  .jarvis-shortcuts svg{width:clamp(16px,.9vw,24px);height:clamp(16px,.9vw,24px)}
+  .jarvis-presence{padding-bottom:clamp(70px,min(14.3vh,8vw),230px)}
+}
+/* Side panels on wide screens: their content is laid out at the accepted design width and zoomed (layout zoom, crisp
+   text, real hit areas) to fill the wider columns, in steps so type stays fine and regular. */
+@media(min-width:2100px){.jarvis-root .jarvis-today,.jarvis-root .jarvis-side{zoom:1.15}}
+@media(min-width:2400px){.jarvis-root .jarvis-today,.jarvis-root .jarvis-side{zoom:1.26}}
+@media(min-width:2800px){.jarvis-root .jarvis-today,.jarvis-root .jarvis-side{zoom:1.38}}
+@media(min-width:3400px){.jarvis-root .jarvis-today,.jarvis-root .jarvis-side{zoom:1.55}}

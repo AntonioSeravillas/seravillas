@@ -117,6 +117,8 @@ function _doRender(){
   attachSwipeNav();
   runAnimations();
   if(tab==='calendar'&&calView==='timeline')setTimeout(tlScrollFocus,30);
+  /* Open Jarvis pages (for example its themed Bookings) refresh after every app render. */
+  if(typeof window.svAfterRender==='function')try{window.svAfterRender();}catch(e){console.error('Jarvis page refresh failed',e);}
 }
 
 /* Scroll each tab bar so its selected tab is fully visible, and flag which edges have more tabs. */

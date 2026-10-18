@@ -54,7 +54,7 @@ test('native tool fields resolve bounded relative days, and typing keeps the mic
 });
 test('literal owner approval is app-only, model tool arguments cannot approve or send, and stale tools cannot complete a newer turn',async()=>{
   let resolve;const h=harness({onTool:()=>new Promise(r=>{resolve=r;})});await h.player.start();const o=h.options();o.onMessage({source:'user',message:'Look up a cleaning',event_id:1});const pending=o.clientTools.lookup_records({query:'{}'});o.onMessage({source:'user',message:'Actually tomorrow',event_id:2});resolve({text:'old'});assert.match(await pending,/superseded/);
-  o.onMessage({source:'user',message:'Approve and send',event_id:3});assert.equal(h.player.suspended,true);assert.match(await o.clientTools.whatsapp_request({intent:'{"kind":"approve"}'}),/paused/);
+  o.onMessage({source:'user',message:'Approve and send',event_id:3});assert.equal(h.player.suspended,false,'an app-handled turn keeps the microphone open');o.onModeChange({mode:'speaking'});assert.deepEqual(h.events.filter(e=>e[0]==='volume').at(-1),['volume',0],'the agent reply to an app-handled turn is silent');assert.match(await o.clientTools.whatsapp_request({intent:'{"kind":"approve"}'}),/paused/);
   const validate=h.sandbox.window.SV_JARVIS_LIVE.validateTool;
   for(const kind of ['approve','send','shell'])assert.throws(()=>validate('whatsapp_request',{intent:JSON.stringify({kind})}),/not allowed/);
   assert.throws(()=>validate('lookup_records',{query:'{"entity":"bookings","view":"delete"}'}));assert.throws(()=>validate('whatsapp_request',{intent:'{"kind":"read","name":"Bex","reviewToken":"SECRET"}'}));h.player.stop();
@@ -67,4 +67,26 @@ test('local live-session endpoint requires its session token and takes no client
   let calls=0;const s=createJarvisServer({liveVoice:{status:()=>({available:true}),session:async()=>{calls++;return {conversationToken:'EPHEMERAL_ONLY',maxDurationSeconds:600};}}});await new Promise(r=>s.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>s.close(r)));const base='http://127.0.0.1:'+s.address().port;const h=await(await fetch(base+'/api/jarvis/health')).json();assert.equal(h.liveVoice.available,true);
   const post=(body,token)=>fetch(base+'/api/jarvis/live-session',{method:'POST',headers:{'Content-Type':'application/json',...(token?{'X-Jarvis-Session-Token':token}:{})},body:JSON.stringify(body)});
   assert.equal((await post({})).status,403);assert.equal((await post({agentId:'OTHER'},h.requestToken)).status,400);assert.equal(calls,0);assert.equal((await(await post({},h.requestToken)).json()).conversationToken,'EPHEMERAL_ONLY');assert.equal(calls,1);
+});
+test('app playback holds only the agent audio: the microphone stays open, speech over it is processed and barge-in stops it',async()=>{
+  let bargeIns=0;const h=harness({onBargeIn:()=>bargeIns++});await h.player.start();const o=h.options();
+  const mic=()=>h.events.filter(e=>e[0]==='mic').map(e=>e[1]),volume=()=>h.events.filter(e=>e[0]==='volume').at(-1)?.[1];
+  h.player.hold();assert.equal(h.player.appSpeaking,true);assert.equal(volume(),0);assert.ok(!mic().includes(true),'the microphone is never muted for app playback');
+  o.onVadScore({vadScore:.95});assert.equal(bargeIns,0,'one confident frame is not enough');o.onVadScore({vadScore:.3});o.onVadScore({vadScore:.9});assert.equal(bargeIns,0);
+  o.onVadScore({vadScore:.92});assert.equal(bargeIns,1,'two consecutive confident frames interrupt the app');
+  o.onMessage({source:'user',message:'No, make it Spanish',event_id:7});assert.ok(h.events.some(e=>e[0]==='owner'&&e[1]==='No, make it Spanish'),'words spoken over app playback reach the app');
+  h.player.unhold();assert.equal(volume(),1);assert.equal(h.player.appSpeaking,false);
+  o.onVadScore({vadScore:.99});o.onVadScore({vadScore:.99});assert.equal(bargeIns,1,'no barge-in without app playback');
+  // The agent is mid-reply when app playback ends: it stays silent until that reply ends, never overlapping.
+  h.player.hold();o.onModeChange({mode:'speaking'});h.player.unhold();assert.equal(volume(),0);o.onModeChange({mode:'listening'});assert.equal(volume(),1);
+  // Typing pauses the microphone: then voice activity cannot interrupt.
+  h.player.muteInput();h.player.hold();o.onVadScore({vadScore:.99});o.onVadScore({vadScore:.99});assert.equal(bargeIns,1);h.player.stop();
+});
+test('a turn the app handles keeps the agent reply silent and its tools refused; the app hearing itself is ignored',async()=>{
+  const h=harness({onUser:text=>text==='Approve and send'?true:text.startsWith('Draft ready')?'ignore':false});await h.player.start();const o=h.options();
+  const volume=()=>h.events.filter(e=>e[0]==='volume').at(-1)?.[1];
+  o.onMessage({source:'user',message:'Draft ready for Bex.',event_id:1});assert.match(await o.clientTools.whatsapp_request({kind:'review'}),/paused|superseded/);
+  o.onModeChange({mode:'speaking'});assert.equal(volume(),0);o.onMessage({source:'ai',message:'Echo reply',event_id:2});assert.ok(!h.events.some(e=>e[0]==='reply'&&e[1]==='Echo reply'));o.onModeChange({mode:'listening'});assert.equal(volume(),1);
+  o.onMessage({source:'user',message:'What time is it?',event_id:3});o.onModeChange({mode:'speaking'});assert.equal(volume(),1,'an ordinary turn is audible again');
+  o.onMessage({source:'ai',message:'It is ten.',event_id:4});assert.ok(h.events.some(e=>e[0]==='reply'&&e[1]==='It is ten.'));h.player.stop();
 });

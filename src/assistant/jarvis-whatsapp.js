@@ -356,12 +356,14 @@
   }
   /* Live is the default; sample:true is only for fixtures and browser tests and never happens as a fallback. */
   /* host (optional) embeds the same inbox inside another panel, such as the Jarvis desktop; the default is a standalone overlay. */
-  function open({returnFocus=null,intent=null,sample=false,host=null,onClose=null}={}){
+  /* chat (optional): a stable chat key from the inbox list, opened directly (the dashboard WhatsApp panel). */
+  function open({returnFocus=null,intent=null,sample=false,host=null,onClose=null,chat=''}={}){
     if(S)return false;
     const embedded=!!(host&&typeof host.appendChild==='function');
     const root=document.createElement('div');root.className=embedded?'wa-root wa-embedded':'wa-root';
     const background=embedded?null:document.querySelector('.app-wrapper');
     const st={root,embedded,onClose:typeof onClose==='function'?onClose:null,mode:sample===true?'sample':'live',tab:'direct',selected:'',data:null,sample:sample===true?sampleInbox():null,token:'',offline:'',error:'',notice:'',outcome:null,review:null,editor:{key:'',version:0,text:'',dirty:false},busy:false,timer:0,seq:0,intent:cleanIntent(intent),returnFocus,background,wasInert:!!(background&&background.hasAttribute('inert'))};
+    if(typeof chat==='string'&&/^[A-Za-z0-9_-]{1,64}$/.test(chat)&&!st.intent){st.selected=chat;st.editor={key:chat,version:-1,text:'',dirty:false};}
     S=st;
     root.addEventListener('click',event=>{const target=event.target&&event.target.closest?event.target.closest('[data-wa]'):null;if(target)void act(st,target.dataset.wa,target);});
     /* The editor text belongs to the chat it was typed for (data-key), so it can never move to another recipient. */

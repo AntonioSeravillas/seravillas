@@ -216,6 +216,8 @@ function crewEnsure(s){
 function openCrewModal(sessId){
   var s=D.sessions.find(function(x){return x.id===sessId;});
   if(!s)return;
+  /* Inside Jarvis: the same assignment rules and mutations, presented in the Jarvis theme. */
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_CLEANINGS_VIEW){showModal(SV_CLEANINGS_VIEW.crewDialog(s));return;}
   var prop=D.props.find(function(p){return p.id===s.propId;});
   var crew=getCleaningCrew(s);
   var required=getRequiredCleanersForProperty(s.propId);

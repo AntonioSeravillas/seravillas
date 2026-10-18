@@ -240,6 +240,8 @@ function handleIssuePhoto(e){
 /* ── SESSION MODAL ── */
 function openSess(id){
   const s=D.sessions.find(x=>x.id===id);if(!s)return;
+  /* Inside Jarvis the same actions are presented in the Jarvis theme, with each team member's real status. */
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_CLEANINGS_VIEW){showModal(SV_CLEANINGS_VIEW.detail(s));return;}
   const prop=D.props.find(p=>p.id===s.propId);
   const cls=(s.cleanerIds||[]).map(id=>D.cleaners.find(c=>c.id===id)).filter(Boolean);
   const tags=cls.map(c=>'<span class="badge tc-'+colorFor(c.name)+'" style="font-size:12px;padding:5px 12px">'+esc(c.name)+'</span>').join('');
