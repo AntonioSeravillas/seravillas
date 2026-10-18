@@ -13,6 +13,7 @@
   settings.liveVoice=true;settings.voiceProvider='live';settings.customVoice=true;
   try{const choice=SV_STORAGE.getItem('sv_jarvis_voice');if(['fish','device','live','elevenlabs'].includes(choice)){settings.voiceProvider=choice;settings.liveVoice=choice==='live';settings.customVoice=choice!=='device';}}catch{}
   let connectionCheck=null,appToolsSelected=false;
+  let relayConfirmation=null,relayRegistrationPending=false;
   let liveReading=null;
   const ios=()=>/iPad|iPhone|iPod/.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   settings.messageAnnouncements=true;
@@ -172,14 +173,33 @@
 
   /* Owner-only PC registration for the live relay. The one-time code is shown once after an explicit choice,
      kept only in this field, and cleared when Jarvis closes. Nothing is stored in the browser. */
+  function createRelayConfirmation(host,decide){
+    let settled=false;
+    const box=document.createElement('div'),note=document.createElement('p'),buttons=document.createElement('div');
+    const confirm=document.createElement('button'),cancel=document.createElement('button');
+    box.className='jarvis-voice-review';box.setAttribute('role','group');box.setAttribute('aria-label','Confirm PC registration');
+    note.textContent='Register this Jarvis PC? Any previously registered PC loses access.';
+    confirm.type=cancel.type='button';confirm.textContent='Confirm PC registration';cancel.textContent='Cancel registration';
+    function finish(accepted){if(settled)return;settled=true;box.remove();decide(accepted);}
+    confirm.addEventListener('click',()=>finish(true));cancel.addEventListener('click',()=>finish(false));
+    buttons.append(confirm,cancel);box.append(note,buttons);host.appendChild(box);cancel.focus();
+    return {cancel:()=>finish(false)};
+  }
   async function relayAction(action){
     const t=transport(),status=el('jarvis-relay-status'),opened=root;if(!t?.remote?.()||!status)return;
     const show=text=>{if(root===opened)status.textContent=text;};
     try{
       if(action==='relay-register'){
-        if(typeof window.confirm==='function'&&!window.confirm('Register the Jarvis PC? Any previously registered PC loses access.'))return;
-        const {deviceToken}=await t.registerDevice();if(root!==opened)return;
-        el('jarvis-relay-code').value=deviceToken;el('jarvis-relay-code-label').hidden=false;show('Registered. Paste the code into the relay configuration on the PC, then start the relay there.');return;
+        if(relayRegistrationPending)return;
+        relayRegistrationPending=true;
+        try{
+          const accepted=await new Promise(resolve=>{relayConfirmation=createRelayConfirmation(el('jarvis-relay'),resolve);});
+          relayConfirmation=null;if(!accepted||root!==opened)return;
+          el('jarvis-relay-code').value='';el('jarvis-relay-code-label').hidden=true;show('Registering this PC…');
+          const {deviceToken}=await t.registerDevice();if(root!==opened)return;
+          el('jarvis-relay-code').value=deviceToken;el('jarvis-relay-code-label').hidden=false;show('Registered. Paste the code into the relay configuration on the PC, then start the relay there.');
+        }finally{relayRegistrationPending=false;}
+        return;
       }
       if(action==='relay-revoke'){
         if(typeof window.confirm==='function'&&!window.confirm('Revoke the Jarvis PC? Other devices stop reaching Jarvis until it is registered again.'))return;
@@ -567,7 +587,7 @@
     rec.onerror=e=>complete(e.error);rec.onend=()=>complete();return {start(){if(closed)return;starting=setTimeout(()=>complete('recognition-start-timeout'),8000);watchdog=setTimeout(()=>complete(latest?undefined:'timeout'),30000);try{rec.start();}catch{complete('audio-capture');}},finish,cancel(){if(closed)return;closed=true;cleanup();try{rec.abort();}catch{}}};
   }
 
-  function closePanel(){panel=null;el('jarvis-panel').hidden=true;el('jarvis-mic')?.focus();}
+  function closePanel(){relayConfirmation?.cancel();relayConfirmation=null;panel=null;el('jarvis-panel').hidden=true;el('jarvis-mic')?.focus();}
   function openPanel(kind){
     if(kind==='chat'){const input=el('jarvis-input');el('jarvis-chat-body')?.scrollIntoView?.({block:'nearest'});input?.focus();return;}
     waConversation?.cancel();stop();panel=kind;el('jarvis-panel').hidden=false;el('jarvis-settings-body').hidden=false;el('jarvis-panel-title').textContent='Make it yours';updateConnection();el('jarvis-mode-select')?.focus();
@@ -634,6 +654,7 @@
     try{ringCleanup=createJarvisRing(el('jarvis-ring'),()=>phase,()=>motion);}catch{error('The ring animation could not start. Conversation is still available.');}setPhase('idle');updateConnection();el('jarvis-mic').focus();void checkConnection();startInbox();
   }
   function closeJarvis(){
+    relayConfirmation?.cancel();relayConfirmation=null;
     records?.reset();records=null;recordsView=null;
     waConversation?.cancel();waConversation=null;
     inboxMonitor?.stop();inboxMonitor=null;announcements=[];inboxState=null;messageAudioArmed=false;
@@ -645,5 +666,5 @@
   document.addEventListener('visibilitychange',()=>{if(!root)return;if(document.hidden){waConversation?.cancel();inboxMonitor?.stop();inboxMonitor=null;announcements=[];stop();}else startInbox();});
   window.openJarvis=openJarvis;window.closeJarvis=closeJarvis;
   // Parser/lifecycle hooks allow deterministic tests without microphone hardware.
-  window.SV_JARVIS={createRecognizer,getPhase:()=>phase,send:text=>send(text)};
+  window.SV_JARVIS={createRecognizer,createRelayConfirmation,getPhase:()=>phase,send:text=>send(text)};
 })();
