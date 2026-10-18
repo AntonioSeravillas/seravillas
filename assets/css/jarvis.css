@@ -171,3 +171,7 @@
 #jarvis-tasks-section.is-attention .jarvis-row-body>span{text-shadow:0 0 14px #e0874d1f}
 .jarvis-root.focus-hold #jarvis-tasks-section.is-attention .jarvis-kicker::after{animation-duration:4.8s}
 @media(prefers-reduced-motion:reduce){.jarvis-root{animation:none}.jarvis-root *{transition:none!important}.jarvis-link{animation:none;opacity:.6}.jarvis-link-dot{display:none}.jarvis-row.is-focus::after,#jarvis-tasks-section.is-attention .jarvis-kicker::after,#jarvis-records.is-attention .jarvis-kicker::after{animation:none;opacity:.45}}
+
+/* Cinematic sound controls follow the warm Jarvis accent. */
+.jarvis-settings input[type="range"]{display:block;width:100%;margin-top:10px;accent-color:#ee8434}
+.jarvis-settings input[type="checkbox"]{accent-color:#ee8434}

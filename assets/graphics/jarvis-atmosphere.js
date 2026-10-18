@@ -136,7 +136,7 @@ function geometryWith(attrs,count){const g=new THREE.BufferGeometry();for(const 
 
 /* layout(): {cx,cy,ring,avoid:{left,right,top,bottom}} in CSS px from the real ring canvas and ask controls.
    signals(): {phase,motion}, the same read-only values the ring receives. */
-export function createAtmosphere(canvas,{layout=()=>null,signals=()=>null,onError=()=>{}}={}){
+export function createAtmosphere(canvas,{layout=()=>null,signals=()=>null,onFeed=()=>{},onError=()=>{}}={}){
   let renderer;
   try{renderer=new THREE.WebGLRenderer({canvas,antialias:false,alpha:false,powerPreference:'low-power',preserveDrawingBuffer:false});}
   catch(error){onError(error);return null;}
@@ -200,7 +200,7 @@ export function createAtmosphere(canvas,{layout=()=>null,signals=()=>null,onErro
     const energyTarget=live.feed+(state===1?.12*Math.min(live.level,1):0);live.energy+=(energyTarget-live.energy)*(1-Math.exp(-dt*4));
     uniforms.uLevel.value=Math.min(live.level,1);uniforms.uSpeak.value=live.mix[3];uniforms.uGather.value=live.mix[2]+live.feed*.5;
     uniforms.uFeed.value=live.feed;uniforms.uEnergy.value=live.energy;uniforms.uTravel.value=live.travel;uniforms.uReduced.value=reduced?1:0;
-    streams.visible=live.feed>.003;
+    streams.visible=live.feed>.003;return phase;
   }
   /* Frame pacing: if frames run long while the scene is active, thin the globe first, then lower resolution. */
   function adapt(now,interval){
@@ -210,13 +210,13 @@ export function createAtmosphere(canvas,{layout=()=>null,signals=()=>null,onErro
   }
   function draw(nowMs){
     if(disposed||lost)return;const now=nowMs/1000;
-    if(!measure(nowMs))return;
+    if(!measure(nowMs)){try{onFeed({level:0});}catch{}return;}
     const dt=Math.min(live.lastNow?now-live.lastNow:1/60,.1);live.lastNow=now;
-    step(now,dt);
+    const phase=step(now,dt);
     parallax.x+=(parallax.tx-parallax.x)*.06;parallax.y+=(parallax.ty-parallax.y)*.06;
     uniforms.uPar.value.set(parallax.x,parallax.y);uniforms.uTime.value=now;live.stirring=updateTrail(nowMs,dt);
     globeGeometry.setDrawRange(0,Math.round(GLOBE_COUNT*quality));
-    try{renderer.render(scene,camera);}catch(error){api.dispose();onError(error);}
+    try{renderer.render(scene,camera);try{onFeed({level:streams.visible?live.feed:0,phase});}catch{}}catch(error){api.dispose();onError(error);}
   }
   function loop(now){
     frame=0;if(disposed||lost||document.hidden){live.lastFrame=0;return;}
@@ -224,10 +224,10 @@ export function createAtmosphere(canvas,{layout=()=>null,signals=()=>null,onErro
     if(live.lastFrame)adapt(now/1000,now-live.lastFrame);live.lastFrame=now;
     /* 30 fps at rest; every frame while streams move, so they glide with the ring. */
     if(live.feed>.01||live.stirring||cursor.on||now-last>=33){last=now;draw(now);}
-    if(!reducedQuery?.matches)frame=requestAnimationFrame(loop);
+    if(!disposed&&!lost&&!document.hidden&&!reducedQuery?.matches)frame=requestAnimationFrame(loop);
   }
   function start(){if(!frame&&!disposed&&!lost){live.lastNow=0;if(reducedQuery?.matches){live.feed=0;draw(performance.now());return;}frame=requestAnimationFrame(loop);}}
-  function stop(){if(frame){cancelAnimationFrame(frame);frame=0;}}
+  function stop(){try{onFeed({level:0});}catch{}if(frame){cancelAnimationFrame(frame);frame=0;}}
   const onVisibility=()=>{if(document.hidden)stop();else start();};
   const onResize=()=>{place_=null;if(reducedQuery?.matches||!frame)draw(performance.now());};
   const onPointer=e=>{if(e.pointerType&&e.pointerType!=='mouse')return;const w=window.innerWidth||1,h=window.innerHeight||1;parallax.tx=-(e.clientX/w-.5)*10;parallax.ty=-(e.clientY/h-.5)*6;

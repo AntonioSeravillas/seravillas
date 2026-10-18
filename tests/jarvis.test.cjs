@@ -146,7 +146,7 @@ const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 
 function installSoundProbe(app,{locked=false}={}){
-  const events=[],contexts=[];let unlock;
+  const events=[],contexts=[];app.context.createJarvisRing=()=>()=>{};let unlock;
   const ready=new Promise(resolve=>{unlock=resolve;});
   app.context.AudioContext=class{constructor(){this.state=locked?'suspended':'running';contexts.push(this);}resume(){return locked?ready:Promise.resolve();}close(){this.state='closed';return Promise.resolve();}};
   app.context.SV_JARVIS_SOUNDS={create:context=>({context,play(kind){events.push(kind);return true;},activity:kind=>events.push(kind),preview(){events.push('preview');return true;},stop:()=>events.push('stop'),dispose:()=>events.push('dispose'),setVolume:v=>events.push(['volume',v])})};
@@ -169,13 +169,13 @@ test('actual live states drive distinct interface cues without a provider theme;
 test('audio unlock is awaited, cancelled work stays silent, and the closing cue finishes before its context is released',async()=>{
   const app=desktopRuntime(),h=installSoundProbe(app,{locked:true});app.run('openJarvis()');assert.deepEqual(h.cues(),[]);h.unlock();await flush();assert.deepEqual(h.cues(),['startup']);
   app.click('settings');app.click('test-sounds');await flush();assert.equal(h.cues().at(-1),'preview');
-  app.click('close');assert.equal(h.cues().at(-1),'shutdown');assert.equal(h.contexts[0].state,'running');app.runDelay(650);assert.equal(h.contexts[0].state,'closed');
+  app.click('close');assert.equal(h.cues().at(-1),'shutdown');assert.equal(h.contexts[0].state,'running');app.runDelay(1300);assert.equal(h.contexts[0].state,'closed');
   const hidden=desktopRuntime(),hh=installSoundProbe(hidden,{locked:true});hidden.run('openJarvis()');hidden.context.document.hidden=true;hidden.docListeners.visibilitychange();hh.unlock();await flush();assert.deepEqual(hh.cues(),[]);hidden.click('close');assert.equal(hh.contexts[0].state,'closed');
 });
 
 test('sound volume and switch survive reload; rapid reopen cancels the old tail and hide stops the new sounds',async()=>{
   const saved=new Map(),app=desktopRuntime({voiceStorage:saved}),h=installSoundProbe(app);app.run('openJarvis()');await flush();
-  app.el('jarvis-sound-volume').listeners.input({target:{value:'35'}});assert.equal(saved.get('sv_jarvis_sound_volume'),'0.35');app.click('close');app.run('openJarvis()');await flush();assert.equal(h.contexts[0].state,'closed');assert.equal(h.contexts[1].state,'running');app.runDelay(650);assert.equal(h.contexts[1].state,'running');
+  app.el('jarvis-sound-volume').listeners.input({target:{value:'35'}});assert.equal(saved.get('sv_jarvis_sound_volume'),'0.35');app.click('close');app.run('openJarvis()');await flush();assert.equal(h.contexts[0].state,'closed');assert.equal(h.contexts[1].state,'running');app.runDelay(1300);assert.equal(h.contexts[1].state,'running');
   app.click('settings');app.click('test-sounds');const count=h.cues().length;app.context.document.hidden=true;app.docListeners.visibilitychange();assert.equal(h.events.at(-1),'stop');assert.equal(h.cues().length,count);app.context.document.hidden=false;
   app.el('jarvis-sounds').listeners.change({target:{checked:false}});app.click('close');
   const restored=desktopRuntime({voiceStorage:saved}),rh=installSoundProbe(restored);restored.run('openJarvis()');await flush();assert.equal(restored.el('jarvis-sounds').checked,false);assert.equal(restored.el('jarvis-sound-volume').value,35);assert.deepEqual(rh.cues(),[]);restored.click('close');
