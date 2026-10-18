@@ -1,0 +1,8 @@
+three 0.186.1 — MIT (see LICENSE.txt)
+
+Unmodified copies of build/three.module.js and build/three.core.js from the npm package three@0.186.1.
+npm dist.integrity: sha512-blFeqb49wRCSGUGj7gtpfnSGHy2lwDk94RhUmS1c/hTby70kvChbWpkJ4Pm1390LqzzvTmzgXKHPEafJwCb8jA==
+sha256 three.module.js 9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea
+sha256 three.core.js   9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6
+
+Loaded by the desktop Jarvis particle ring (assets/graphics/). The two JavaScript files above remain unmodified.

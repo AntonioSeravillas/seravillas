@@ -1,4 +1,4 @@
-/* Original silver filament ring, with a slightly larger desktop membrane and mouse response. */
+/* Desktop particle ring, with the original silver membrane for phones and graphics fallback. */
 (function(){
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  function createInteraction(){
@@ -25,8 +25,7 @@
    }
   };
  }
- window.SV_JARVIS_RING=Object.freeze({createInteraction});
-window.createJarvisRing=function(canvas,getPhase,getMotion){const c=canvas,ctx=c.getContext('2d');if(!ctx)return;let frame=0,last=0,clock=0,energy=0,speakMix=0,disposed=false,bound=false;
+function createOriginalRing(canvas,getPhase,getMotion){const c=canvas,ctx=c.getContext('2d');if(!ctx)return;let frame=0,last=0,clock=0,energy=0,speakMix=0,disposed=false,bound=false;
  const reducedQuery=window.matchMedia?.('(prefers-reduced-motion: reduce)'),desktopQuery=window.matchMedia?.('(min-width: 1100px)'),mouseQuery=window.matchMedia?.('(min-width: 1100px) and (hover: hover) and (pointer: fine)');
  const interaction=createInteraction(),warped=[0,0];let reduced=!!reducedQuery?.matches,interactive=false;
  function pointerMove(e){if(!interactive||(e.pointerType&&e.pointerType!=='mouse'))return;const r=c.getBoundingClientRect();if(!r.width||!r.height)return;interaction.move((e.clientX-r.left)/r.width-.5,(e.clientY-r.top)/r.height-.5,performance.now());}
@@ -66,5 +65,40 @@ window.createJarvisRing=function(canvas,getPhase,getMotion){const c=canvas,ctx=c
  if(speakMix>.01&&!reduced)for(let n=0;n<3;n++){const progress=(t*.62+n/3)%1;context.beginPath();for(let p=0;p<=150;p++){const a=p/150*Math.PI*2;const rr=radius+size*(progress*.105+Math.sin(a*5-t*2)*.008);const x=Math.cos(a)*rr,y=Math.sin(a)*rr;if(!p)context.moveTo(x,y);else context.lineTo(x,y);}context.strokeStyle=`rgba(214,214,218,${(1-progress)**2*speakMix*(.09+amp*.12)})`;context.lineWidth=.8;context.stroke();}
  for(let k=0;k<160;k++){const a=k*2.39996+t*(.035+speakMix*.08);const spread=Math.abs(Math.sin(k*73.1)*Math.cos(k*13.3));const rr=radius+size*(.026+spread*.11+Math.sin(t+k)*.007+amp*.02);let x=Math.cos(a)*rr,y=Math.sin(a)*rr;if(responding){interaction.warp(x,y,size,now,warped);x=warped[0];y=warped[1];}context.beginPath();context.arc(x,y,.3+(k%4)*.19,0,Math.PI*2);const spark=k%11===0?speakMix:0;context.fillStyle=`rgba(${spark>.01?[226,226,230].map((v,i)=>Math.round(v+([224,135,77][i]-v)*spark)).join(','):'226,226,230'},${(.04+(1-spread)*.14)*(1+amp)})`;context.fill();}context.restore();}
  frame=requestAnimationFrame(draw);return()=>{disposed=true;cancelAnimationFrame(frame);if(bound){c.removeEventListener('pointermove',pointerMove);c.removeEventListener('pointerleave',pointerLeave);window.removeEventListener?.('blur',resetPointer);}reducedQuery?.removeEventListener?.('change',syncFeatures);mouseQuery?.removeEventListener?.('change',syncFeatures);if(c.dataset){delete c.dataset.ringInteractive;delete c.dataset.ringHover;}};
+}
+
+/* Keep a working membrane visible while the local, pinned graphics module loads.
+   Canvas contexts cannot be switched between 2D and WebGL, so each renderer gets a fresh canvas.
+   The token also prevents a delayed import from reviving Jarvis after it has been closed. */
+function createDesktopRing(canvas,getPhase,getMotion,loadModule=()=>import(new URL('assets/graphics/jarvis-particle-ring.js?v=20261018-particles1',document.baseURI).href)){
+ let current=canvas,stop=createOriginalRing(current,getPhase,getMotion),kind='original',token=0,closed=false,failed=false,wanted=false;
+ const desktop=window.matchMedia('(min-width: 1100px)');
+ current.dataset.ringRenderer='original';
+ function fresh(){const next=current.cloneNode(false);current.replaceWith(next);current=next;return next;}
+ function original(label='original'){
+  if(kind!=='original'){stop?.();stop=createOriginalRing(fresh(),getPhase,getMotion);kind='original';}
+  current.dataset.ringRenderer=label;
+ }
+ function fallback(error){if(closed||failed)return;failed=true;++token;original('original-fallback');console.warn('Jarvis graphics unavailable; using the original ring.',error);}
+ function sync(){
+  const next=!!desktop.matches&&!failed;
+  if(closed||next===wanted)return;wanted=next;const id=++token;
+  if(!next){original(failed?'original-fallback':'original');return;}
+  current.dataset.ringRenderer='particles-loading';
+  Promise.resolve().then(loadModule).then(mod=>{
+   if(closed||id!==token||!desktop.matches)return;
+   stop?.();stop=null;kind='particles';const target=fresh();
+   const ring=mod.createParticleRing(target,getPhase,getMotion,{onError:fallback});
+   stop=()=>ring.dispose();stop.reset=()=>ring.reset();target.dataset.ringRenderer='particles';
+  }).catch(error=>{if(!closed&&id===token)fallback(error);});
+ }
+ desktop.addEventListener?.('change',sync);sync();
+ const cleanup=()=>{if(closed)return;closed=true;++token;stop?.();desktop.removeEventListener?.('change',sync);};
+ cleanup.reset=()=>stop?.reset?.();return cleanup;
+}
+window.SV_JARVIS_RING=Object.freeze({createInteraction,createDesktopRing});
+window.createJarvisRing=function(canvas,getPhase,getMotion){
+ return window.WebGL2RenderingContext&&window.matchMedia
+  ?createDesktopRing(canvas,getPhase,getMotion):createOriginalRing(canvas,getPhase,getMotion);
 };
 })();
