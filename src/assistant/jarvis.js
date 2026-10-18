@@ -348,8 +348,14 @@
     el('jarvis-review-english').textContent=review.english?'English meaning: '+review.english:'';el('jarvis-review-english').hidden=!review.english;
     el('jarvis-review-note').textContent=review.understanding?'Checking your latest request. Review again before sending.':review.heard?'Say “Approve and send”, or approve below.':'Listen to the full read-back before approving by voice, or review below.';
   }
+  /* Read-only message text for "send tomorrow's cleaning schedule": current cleaning records for that day, with each
+     cleaner's real status. No records are created or changed. English, or Spanish when the draft is in Spanish. */
+  function scheduleMessage(date,language){
+    const day=date==='today'?today():date==='tomorrow'?addDays(today(),1):date;
+    return window.SV_JARVIS_RECORDS?.scheduleText?.({props:D.props,cleaners:D.cleaners,sessions:D.sessions},day,language)||'';
+  }
   function ensureWhatsAppConversation(){
-    if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,getToken:()=>requestToken,onChange:renderVoiceReview});return waConversation;
+    if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,getToken:()=>requestToken,onChange:renderVoiceReview,compose:scheduleMessage});return waConversation;
   }
   function ensureRecords(){if(!records&&window.SV_JARVIS_RECORDS)records=SV_JARVIS_RECORDS.create();return records;}
   /* ── App operations: the AI proposes typed fields; SV_JARVIS_OPERATIONS resolves records and applies cleaning rules.
@@ -518,6 +524,7 @@
       if(['approve','cancel','review'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&waConversation?.snapshot()?.stage==='review'){if(await whatsappTurn(text,id,screenApproval))return;}
       /* A recognised topic search runs directly; Hermes then only presents the results in English. */
       if(literal?.kind==='search'&&await whatsappTurn(text,id,screenApproval))return;
+      if(waConversation?.answers?.(text)&&await whatsappTurn(text,id,screenApproval))return;
       await conversationTurn(text,id,{ownerText:text,channel:fromVoice?'voice':'typed'});return;
     }
     // The owner’s words go to bounded inbox tools; contact text is never routed back as commands.
@@ -554,6 +561,8 @@
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){pauseVoice('Paused. Tap the microphone to talk again.');return true;}
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
     if(['approve','cancel','review'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&waConversation?.snapshot()?.stage==='review'){void whatsappTurn(text,generation);return true;}
+    /* "Yes", "no", "option two" or a listed chat name answer the app's own recipient question; the request is kept. */
+    if(waConversation?.answers?.(text)){void whatsappTurn(text,generation);return true;}
     /* A confirmation or cancellation of the pending cleaning plan is decided here from Antonio's own words; the agent never sees it as a turn to act on. */
     if(literal?.kind!=='approve'&&operationWords(text,liveChannel))return true;
     /* Topic search in a live session: the agent gives the one answer that is both spoken and displayed (a parallel app

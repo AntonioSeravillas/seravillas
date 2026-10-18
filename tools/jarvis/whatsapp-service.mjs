@@ -321,7 +321,8 @@ export function createWhatsAppService({store,connector=null,generator=null,now=(
     const history=historyCoverage(7),coverage={chats:Object.keys(state.chats).length,retentionDays:limits.retentionDays,history,scope:'Stored linked-device text only, kept for '+limits.retentionDays+' days from '+day(history.trackingSince)+' onward; '+history.summary+' Older phone history is not imported. Attachments are listed but not downloaded or transcribed. Waiting means a contact wrote after the last observed owner reply, not a guaranteed unanswered request. Chats ending only in thanks/OK/emoji are counted separately as acknowledgements.'};
     const project=(c,m,max=limits.text)=>({id:readKey(c,m),chat:c.key,name:recipient(c).name,kind:c.kind,from:m.from,sender:m.sender,text:clip(m.text,max),truncated:(m.text||'').length>max,media:mediaLabel(m.media),at:m.at,receivedAt:m.receivedAt||m.at*1000,unread:m.unread===true});
     const chats=Object.values(state.chats).sort((a,b)=>b.updatedAt-a.updatedAt),out={chats:chats.slice(0,limits.chatList).map(summary),coverage};
-    if(view==='voice'){if(key)out.chat=summary(need(key));return out;}
+    /* Recipient lookups need every stored chat (as the inbox screen shows), not only the most recent page. */
+    if(view==='voice'){out.chats=chats.map(summary);if(key)out.chat=summary(need(key));return out;}
     const page=all=>({total:all.length,offset,nextOffset:offset+limit<all.length?offset+limit:null});
     /* Topic search across every stored chat and group. Carried as history without a chat so the existing relay/Worker
        validation (view list, query ≤120 chars) applies unchanged: query is "days:N|term|term…". Read-only: nothing is marked read. */

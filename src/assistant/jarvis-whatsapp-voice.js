@@ -78,7 +78,73 @@
     return null;
   }
   const quote=(m,max=2000)=>{const t=String(m?.text||'');return t?'“'+(t.length>max?t.slice(0,max).replace(/\s+\S*$/,'')+'…':t)+'”':(m?.media?.label||m?.media||'an attachment, not downloaded');};
-  function create({fetchImpl,getToken=()=>'',now=()=>Date.now(),onChange=()=>{}}={}){
+  /* ── Recipient resolution against the current chat directory (direct chats and groups) ──
+     Same name apart from case, accents, punctuation or spacing → that chat. Otherwise every spoken word must match a
+     chat-name word in order, allowing plural/singular, small spelling or transcription slips, words run together or
+     split ("Seravillas" / "Sera Villas") and shortened names that leave chat words out. Approximate matches are never
+     selected silently: one clear candidate is confirmed, several are offered as a short choice. */
+  const STOP=new Set(['the','a','an','my','our','group','grupo','chat','whatsapp','whats','app','de','del','la','el','los','las','with','to','for','in','on','called','named']);
+  const fold=v=>String(v||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[’'`]/g,'').replace(/&/g,' and ').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+  const singular=w=>w.length>4&&w.endsWith('ies')?w.slice(0,-3)+'y':w.length>3&&/(?:ss|us|is)$/.test(w)?w:w.length>4&&/(?:ch|sh|x|z)es$/.test(w)?w.slice(0,-2):w.length>3&&w.endsWith('s')?w.slice(0,-1):w;
+  const words=v=>fold(v).split(' ').filter(w=>w&&!STOP.has(w)).map(singular);
+  function lev(a,b){const row=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){let prev=row[0];row[0]=i;for(let j=1;j<=b.length;j++){const old=row[j];row[j]=Math.min(row[j]+1,row[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=old;}}return row[b.length];}
+  /* Spelling distance allowed for a word of this length: none for short words, one for 4–7 letters, two from 8. */
+  const near=(a,b)=>{if(a===b)return 0;const n=Math.max(a.length,b.length),d=lev(a,b);return d<=(n>=8?2:n>=4?1:0)?d:Infinity;};
+  /* Cheapest in-order alignment of spoken words to chat-name words. Cost: 2 per spelling edit, 1 per chat word left out,
+     6 for one unmatched spoken word (only in longer names, so a real spelling match always wins). Infinity when the
+     words cannot be aligned. */
+  function align(said,name){
+    const memo=new Map();
+    const go=(i,j,dropped)=>{
+      if(i===said.length)return name.length-j;
+      const key=i+','+j+','+dropped;if(memo.has(key))return memo.get(key);
+      let best=Infinity;
+      if(j<name.length)best=Math.min(best,1+go(i,j+1,dropped));
+      for(let k=1;k<=3&&j+k<=name.length;k++){const d=near(said[i],name.slice(j,j+k).join(''));if(d<Infinity)best=Math.min(best,2*d+go(i+1,j+k,dropped));}
+      if(i+1<said.length&&j<name.length){const d=near(said[i]+said[i+1],name[j]);if(d<Infinity)best=Math.min(best,2*d+go(i+2,j+1,dropped));}
+      if(!dropped&&said.length>=3)best=Math.min(best,6+go(i+1,j,true));
+      memo.set(key,best);return best;
+    };
+    return go(0,0,false);
+  }
+  function resolve(spoken,pool){
+    const compact=v=>fold(v).replace(/ /g,'');
+    const said=words(spoken),scored=!said.length||said.join('').length<3?[]:pool.map(c=>({chat:c,cost:align(said,words(c.name))})).filter(x=>x.cost<Infinity).sort((a,b)=>a.cost-b.cost||(a.chat.kind==='group'?-1:1));
+    const exact=compact(spoken)?pool.filter(c=>compact(c.name)===compact(spoken)):[];
+    if(exact.length===1){
+      /* A group and a direct chat can both fit ("cleaning team"): an exact name alone does not settle which kind was meant. */
+      const rivals=scored.filter(x=>x.chat!==exact[0]&&x.chat.kind!==exact[0].kind&&x.cost<=2).map(x=>x.chat);
+      return rivals.length?{exact:[],candidates:[exact[0],...rivals].slice(0,4),clear:false}:{exact};
+    }
+    if(exact.length)return {exact};
+    if(!scored.length)return {exact:[],candidates:[]};
+    const best=scored[0].cost,close=scored.filter(x=>x.cost<=best+1).slice(0,4);
+    return {exact:[],candidates:close.map(x=>x.chat),clear:close.length===1};
+  }
+  function match(spoken,chats,{group=false}={}){
+    const all=(chats||[]).filter(c=>c&&c.name);
+    if(!group)return resolve(spoken,all);
+    const groups=resolve(spoken,all.filter(c=>c.kind==='group'));
+    if(groups.exact.length||groups.candidates.length)return groups;
+    /* Asked for a group that does not exist: offer what does match, but never select it without confirmation. */
+    const any=resolve(spoken,all),found=any.exact.length?any.exact:any.candidates;
+    return {exact:[],candidates:found.slice(0,4),clear:found.length===1,groupMissing:found.length>0};
+  }
+  const kindLabel=c=>c.kind==='group'?'the WhatsApp group':'a direct chat'+(/number ending/.test(c.detail||'')?' ('+String(c.detail).replace(/^Direct chat · /,'')+')':'');
+  const YES=/^(?:(?:yes|yeah|yep|yup|correct|right|exactly|sure|ok|okay|si|sí|that one|that s (?:it|right|the one|correct)|thats (?:it|right|the one)|that is (?:it|right|the one|correct)|please|it is|it s)\s*)+$/;
+  const NO=/^(?:no|nope|not that one|not that|wrong one|wrong|neither|none of them|neither of them)(?:\s+(?:thanks|thank you))?$/;
+  const ORDINAL={one:1,two:2,three:3,four:4,first:1,second:2,third:3,fourth:4,'1':1,'2':2,'3':3,'4':4};
+  function answer(text,choices){
+    const t=fold(text).replace(/\b(?:jarvis|um+|uh+|er+|well)\b/g,' ').replace(/\s+/g,' ').trim();if(!t)return null;
+    if(YES.test(t))return {yes:true};if(NO.test(t))return {no:true};
+    const o=t.match(/^(?:(?:option|number|the)\s+)?(one|two|three|four|first|second|third|fourth|[1-4])(?:\s+(?:one|option))?$/);if(o)return {option:ORDINAL[o[1]]};
+    const list=choices||[],groups=list.filter(c=>c.kind==='group'),direct=list.filter(c=>c.kind!=='group');
+    if(/\b(?:group|grupo)\b/.test(t)&&!/\b(?:not|no)\b/.test(t)&&groups.length===1&&words(t.replace(/\b(?:yes|yeah|that|it|is|s|one|please)\b/g,' ')).length===0)return {chat:groups[0]};
+    if(/\b(?:direct|private|personal|individual)\b/.test(t)&&direct.length===1)return {chat:direct[0]};
+    const named=match(t.replace(/^(?:yes|yeah|no|the)\s+/,'').replace(/\b(?:one|ones|please)\b/g,' ').trim(),list);const hit=named.exact?.length===1?named.exact[0]:named.candidates?.length===1?named.candidates[0]:null;
+    return hit?{chat:hit}:null;
+  }
+  function create({fetchImpl,getToken=()=>'',now=()=>Date.now(),onChange=()=>{},compose=null}={}){
     let token='',pending=null,lastRecipient=null,lastRead=null,epoch=0,request=null,busy=false;
     /* Spoken relative time from WhatsApp seconds; the same phrase is passed to the models so they never compute it. */
     const ago=at=>{if(!(Number(at)>0))return '';const s=Math.max(0,now()/1000-Number(at));if(s<90)return 'just now';const m=Math.round(s/60);if(m<60)return m+' minutes ago';const h=Math.round(m/60);if(h<24)return h===1?'an hour ago':h+' hours ago';const d=Math.round(h/24);return d===1?'yesterday':d+' days ago';};
@@ -133,18 +199,35 @@
       const r=await api('review',{body:{chat:chat.key,version:chat.version,text,checkedPhone:false}},signal);
       pending={stage:'review',name:chat.name,key:chat.key,version:chat.version,review:r,heard:false,english:String(translation.english||'').slice(0,2000),language:String(translation.language||'').slice(0,12)};changed();return describe();
     }
+    /* The original request (body, schedule, language) stays in pending.intent while the recipient is clarified. */
     async function find(intent,data){
-      if(intent.chat){const chat=(data.chats||[]).find(c=>c.key===intent.chat&&(!intent.group||c.kind==='group'));return chat||reply('That chat is no longer available. Who should I contact?');}
-      const list=(data.chats||[]).filter(c=>normal(c.name)===normal(intent.name)&&(!intent.group||c.kind==='group'));
-      if(list.length===1)return list[0];
-      const spokenKey=s=>normal(s).replace(/cks/g,'x').replace(/[^\p{L}\p{N}]/gu,'');
-      const choices=(list.length?list:(data.chats||[]).filter(c=>spokenKey(c.name)===spokenKey(intent.name)&&(!intent.group||c.kind==='group'))).slice(0,5);
-      if(!choices.length){reset();return reply('I cannot find a chat named '+intent.name+' in the received WhatsApp inbox. Say its name as shown in WhatsApp.');}
-      pending={stage:'choose',intent,choices};changed();return reply((list.length?'There is more than one chat named '+intent.name+'. ':'I could not find that exact name. Did you mean one of these? ')+choices.map((c,i)=>'Option '+(i+1)+': '+c.name+', '+c.detail).join('. ')+'. Say the option number.');
+      if(intent.chat){const chat=(data.chats||[]).find(c=>c.key===intent.chat&&(!intent.group||c.kind==='group'));if(chat)return chat;pending={stage:'name',intent:{...intent,chat:undefined}};changed();return reply('That chat is no longer available. Which chat should I use?');}
+      const found=match(intent.name,data.chats,{group:intent.group});
+      if(found.exact?.length===1)return found.exact[0];
+      if(found.exact?.length>1){const choices=found.exact.slice(0,4);pending={stage:'choose',intent,choices};changed();return reply('There is more than one chat named '+choices[0].name+'. '+choices.map((c,i)=>'Option '+(i+1)+': '+c.name+', '+c.detail).join('. ')+'. Say the option number.');}
+      const choices=found.candidates||[];
+      if(!choices.length){pending={stage:'name',intent};changed();return reply('I can’t find a chat called '+intent.name+' in WhatsApp. Which chat should I use? You can say part of its name.');}
+      const note=found.groupMissing?'I couldn’t find a group by that name. ':'';
+      if(found.clear){pending={stage:'confirm',intent,choices};changed();return reply(note+'Do you mean '+choices[0].name+', '+kindLabel(choices[0])+'?');}
+      pending={stage:'choose',intent,choices};changed();
+      return reply(note+'Do you mean '+choices.map((c,i)=>'option '+(i+1)+', '+c.name+', '+kindLabel(c)).join('; or ')+'? Say the number or the name.');
+    }
+    /* A later request naming the recipient again keeps whatever the first request already said. */
+    function merge(first,next){
+      if(!first||first.kind!==next.kind)return next;
+      const out={...first,...Object.fromEntries(Object.entries(next).filter(([,v])=>v!==undefined&&v!==''&&v!==null))};
+      out.group=first.group===true||next.group===true;if(next.name&&!next.chat)delete out.chat;return out;
+    }
+    /* The message body for "send tomorrow's schedule": composed by the app from current cleaning records (read-only). */
+    function scheduleText(intent){
+      if(typeof compose!=='function')return reply('I can’t read the cleaning schedule here. Please dictate the message instead.');
+      const text=compose(intent.schedule,intent.language||'en');
+      return typeof text==='string'&&text.trim()&&text.length<=2000?text:reply('I couldn’t prepare that schedule from the records. Please dictate the message instead.');
     }
     async function selected(intent,chat,signal){
       lastRecipient={key:chat.key,name:chat.name,kind:chat.kind,detail:chat.detail};
       if(intent.kind==='write'){
+        if(intent.schedule){const body=scheduleText(intent);if(body.handled)return body;return review(chat,body,signal,{...intent,english:intent.language&&intent.language!=='en'?scheduleText({...intent,language:'en'}):''});}
         if(!intent.text){pending={stage:'body',name:chat.name,key:chat.key,language:intent.language||''};changed();return reply('What should I say to '+chat.name+'?');}
         return review(chat,intent.text,signal,intent);
       }
@@ -169,7 +252,7 @@
       const literal=parse(text);
       // Approval, vague consent and cancellation always come from the owner's literal utterance.
       const control=['approve','cancel'].includes(literal?.kind)||literal?.kind==='ambiguousApproval'&&pending?.stage==='review';
-      const intent=control?literal:resolved||literal;
+      let intent=control?literal:resolved||literal;
       if(resolved&&!control&&!['write','read','recent','unread','history','awaiting','search','body','edit','choose','review','cancel'].includes(resolved.kind))return reply('I could not interpret that action safely. What would you like to do?');
       if(!intent&&!pending)return {handled:false};
       if(busy)return reply('I am still completing the previous WhatsApp request. Please wait.');
@@ -191,19 +274,30 @@
           try{r=await api('send',{body:{chat:p.key,reviewToken:p.review.reviewToken,text:p.review.text}},signal);}
           catch(err){return myEpoch===epoch?reply([400,403,404,409,415,429].includes(err.status)?'Not sent. '+err.message:'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.'):null;}
           result=reply(r.status==='sent'?'Sent to '+p.review.recipient.name+'.':r.status==='uncertain'?'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.':r.message||'The message was not sent.');
-        }else if(intent?.kind==='ambiguousApproval')result=reply(pending?.stage==='review'?'To send the reviewed message, say exactly “Approve and send,” or say “Cancel.”':'There is no reviewed message to send.');
+        }else if(intent?.kind==='ambiguousApproval'&&!['confirm','choose','name'].includes(pending?.stage))result=reply(pending?.stage==='review'?'To send the reviewed message, say exactly “Approve and send,” or say “Cancel.”':'There is no reviewed message to send.');
         else if(intent?.kind==='body'||intent?.kind==='edit'||!intent&&pending?.stage==='body'){
           if(!pending||!(intent?.kind==='edit'?pending.stage==='review':pending.stage==='body'))return reply('Who should I write to, and what would you like to say?');
-          const body=String(intent?.text??text).replace(/^(?:say|saying)\s+/i,'').trim();if(!body||body.length>2000)return reply('Keep the message between one and 2000 characters. What should I say?');
+          let body=String(intent?.text??text).replace(/^(?:say|saying)\s+/i,'').trim();
+          if(intent?.schedule){const s=scheduleText({...intent,language:intent.language||pending.language});if(s.handled)return s;body=s;}
+          if(!body||body.length>2000)return reply('Keep the message between one and 2000 characters. What should I say?');
           const data=await api('inbox',{chat:pending.key,view:'voice'},signal);if(!current())return null;
           if(!data.chat){reset();return reply('That chat is no longer available. Nothing was sent.');}result=await review(data.chat,body,signal,{...intent,language:intent?.language||pending.language});
-        }else if(intent?.kind==='choose'||!intent&&pending?.stage==='choose'){
-          if(pending?.stage!=='choose')return reply('There is no contact choice pending. Who would you like to contact?');
-          const option=normal(text).replace(/[.!]/g,'').match(/^(?:option )?(1|2|3|4|5|one|two|three|four|five)$/),n=intent?.kind==='choose'?intent.option:option?(['one','two','three','four','five'].indexOf(option[1])+1||Number(option[1])):0;
-          if(!n||!pending.choices[n-1])return reply('Please say a listed option number, or “Cancel.”');
-          const p=pending;reset();result=await selected(p.intent,p.choices[n-1],signal);
-        }else if(!intent){reset();return {handled:false};}
+        }else if(['confirm','choose','name'].includes(pending?.stage)&&!(intent&&['write','read','history'].includes(intent.kind))){
+          const p=pending,a=intent?.kind==='choose'?{option:intent.option}:answer(text,p.choices);
+          let chat=null;
+          if(a?.option)chat=p.choices?.[a.option-1]||null;
+          else if(a?.yes&&p.choices?.length===1)chat=p.choices[0];
+          else if(a?.chat)chat=a.chat;
+          if(chat){reset();result=await selected(p.intent,chat,signal);}
+          else if(a?.no){pending={stage:'name',intent:p.intent};changed();result=reply('Which chat should I use? Say its name as you see it in WhatsApp.');}
+          else if(p.stage==='name'&&!intent&&String(text).trim()){
+            reset();const data=await api('inbox',{view:'voice'},signal);if(!current())return null;
+            const found=await find({...p.intent,name:tidy(text).replace(/^(?:it(?:'s| is)|the group|group)\s+/i,'')},data);if(!current())return null;result=found.handled?found:await selected(p.intent,found,signal);
+          }else result=reply(p.stage==='confirm'?'Please say yes, no, or the chat name — or “Cancel.”':p.stage==='choose'?'Please say the option number or the chat name, or “Cancel.”':'Which chat should I use? Say its name, or “Cancel.”');
+        }else if(intent?.kind==='choose'){return reply('There is no contact choice pending. Who would you like to contact?');}
+        else if(!intent){reset();return {handled:false};}
         else{
+          if(pending?.intent&&['confirm','choose','name'].includes(pending.stage))intent=merge(pending.intent,intent);
           reset();const scoped=['recent','unread','awaiting'].includes(intent.kind),data=await api('inbox',intent.kind==='search'?{view:'history',query:searchQuery(intent),limit:Math.min(10,intent.limit||5),offset:intent.offset||0,direction:intent.direction||'incoming'}:scoped?{view:intent.kind,limit:Math.min(intent.kind==='awaiting'?8:10,intent.limit||(intent.kind==='recent'?1:5)),offset:intent.offset||0,direction:intent.direction||'incoming'}:{view:'voice'},signal);if(!current())return null;
           if(data.connection?.state!=='open')return reply('WhatsApp is not connected right now. '+(data.connection?.message||'Check the Jarvis PC.'));
           if(intent.kind==='write'||intent.kind==='read'||intent.kind==='history'){
@@ -241,12 +335,16 @@
     }
     const contact=c=>c?{key:c.key,name:c.name,kind:c.kind,detail:c.detail}:null;
     return {handle,describe,snapshot,get busy(){return busy;},hasPending:()=>!!pending,
-      context:()=>({stage:pending?.stage||null,recipient:pending?contact(pending.stage==='choose'?null:{...lastRecipient,key:pending.key,name:pending.name}):null,lastRecipient:contact(lastRecipient),draft:pending?.stage==='review'?pending.review.text:'',english:pending?.english||'',language:pending?.language||'',lastRead,requestedName:pending?.intent?.name||'',choices:pending?.stage==='choose'?pending.choices.map(contact):[]}),
+      context:()=>({stage:pending?.stage||null,recipient:pending?contact(pending.stage==='choose'?null:{...lastRecipient,key:pending.key,name:pending.name}):null,lastRecipient:contact(lastRecipient),draft:pending?.stage==='review'?pending.review.text:'',english:pending?.english||'',language:pending?.language||'',lastRead,requestedName:pending?.intent?.name||'',choices:['choose','confirm'].includes(pending?.stage)?pending.choices.map(contact):[],
+        /* While a recipient is being clarified the original request is kept; the model only needs to supply the chat. */
+        heldRequest:['confirm','choose','name'].includes(pending?.stage)?{kind:pending.intent.kind,hasText:!!pending.intent.text,schedule:pending.intent.schedule||'',language:pending.intent.language||''}:null}),
+      /* Antonio's own short answer to a recipient question (yes / no / option / a listed name) is handled by the app. */
+      answers(text){return ['confirm','choose'].includes(pending?.stage)&&!!answer(text,pending.choices);},
       suspendApproval(){if(pending?.stage==='review'){pending.heard=false;pending.understanding=true;changed();}},
       finishUnderstanding(){if(pending?.stage==='review'){pending.understanding=false;changed();}},
       observe(data){if(pending?.stage==='review'){const c=(data.chats||[]).find(c=>c.key===pending.key);if(c&&c.version!==pending.version){reset();return true;}}return false;},
       clearPending(){epoch++;request?.abort();request=null;busy=false;reset();},
       cancel(){lastRecipient=null;epoch++;request?.abort();request=null;busy=false;reset();}};
   }
-  window.SV_JARVIS_WHATSAPP_VOICE=Object.freeze({create,parse});
+  window.SV_JARVIS_WHATSAPP_VOICE=Object.freeze({create,parse,match});
 })();

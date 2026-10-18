@@ -21,7 +21,13 @@
     if(name==='ask_hermes'){if(!args||Object.keys(args).length!==1||typeof args.request!=='string'||!args.request.trim()||args.request.length>2000)throw Error('Invalid request.');return args.request.trim();}
     if(name!=='whatsapp_request')throw Error('Unsupported tool.');
     let i=args&&Object.keys(args).length===1&&args.intent!==undefined?typeof args.intent==='object'?args.intent:parse('intent',5000):{...args};if(!i||typeof i!=='object'||Array.isArray(i)||!['write','read','recent','unread','history','awaiting','search','body','edit','choose','review','cancel'].includes(i.kind))throw Error('That WhatsApp action is not allowed.');
-    if(Object.keys(i).some(k=>!['kind','name','chat','group','text','option','limit','offset','direction','query','english','language','days','terms'].includes(k)))throw Error('Unexpected WhatsApp arguments.');
+    if(Object.keys(i).some(k=>!['kind','name','chat','group','text','option','limit','offset','direction','query','english','language','days','terms','schedule'].includes(k)))throw Error('Unexpected WhatsApp arguments.');
+    if(i.schedule!==undefined){
+      const s=typeof i.schedule==='string'?i.schedule.trim().toLowerCase():'',day={today:0,tomorrow:1,'day after tomorrow':2}[s];
+      if(day!==undefined&&/^20\d{2}-\d{2}-\d{2}$/.test(today||''))i.schedule=new Date(Date.parse(today+'T12:00:00Z')+day*86400000).toISOString().slice(0,10);
+      if(!['write','body','edit'].includes(i.kind)||!/^20\d{2}-\d{2}-\d{2}$/.test(i.schedule))throw Error('A schedule draft needs a date.');
+      if(i.text===undefined)i.text='';
+    }
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(ownerText);
     if(i.kind==='read'&&/^(last|latest|recent|most recent)$/i.test(i.name||'')&&literal?.kind==='recent')i={kind:'recent',limit:literal.limit||1};
     /* Topic search. The owner's recognised words win over a chat lookup (a topic is never a contact), and history with
@@ -36,7 +42,7 @@
     if(['write','read','history'].includes(i.kind)&&!(/^[a-f0-9]{20}$/.test(i.chat||'')||typeof i.name==='string'&&i.name.trim()&&i.name.length<=80))throw Error('A known chat or contact name is required.');
     if(i.chat!==undefined&&!/^[a-f0-9]{20}$/.test(i.chat))throw Error('Invalid chat.');
     if(i.name!==undefined&&(typeof i.name!=='string'||i.name.length>80))throw Error('Invalid name.');
-    if(['write','body','edit'].includes(i.kind)&&(typeof i.text!=='string'||i.text.length>2000||i.kind!=='write'&&!i.text.trim()))throw Error('A bounded draft is required.');
+    if(['write','body','edit'].includes(i.kind)&&(typeof i.text!=='string'||i.text.length>2000||i.kind!=='write'&&!i.schedule&&!i.text.trim()))throw Error('A bounded draft is required.');
     if(i.kind==='choose'&&(!Number.isInteger(i.option)||i.option<1||i.option>5))throw Error('Choose a displayed option.');
     for(const k of ['limit','offset'])if(i[k]!==undefined&&(!Number.isInteger(i[k])||i[k]<(k==='limit'?1:0)||i[k]>(k==='limit'?10:100)))throw Error('Invalid message window.');
     if(i.direction!==undefined&&!['incoming','outgoing','both'].includes(i.direction))throw Error('Invalid message direction.');

@@ -158,5 +158,24 @@
       /* The complete matched set of the latest result (not just the visible page), for follow-up operations. */
       matches:()=>last?{entity:last.entity,query:copy(last.query),ids:[...(last.matchIds||[])],page:last.rows.map(r=>r.id),total:last.total,choices:last.choices===true}:null,context:()=>last?{query:copy(last.query),selected:last.rows.length===1?selector(last.rows[0]):null,choices:last.rows.map(selector),total:last.total,offset:last.offset}:null};
   }
-  return Object.freeze({create,sanitizeQuery,period,rangeLabel,PERIODS});
+  /* Read-only message text for a day's cleaning schedule, from current records: time, property and each cleaner's real
+     status (offered cleaners are marked as still to be confirmed). Nothing is created or changed. English or Spanish. */
+  const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'],MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  function scheduleText(d,day,language='en'){
+    if(!date(day))return '';
+    const es=language==='es',x=new Date(day+'T12:00:00Z'),label=es?DIAS[x.getUTCDay()]+' '+x.getUTCDate()+' de '+MESES[x.getUTCMonth()]:DAYS[x.getUTCDay()]+' '+x.getUTCDate()+' '+MONTHS[x.getUTCMonth()];
+    const props=d.props||[],cleaners=d.cleaners||[],later=es?' (por confirmar)':' (to be confirmed)';
+    const rows=(d.sessions||[]).filter(s=>s.date===day&&s.status!=='cancelled').sort((a,b)=>String(a.time||'99:99').localeCompare(String(b.time||'99:99')));
+    if(!rows.length)return es?'No hay limpiezas programadas para el '+label+'.':'No cleanings are scheduled for '+label+'.';
+    const team=s=>{
+      const main=s.crew&&Array.isArray(s.crew.main)?s.crew.main:(s.cleanerIds||[]).map(cleanerId=>({cleanerId,status:'confirmed'}));
+      const names=main.filter(m=>m.status!=='cancelled').map(m=>clean((cleaners.find(c=>c.id===m.cleanerId)||{}).name||m.name||'?',80)+(m.status==='offered'?later:''));
+      const spots=s.crew&&s.crew.alinaStatus!=='cancelled'?Math.max(0,Number(s.crew.alinaSpots)||0):0;
+      if(spots)names.push((es?'equipo de Alina: ':'Alina team: ')+spots+(s.crew.alinaStatus==='confirmed'?'':later));
+      return names.length?names.join(', '):es?'equipo sin asignar':'team not assigned yet';
+    };
+    const line=s=>'• '+(s.time||(es?'hora por confirmar':'time to be confirmed'))+' – '+clean((props.find(p=>p.id===s.propId)||{}).name||'?',80)+': '+team(s)+(s.status==='done'?(es?' (hecha)':' (done)'):'');
+    return ((es?'Limpiezas del '+label+':':'Cleaning schedule for '+label+':')+'\n'+rows.map(line).join('\n')).slice(0,2000);
+  }
+  return Object.freeze({create,sanitizeQuery,period,rangeLabel,scheduleText,PERIODS});
 });
