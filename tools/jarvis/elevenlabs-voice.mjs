@@ -3,6 +3,7 @@
 import {readFileSync,existsSync} from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
+import {SPEECH_DELIVERY} from './elevenlabs-agent-config.mjs';
 
 export const defaultVoicePath=(env=process.env)=>env.LOCALAPPDATA?path.join(env.LOCALAPPDATA,'hermes','profiles','seravillas','jarvis-elevenlabs.json'):'';
 export function loadVoiceConfig(file=defaultVoicePath()){
@@ -38,7 +39,7 @@ export function createElevenLabsVoice({config,store,fetchImpl=fetch,now=()=>new 
       let res;
       try{res=await fetchImpl('https://api.elevenlabs.io/v1/text-to-speech/'+config.voiceId+'?output_format=mp3_22050_32',{
         method:'POST',redirect:'error',headers:{'Content-Type':'application/json','xi-api-key':config.apiKey,Accept:'audio/mpeg'},
-        body:JSON.stringify({text,model_id:'eleven_flash_v2_5',voice_settings:{stability:0.5,similarity_boost:0.75,speed:1}}),signal:AbortSignal.timeout(45000)
+        body:JSON.stringify({text,model_id:'eleven_flash_v2_5',voice_settings:{...SPEECH_DELIVERY,similarity_boost:0.75}}),signal:AbortSignal.timeout(45000)
       });}catch{throw problem('ElevenLabs did not answer. Tap Play reply to try again, or choose Device voice.');}
       if(!res.ok){
         const code=await providerCode(res);
