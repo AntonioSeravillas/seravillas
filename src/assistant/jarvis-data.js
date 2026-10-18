@@ -40,7 +40,7 @@
       const rows=D.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<=reference&&(!prop||t.propId===prop.id));
       return rows.length?rows.length+' task'+(rows.length===1?' needs':'s need')+' attention.\n'+rows.map(t=>clean(t.text,300)+(t.propId?' · '+propName(t.propId):'')+(t.dueDate<reference?' · overdue':' · due today')).join('\n'):'No tasks are due today or overdue in the current app data.';
     }
-    if(/^(hello|hi|hey|hola)[.!\s]*$/.test(lower))return 'At your service, Antonio. Ask me about cleanings, arrivals or tasks.';
+    if(/^(hello|hi|hey|hola)[.!\s]*$/.test(lower))return 'At your service, '+(window.SV_JARVIS_PERSONAL?.address()||'Antonio')+'. Ask me about cleanings, arrivals or tasks.';
     if(/\b(time|hora)\b/.test(lower))return 'It is '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'.';
     return null;
   }
@@ -87,6 +87,8 @@
      D.props name, or a legacy alias of exactly one D.props name. Without a phrase, a whole name in the text counts.
      Returns {prop}, {unknown:name}, {ambiguous:name} or {} — never a partial or fuzzy match. */
   function focusProperty(text){
+    const personal=window.SV_JARVIS_PERSONAL?.resolve(text,D.props,{phrase:true});
+    if(personal)return personal.match?{prop:personal.match}:personal.ambiguous?{ambiguous:clean(text,80)}:{unknown:clean(text,80)};
     const props=D.props||[],named=props.map(p=>({p,w:words(p.name).join(' ')}));
     const byName=phrase=>{
       let hits=named.filter(x=>x.w===phrase).map(x=>x.p);

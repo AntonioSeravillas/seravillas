@@ -193,7 +193,7 @@
   async function refreshConnection(){
     if(!DEV_MODE&&!transport()){health={ready:false,message:'Jarvis on other devices needs the live relay. App tools work here without an AI connection.'};updateConnection();return;}
     const opened=root;
-    try{const res=await jarvisFetch('/api/jarvis/health',{cache:'no-store',signal:AbortSignal.timeout(viaRelay()?22000:5000)});const data=await res.json().catch(()=>({}));if(root!==opened)return;if(!res.ok)throw Object.assign(Error(),{detail:typeof data.error==='string'?data.error:''});health={ready:data.ready===true,route:data.route,message:data.message,speech:data.speech,conversation:data.conversation,liveVoice:data.liveVoice};requestToken=typeof data.requestToken==='string'?data.requestToken:'';if(health.ready&&requestToken)mode='hermes';}
+    try{const res=await jarvisFetch('/api/jarvis/health',{cache:'no-store',signal:AbortSignal.timeout(viaRelay()?22000:5000)});const data=await res.json().catch(()=>({}));if(root!==opened)return;if(!res.ok)throw Object.assign(Error(),{detail:typeof data.error==='string'?data.error:''});health={ready:data.ready===true,route:data.route,message:data.message,speech:data.speech,conversation:data.conversation,liveVoice:data.liveVoice};applyPersonal(data.personalMemory);requestToken=typeof data.requestToken==='string'?data.requestToken:'';if(health.ready&&requestToken)mode='hermes';}
     catch(e){if(root!==opened)return;health={ready:false,message:viaRelay()?(e?.detail||'The Jarvis PC is not reachable. It must be on, with Jarvis and the live relay running.')+' App tools still work here.':'Start the local Jarvis server to connect Hermes. Your app questions still work in App tools mode.'};}
     updateConnection();
   }
@@ -250,7 +250,42 @@
   /* ── Dashboard panels. Figures come from SV_JARVIS_DASHBOARD over the current app data (read-only, no AI call).
      Rows are real buttons: they show the record inside Jarvis (the conversation keeps running) or open the existing page.
      Every value is set as text. A panel is rebuilt only when its data changed, so hover, keyboard focus and scrolling survive. ── */
-  const BUSINESS={place:'Mallorca',timeZone:'Europe/Madrid',owner:'Antonio'};
+  const BUSINESS={place:'Mallorca',timeZone:'Europe/Madrid',get owner(){return window.SV_JARVIS_PERSONAL?.address()||'Antonio';}};
+  let memoryPending=null;
+  function applyPersonal(value){
+    if(!value||value.available===false||!window.SV_JARVIS_PERSONAL)return;
+    try{SV_JARVIS_PERSONAL.set(value);}catch{return;}
+    const greeting=root?.querySelector?.('.jarvis-greeting h1');if(greeting)greeting.textContent=BUSINESS.owner;
+    const input=el('jarvis-input');if(input)input.placeholder='Ask anything, '+BUSINESS.owner+'…';
+    renderPersonal();if(live?.ready)live.updateContext(liveContext());
+  }
+  function renderPersonal(){
+    const host=el('jarvis-personal-list');if(!host||!window.SV_JARVIS_PERSONAL)return;
+    const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const p=SV_JARVIS_PERSONAL.get();
+    host.innerHTML='<p class="jarvis-privacy">Saved privately on your Jarvis PC. Say “Call me Sir” or “When I say Villa Lumina, I mean Villa Mar” to save a preference.</p>'
+      +(p.preferredAddress?'<p>Call me '+esc(p.preferredAddress)+' <button class="jarvis-wide" data-j="memory-clear-address">Remove name preference</button></p>':'<p class="jarvis-privacy">No preferred form of address saved.</p>')
+      +p.aliases.map(a=>'<p>'+esc(a.alias)+' → '+esc((D.props.find(x=>String(x.id)===a.propertyId)||{}).name||a.propertyName)+' <button class="jarvis-wide" data-j="memory-remove-alias" data-alias="'+esc(a.alias)+'">Forget nickname</button></p>').join('');
+  }
+  function personalIntent(text){
+    const api=window.SV_JARVIS_PERSONAL;if(!api)return null;
+    try{const direct=api.direct(text);if(direct)return direct;
+      if(memoryPending?.action==='set_alias'&&D.props.filter(p=>api.norm(p.name)===api.norm(text)).length===1)return {...memoryPending,property:text};
+    }catch{}return null;
+  }
+  async function personalTurn(text,operation,id=generation){
+    try{
+      if(!requestToken)await checkConnection();if(id!==generation||!root)return;
+      if(!requestToken)throw Error('I can’t reach your Jarvis PC to save that for next time.');
+      const context=SV_JARVIS_DATA.context(),pending=memoryPending;
+      const ownerText=pending?.action==='set_alias'&&pending.alias===operation.alias&&SV_JARVIS_PERSONAL.norm(text)===SV_JARVIS_PERSONAL.norm(operation.property)?'When I say '+pending.alias+', I mean '+text:text;
+      context.memoryProperties=D.props.map(p=>({id:String(p.id),name:p.name}));context.memoryRequest={intent:operation,version:SV_JARVIS_PERSONAL.get().version};
+      const response=await jarvisFetch('/api/jarvis/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:JSON.stringify({text:ownerText,sessionId,context}),signal:AbortSignal.timeout(25000)});
+      const result=await response.json();if(id!==generation||!root)return;if(!response.ok)throw Error(result.error||'I couldn’t verify saving that preference.');
+      applyPersonal(result.personalMemory);memoryPending=result.decision?.pending||null;
+      const answer=result.decision?.text;if(!answer)throw Error('I couldn’t verify that memory request.');add('Jarvis',answer);speak(answer);
+    }catch(e){if(id===generation&&root){error(e.message||'Your preference could not be saved.');replyDone();}}
+  }
   let calDay='',taskFilter='today',waFilter='all',expanded='',clockTimer=null,atmosphere=null,panelSig={};
   const doneTasks=new Map();
   const DASH=()=>window.SV_JARVIS_DASHBOARD||null;
@@ -686,8 +721,10 @@
     beginFocus(text);ensureWhatsAppConversation()?.suspendApproval();const controller=new AbortController();request=controller;const timeout=setTimeout(()=>controller.abort(),120000);
     try{
       const engine=ensureRecords(),context=SV_JARVIS_DATA.context();context.dialogue={schema:1,ownerTurns:lines.filter(l=>l.role==='You').slice(-6).map(l=>l.text),whatsapp:ensureWhatsAppConversation()?.context?.()||{},records:{available:!!engine,coverage:engine?.coverage(),state:engine?.context()},operations:ensureOperations()?.context()||null,recent:lines.slice(-10).map(l=>({role:l.role==='You'?'owner':'jarvis',text:l.text.slice(0,600)})),...(agentNote&&agentNote!==text?{agentNote:String(agentNote).slice(0,600)}:{})};
+      context.memoryProperties=D.props.map(p=>({id:String(p.id),name:p.name}));
       const res=await jarvisFetch('/api/jarvis/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:JSON.stringify({text,sessionId,context}),signal:controller.signal});
       const data=await res.json();if(id!==generation||!root)return;if(!res.ok)throw Error(data.error||'The agent could not respond.');
+      applyPersonal(data.personalMemory);memoryPending=data.decision?.pending||null;
       const d=data.decision;if(!d||typeof d!=='object')throw Error('Jarvis could not interpret that reliably. Please try again.');
       if(d.kind==='whatsapp'){
         closeRecords();
@@ -719,6 +756,7 @@
     error('');caption('');const id=generation;add('You',text);if(el('jarvis-input')&&!fromVoice)el('jarvis-input').value='';setPhase('thinking');
     if(STOP_TALKING.test(text)){add('You',text);replyDone();return;}
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){voice?.pause('Paused. Tap the microphone to talk again.');add('Jarvis','Paused. Tap the microphone when you want to talk again.');if(!voice?.active)setPhase('paused');return;}
+    const personal=personalIntent(text);if(personal){await personalTurn(text,personal,id);return;}memoryPending=null;
     // Always recognise owner approval locally. The AI cannot propose or grant approval.
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
     if(!['approve','ambiguousApproval'].includes(literal?.kind)&&operationWords(text,fromVoice?'voice':'typed'))return;
@@ -757,13 +795,14 @@
   function elFromPage(id){return document.getElementById(id);}
 
   /* ── Voice: the controller decides when to listen; this only adapts the browser recognizer and level meter. ── */
-  function liveContext(){return {today:today(),timezone:'Europe/Madrid',properties:SV_JARVIS_DATA.context().properties||[],records:ensureRecords()?.context(),coverage:ensureRecords()?.coverage(),whatsapp:ensureWhatsAppConversation()?.context?.()||{},operations:ensureOperations()?.context()||null,recentConversation:lines.slice(-8).map(l=>({role:l.role,text:l.text.slice(0,1200)}))};}
+  function liveContext(){const p=window.SV_JARVIS_PERSONAL?.get();return {personalMemory:p?{schema:1,version:p.version,preferredAddress:p.preferredAddress,aliases:p.aliases.slice(0,8),totalAliases:p.aliases.length}:null,today:today(),timezone:'Europe/Madrid',properties:SV_JARVIS_DATA.context().properties||[],records:ensureRecords()?.context(),coverage:ensureRecords()?.coverage(),whatsapp:ensureWhatsAppConversation()?.context?.()||{},operations:ensureOperations()?.context()||null,recentConversation:lines.slice(-6).map(l=>({role:l.role,text:l.text.slice(0,600)}))};}
   function liveUser(text){
     if(!root||document.hidden)return true;
     if(echoOfApp(text))return 'ignore';
     if(STOP_TALKING.test(text)){cancelReply();add('You',text);setPhase('listening');return true;}
     liveOwnerText=text;liveChannel=liveTyped&&liveTyped===text?'typed':'voice';liveTyped='';cancelReply();clearFocus();error('');add('You',text);
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){pauseVoice('Paused. Tap the microphone to talk again.');return true;}
+    const personal=personalIntent(text);if(personal){setPhase('thinking');void personalTurn(text,personal);return true;}memoryPending=null;
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
     if(['approve','cancel','review'].includes(literal?.kind)||['ambiguousApproval','readDraft'].includes(literal?.kind)&&waConversation?.snapshot()?.stage==='review'){void whatsappTurn(text,generation);return true;}
     /* "Yes", "no", "option two" or a listed chat name answer the app's own recipient question; the request is kept. */
@@ -802,7 +841,7 @@
   function ensureLiveVoice(){
     if(live||!window.SV_JARVIS_LIVE)return live;
     live=SV_JARVIS_LIVE.create({
-      connect:async signal=>{if(connectionCheck)await connectionCheck;else if(!health.liveVoice?.available||!requestToken)await checkConnection();if(signal.aborted)throw Object.assign(Error('Connection cancelled'),{name:'AbortError'});if(!health.liveVoice?.available||!requestToken)throw Error('Live conversation is not connected. Check the Jarvis PC and Voice settings.');const r=await jarvisFetch('/api/jarvis/live-session',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:'{}',signal});const data=await r.json();if(!r.ok)throw Error(data.error||'The live voice agent could not connect.');return data;},
+      connect:async signal=>{await checkConnection();if(signal.aborted)throw Object.assign(Error('Connection cancelled'),{name:'AbortError'});if(!health.liveVoice?.available||!requestToken)throw Error('Live conversation is not connected. Check the Jarvis PC and Voice settings.');const r=await jarvisFetch('/api/jarvis/live-session',{method:'POST',headers:{'Content-Type':'application/json','X-Jarvis-Session-Token':requestToken},body:'{}',signal});const data=await r.json();if(!r.ok)throw Error(data.error||'The live voice agent could not connect.');return data;},
       context:liveContext,
       onUser:liveUser,
       onReply:text=>{if(!root)return;text=text.replace(/\[(?:slow|calm|laughs|whispers|sighs|excited|chuckles|clears throat|sigh|laughing)\]\s*/gi,'');liveHasReplied=true;lastReply=text;add('Jarvis · live voice',text);},
@@ -888,7 +927,9 @@
   function closePanel(){relayConfirmation?.cancel();relayConfirmation=null;panel=null;el('jarvis-panel').hidden=true;el('jarvis-mic')?.focus();}
   function openPanel(kind){
     if(kind==='chat'){const input=el('jarvis-input');el('jarvis-chat-body')?.scrollIntoView?.({block:'nearest'});input?.focus();return;}
-    waConversation?.cancel();stop();panel=kind;el('jarvis-panel').hidden=false;el('jarvis-settings-body').hidden=false;el('jarvis-panel-title').textContent='Make it yours';updateConnection();el('jarvis-mode-select')?.focus();
+    waConversation?.cancel();stop();panel=kind;el('jarvis-panel').hidden=false;el('jarvis-settings-body').hidden=false;el('jarvis-panel-title').textContent='Make it yours';updateConnection();
+    if(!el('jarvis-personal-list')){const section=document.createElement('details');section.className='jarvis-relay';section.innerHTML='<summary>Preferences and villa nicknames</summary><div id="jarvis-personal-list"></div><button class="jarvis-wide" data-j="memory-refresh">Refresh saved preferences</button>';el('jarvis-settings-body').appendChild(section);}
+    renderPersonal();el('jarvis-mode-select')?.focus();
   }
   const RAIL=[['overview','home','Dashboard',''],['chat','chat','Jarvis',''],['bookings','calendar','Bookings',''],['cleaning','broom','Cleanings','Opens the Cleaning page'],['tasks','tasks','Tasks','Opens the Tasks page'],['whatsapp','whatsapp','WhatsApp',''],['properties','property','Properties','Opens the Properties page'],['team','team','Team','Opens the Team page'],['reports','reports','Reports','Opens the Reports page'],['issues','issues','Issues','Opens the Issues page']];
   const TOP=[['overview','Overview'],['bookings','Bookings'],['cleaning','Cleanings'],['tasks','Tasks'],['properties','Properties'],['reports','Reports']];
@@ -985,6 +1026,7 @@
     return false;
   }
   function openJarvis(){
+    if(!root){window.SV_JARVIS_PERSONAL?.reset();memoryPending=null;}
     if(root)return;if(!DEV_MODE&&!SYNC_SECRET){toast('Sign in before opening Jarvis.');return;}returnFocus=document.activeElement;background=document.querySelector('.app-wrapper');wasInert=background?.hasAttribute('inert')||false;
     root=document.createElement('div');root.className='jarvis-root';root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Jarvis assistant');root.innerHTML=MARKUP();
     document.body.appendChild(root);background?.setAttribute('inert','');restoreSession();document.body.classList?.add('jarvis-open');root.dataset.page=page='overview';root.classList.remove('is-workpage');pageReply=false;
@@ -999,8 +1041,11 @@
       if(action==='chat'||action==='settings')openPanel(action);
       if(action==='mic')micPressed();
       if(action==='keep')setContinuous(!settings.continuous);
-      if(action==='replay'){stop();prepareSpeech();error('');speak(lastReply||'At your service, Antonio.',true);}
-      if(action==='test-speaker'){stop();prepareSpeech();closePanel();error('');speak('At your service, Antonio. Your speaker is ready.',true);}
+      if(action==='replay'){stop();prepareSpeech();error('');speak(lastReply||'At your service, '+BUSINESS.owner+'.',true);}
+      if(action==='test-speaker'){stop();prepareSpeech();closePanel();error('');speak('At your service, '+BUSINESS.owner+'. Your speaker is ready.',true);}
+      if(action==='memory-refresh'){void personalTurn('Show my saved preferences',{action:'list'});return;}
+      if(action==='memory-clear-address'){void personalTurn('Clear my preferred name',{action:'clear_address'});return;}
+      if(action==='memory-remove-alias'){const alias=e.target.closest('[data-j]').dataset.alias;void personalTurn('Forget the nickname '+alias,{action:'forget_alias',alias});return;}
       if(action==='message-audio'){prepareAudio();prepareSpeech();settings.messageAnnouncements=true;el('jarvis-message-alerts').checked=true;cue('message');flushAnnouncements();}
       if(action==='wa-voice-approve'||action==='wa-voice-repeat'||action==='wa-voice-cancel'){prepareAudio();prepareSpeech();void send(action==='wa-voice-approve'?'Approve and send':action==='wa-voice-repeat'?'Read the draft again':'Cancel',{screenApproval:action==='wa-voice-approve'});return;}
       if(['plan-confirm','plan-cancel','plan-repeat','plan-leave'].includes(action)){prepareAudio();prepareSpeech();planClick(action,e.target.closest('[data-j]'));return;}
@@ -1041,7 +1086,7 @@
     records?.reset();records=null;recordsView=null;operations?.reset();operations=null;if(syncWatch){clearInterval(syncWatch);syncWatch=null;}
     waConversation?.cancel();waConversation=null;
     inboxMonitor?.stop();inboxMonitor=null;announcements=[];inboxState=null;messageAudioArmed=false;
-    stop();
+    stop();memoryPending=null;window.SV_JARVIS_PERSONAL?.reset();
     if(waEmbedded&&window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();waEmbedded=false;
     try{el('jarvis-bookings-page')?._jbCleanup?.();}catch{}
     if(clockTimer){window.clearInterval?.(clockTimer);clockTimer=null;}atmosphere?.();atmosphere=null;visualSim=null;calDay='';taskFilter='today';waFilter='all';expanded='';panelSig={};doneTasks.clear();

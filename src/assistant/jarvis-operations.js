@@ -85,6 +85,7 @@
   function distance(a,b){const row=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){let prev=row[0];row[0]=i;for(let j=1;j<=b.length;j++){const old=row[j];row[j]=Math.min(row[j]+1,row[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=old;}}return row[b.length];}
   const GENERIC=new Set(['villa','casa','can','ca','finca','la','el','the','apartment','apartamento','house']);
   function resolveName(spoken,candidates,label){
+    if(label==='property'){const personal=(typeof window!=='undefined'?window:globalThis).SV_JARVIS_PERSONAL,alias=personal?.resolve(spoken,candidates);if(alias)return alias;}
     const q=norm(spoken),qWords=q.split(' ').filter(w=>w&&!GENERIC.has(w));
     if(!q)return {error:'Which '+label+'?'};
     const exact=candidates.filter(c=>norm(c.name)===q);if(exact.length===1)return {match:exact[0]};

@@ -64,6 +64,8 @@ const _VOICE_ALIAS_PAIRS=(function(){
    ("mar") match ONLY as a standalone normalized token, never inside another
    word ("marjals" / "villamar"). Returns {id,name,found,alias} or null. */
 function resolveVoiceProperty(text){
+  const personal=window.SV_JARVIS_PERSONAL?.resolve(text,D.props,{phrase:true});
+  if(personal)return personal.match?{id:personal.match.id,name:personal.match.name,found:true,alias:personal.alias}:{id:'',name:String(text),found:false,alias:String(text)};
   const tokens=normalizeVoiceText(text).split(' ').filter(Boolean);
   if(!tokens.length)return null;
   for(const p of _VOICE_ALIAS_PAIRS){

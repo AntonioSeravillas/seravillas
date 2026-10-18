@@ -144,6 +144,42 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 }
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
+
+async function personalRuntime(options={}){
+  const {createPersonalMemory}=await import('../tools/jarvis/personal-memory.mjs');const api=require('../src/assistant/jarvis-personal.js');
+  let saved=api.empty();const memory=createPersonalMemory({store:{load:()=>structuredClone(saved),save:value=>{saved=structuredClone(value);}}});
+  const app=desktopRuntime({agent:true,...options});app.run(fs.readFileSync(path.join(root_,'src/assistant/jarvis-personal.js'),'utf8'));
+  app.run('D.props=[{id:"mar",name:"Villa Mar"},{id:"marjals",name:"Villa Marjals"}];D.bookings=[{id:"b1",propId:"mar",checkIn:"2026-10-19",checkOut:"2026-10-21",status:"confirmed"}]');
+  const previous=app.context.fetch;app.context.fetch=async(url,init)=>{
+    if(String(url).endsWith('/health')){const res=await previous(url,init),body=await res.json();return {ok:true,json:async()=>({...body,personalMemory:{available:true,...memory.get()}})};}
+    if(String(url).endsWith('/chat')){const input=JSON.parse(init.body),decision=memory.execute({text:input.text,operation:input.context.memoryRequest?.intent,properties:input.context.memoryProperties,version:input.context.memoryRequest?.version});return {ok:true,json:async()=>({decision,personalMemory:{available:true,...memory.get()}})};}
+    return previous(url,init);
+  };
+  return {app,memory};
+}
+test('owner preferences save through the actual typed overlay, survive close/new conversation, resolve aliases and can be removed in settings',async()=>{
+  const {app,memory}=await personalRuntime();app.run('openJarvis()');await flush();
+  await app.context.SV_JARVIS.send('From now on call me Sir, not Antonio');assert.equal(memory.get().preferredAddress,'Sir');assert.match(app.el('jarvis-input').placeholder,/Sir/);
+  app.finishSpeech();await app.context.SV_JARVIS.send('When I say Villa Lumina, I mean Villa Mar');assert.equal(memory.get().aliases[0].propertyId,'mar');app.finishSpeech();
+  app.click('new');assert.equal(app.context.SV_JARVIS_PERSONAL.address(),'Sir');app.click('close');assert.equal(app.context.SV_JARVIS_PERSONAL.address(),'Antonio');
+  app.run('openJarvis()');await flush();assert.equal(app.context.SV_JARVIS_PERSONAL.address(),'Sir');
+  const result=await app.context.SV_JARVIS.preview.tool('lookup_records',{entity:'bookings',view:'list',property:'Villa Lumina'});assert.equal(result.rows[0].id,'b1');
+  app.click('settings');app.click('memory-remove-alias',{alias:'Villa Lumina'});await flush();assert.equal(memory.get().aliases.length,0);
+  app.finishSpeech();app.click('memory-clear-address');await flush();assert.equal(memory.get().preferredAddress,'');app.click('close');
+});
+test('live owner preference turns are app-owned and the next real live-session context loads the saved form of address',async()=>{
+  const sessions=[];const {app,memory}=await personalRuntime({liveSdk:{Conversation:{startSession:async options=>{sessions.push(options);return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){}};}}}});
+  app.run('openJarvis()');await flush();app.click('mic');for(let i=0;i<4;i++)await flush();
+  sessions[0].onMessage({source:'user',message:'Call me Sir from now on',event_id:'personal-one'});for(let i=0;i<4;i++)await flush();assert.equal(memory.get().preferredAddress,'Sir',JSON.stringify({phase:app.phase(),error:app.el('jarvis-error').textContent,lines:app.texts(app.el('jarvis-transcript'))}));
+  app.click('close');app.run('openJarvis()');await flush();app.click('mic');for(let i=0;i<4;i++)await flush();
+  assert.equal(JSON.parse(sessions.at(-1).dynamicVariables.app_context).personalMemory.preferredAddress,'Sir');app.click('close');
+});
+
+test('a missing villa clarification keeps the nickname and saves only after the owner identifies a current villa',async()=>{
+  const {app,memory}=await personalRuntime();app.run('openJarvis()');await flush();
+  await app.context.SV_JARVIS.send('When I say Sunshine, I mean Missing Villa');assert.equal(memory.get().aliases.length,0);app.finishSpeech();
+  await app.context.SV_JARVIS.send('Villa Mar');assert.deepEqual(memory.get().aliases,[{alias:'Sunshine',propertyId:'mar',propertyName:'Villa Mar'}]);app.click('close');
+});
 test('Fish desktop and phone use incremental PCM, replace a saved live-agent choice and wait for actual playback completion',async()=>{
   for(const desktop of [true,false]){
     let starts=0;const app=desktopRuntime({agent:true,desktop,fishSpeech:true,voiceChoice:'live',liveSdk:{Conversation:{startSession:async()=>{starts++;}}},understand:async()=>({kind:'reply',text:'Ready when you are.'})});
