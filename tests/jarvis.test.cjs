@@ -145,6 +145,18 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 
+test('Ultron sounds start only after an explicit conversation, follow speaking state, and obey sound-off and mute',async()=>{
+  const sessions=[],sounds=[];const app=desktopRuntime({agent:true,liveSdk:{Conversation:{startSession:async options=>{sessions.push(options);return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){}};}}}});
+  const previous=app.context.fetch;app.context.fetch=async(url,init)=>{const response=await previous(url,init);if(!String(url).endsWith('/health'))return response;const body=await response.json();return {ok:true,json:async()=>({...body,liveVoice:{available:true,name:'Ultron · SeraVillas',soundTheme:'ultron'}})};};
+  app.context.AudioContext=class{constructor(){this.state='running';}resume(){return Promise.resolve();}};
+  app.context.SV_JARVIS_SOUNDS={create:context=>({context,play:kind=>sounds.push(kind),stop:()=>sounds.push('stop'),dispose(){}})};
+  app.run('openJarvis()');await flush();assert.deepEqual(sounds,[]);assert.match(app.el('jarvis-live-voice-option').textContent,/Ultron/);
+  app.click('mic');for(let i=0;i<4;i++)await flush();assert.equal(sounds.filter(x=>x==='startup').length,1);
+  sessions[0].onModeChange({mode:'speaking'});assert.equal(sounds.filter(x=>x==='response').length,1);
+  app.el('jarvis-sounds').listeners.change({target:{checked:false}});const count=sounds.length;sessions[0].onModeChange({mode:'listening'});sessions[0].onModeChange({mode:'speaking'});assert.equal(sounds.length,count);
+  app.el('jarvis-muted').listeners.change({target:{checked:true}});assert.equal(sounds.at(-1),'stop');app.click('close');
+});
+
 async function personalRuntime(options={}){
   const {createPersonalMemory}=await import('../tools/jarvis/personal-memory.mjs');const api=require('../src/assistant/jarvis-personal.js');
   let saved=api.empty();const memory=createPersonalMemory({store:{load:()=>structuredClone(saved),save:value=>{saved=structuredClone(value);}}});

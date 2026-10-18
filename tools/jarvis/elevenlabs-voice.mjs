@@ -3,7 +3,7 @@
 import {readFileSync,existsSync} from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {SPEECH_DELIVERY} from './elevenlabs-agent-config.mjs';
+import {SPEECH_DELIVERY,ULTRON_DELIVERY,voiceIdentity} from './elevenlabs-agent-config.mjs';
 
 export const defaultVoicePath=(env=process.env)=>env.LOCALAPPDATA?path.join(env.LOCALAPPDATA,'hermes','profiles','seravillas','jarvis-elevenlabs.json'):'';
 export function loadVoiceConfig(file=defaultVoicePath()){
@@ -21,10 +21,11 @@ async function providerCode(res){
 export function createElevenLabsVoice({config,store,fetchImpl=fetch,now=()=>new Date()}={}){
   if(!config||config.enabled!==true)return null;
   if(typeof config.apiKey!=='string'||!/^sk_[A-Za-z0-9_-]{20,200}$/.test(config.apiKey)||!/^\w{15,64}$/.test(config.voiceId||''))throw Error('The private ElevenLabs key or voice ID is missing or invalid.');
-  const limit=Number.isInteger(config.monthlyCharacters)&&config.monthlyCharacters>0&&config.monthlyCharacters<=10000?config.monthlyCharacters:10000;
+  const limit=Number.isInteger(config.monthlyCharacters)&&config.monthlyCharacters>0&&config.monthlyCharacters<=20000?config.monthlyCharacters:10000;
   if(!store)throw Error('A private voice usage store is required.');
   const cache=new Map();let pending=false;
-  const status=()=>({available:true,provider:'elevenlabs',name:'Jarvis Seravillas',monthlyCharacters:limit});
+  const identity=voiceIdentity(config),delivery=identity.soundTheme==='ultron'?ULTRON_DELIVERY:SPEECH_DELIVERY;
+  const status=()=>({available:true,provider:'elevenlabs',...identity,monthlyCharacters:limit});
   async function generate(text){
     if(typeof text!=='string'||!text.trim()||text.length>600)throw problem('A spoken section must contain 1–600 characters.',400);
     const key=createHash('sha256').update(config.voiceId+'\0'+text).digest('hex');
@@ -39,7 +40,7 @@ export function createElevenLabsVoice({config,store,fetchImpl=fetch,now=()=>new 
       let res;
       try{res=await fetchImpl('https://api.elevenlabs.io/v1/text-to-speech/'+config.voiceId+'?output_format=mp3_22050_32',{
         method:'POST',redirect:'error',headers:{'Content-Type':'application/json','xi-api-key':config.apiKey,Accept:'audio/mpeg'},
-        body:JSON.stringify({text,model_id:'eleven_flash_v2_5',voice_settings:{...SPEECH_DELIVERY,similarity_boost:0.75}}),signal:AbortSignal.timeout(45000)
+        body:JSON.stringify({text,model_id:'eleven_flash_v2_5',voice_settings:{...delivery,similarity_boost:0.75}}),signal:AbortSignal.timeout(45000)
       });}catch{throw problem('ElevenLabs did not answer. Tap Play reply to try again, or choose Device voice.');}
       if(!res.ok){
         const code=await providerCode(res);
@@ -52,7 +53,7 @@ export function createElevenLabsVoice({config,store,fetchImpl=fetch,now=()=>new 
       const reader=res.body.getReader(),parts=[];let bytes=0;
       try{while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>180000){await reader.cancel();throw problem('The voice reply is too large. Please ask for a shorter answer.');}parts.push(Buffer.from(value));}}finally{reader.releaseLock();}
       if(bytes<16)throw problem('The voice service returned empty audio.');
-      const audio={contentType:'audio/mpeg',audio:Buffer.concat(parts).toString('base64'),provider:'elevenlabs',name:'Jarvis Seravillas'};
+      const audio={contentType:'audio/mpeg',audio:Buffer.concat(parts).toString('base64'),provider:'elevenlabs',name:identity.name};
       cache.set(key,audio);if(cache.size>12)cache.delete(cache.keys().next().value);
       return audio;
     }finally{pending=false;}

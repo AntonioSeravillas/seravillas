@@ -1,9 +1,10 @@
 /* Private agent authentication. Only a short-lived WebRTC credential leaves the PC. */
+import {voiceIdentity} from './elevenlabs-agent-config.mjs';
 export function createElevenLabsAgent({config,fetchImpl=fetch,now=()=>Date.now()}={}){
   if(config?.enabled!==true||!/^agent_[a-zA-Z0-9]{15,80}$/.test(config.liveAgentId||''))return null;
   if(!/^sk_[A-Za-z0-9_-]{20,200}$/.test(config.apiKey||''))throw Error('The private ElevenLabs key is invalid.');
   let busy=false,last=-Infinity;
-  return {status:()=>({available:true,provider:'elevenlabs-agents',name:'Jarvis Seravillas',maxDurationSeconds:600}),async session(){
+  return {status:()=>({available:true,provider:'elevenlabs-agents',...voiceIdentity(config),maxDurationSeconds:600}),async session(){
     if(busy||now()-last<10000)throw Object.assign(Error('A voice connection is already starting. Wait a moment, then tap the microphone.'),{status:429});
     busy=true;last=now();
     try{
