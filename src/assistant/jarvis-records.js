@@ -5,7 +5,26 @@
   const ENTITIES=['bookings','cleanings','tasks','issues','properties'];
   const VIEWS=['list','details','price','payment','summary','availability','count'];
   const STATUSES=['active','all','cancelled','done','open','overdue','unassigned','needs_team','high','doing','waiting','inbox','today','scheduled','resolved'];
+  const PERIODS=['today','tomorrow','this_week','next_week','last_week','this_weekend','next_weekend','this_month','next_month','last_month','this_year','next_year'];
   const PAGE=8,copy=v=>v?JSON.parse(JSON.stringify(v)):null;
+  const shift=(v,n)=>new Date(Date.parse(v+'T12:00:00Z')+n*86400000).toISOString().slice(0,10);
+  /* Business calendar: weeks run Monday to Sunday; months and years are whole calendar periods. */
+  function period(name,reference){
+    if(!PERIODS.includes(name)||!/^20\d{2}-\d{2}-\d{2}$/.test(reference||''))return null;
+    const monday=shift(reference,-((new Date(reference+'T12:00:00Z').getUTCDay()+6)%7)),y=+reference.slice(0,4),m=+reference.slice(5,7);
+    const month=(yy,mm)=>{const first=new Date(Date.UTC(yy,mm-1,1,12)),last=new Date(Date.UTC(yy,mm,0,12));return [first.toISOString().slice(0,10),last.toISOString().slice(0,10)];};
+    const [start,end]={today:[reference,reference],tomorrow:[shift(reference,1),shift(reference,1)],this_week:[monday,shift(monday,6)],next_week:[shift(monday,7),shift(monday,13)],last_week:[shift(monday,-7),shift(monday,-1)],
+      this_weekend:[shift(monday,5),shift(monday,6)],next_weekend:[shift(monday,12),shift(monday,13)],this_month:month(y,m),next_month:month(m===12?y+1:y,m===12?1:m+1),last_month:month(m===1?y-1:y,m===1?12:m-1),this_year:[y+'-01-01',y+'-12-31'],next_year:[(y+1)+'-01-01',(y+1)+'-12-31']}[name];
+    return {name,start,end,label:name.replace('_',' ')};
+  }
+  const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const parts=v=>{const d=new Date(v+'T12:00:00Z');return {day:DAYS[d.getUTCDay()],date:d.getUTCDate(),month:MONTHS[d.getUTCMonth()],year:d.getUTCFullYear()};};
+  const longDate=v=>{const p=parts(v);return p.day+' '+p.date+' '+p.month+' '+p.year;};
+  /* "Monday 19 to Sunday 25 October 2026", repeating month/year only where they change. */
+  function rangeLabel(start,end){
+    if(start===end)return longDate(start);const a=parts(start),b=parts(end);
+    return a.day+' '+a.date+(a.month!==b.month||a.year!==b.year?' '+a.month:'')+(a.year!==b.year?' '+a.year:'')+' to '+longDate(end);
+  }
   const clean=(v,n=100)=>typeof v==='string'?v.slice(0,n):'';
   const norm=v=>String(v||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
   const has=(v,q)=>norm(q).split(' ').filter(Boolean).every(w=>(' '+norm(v)+' ').includes(' '+w+' '));
@@ -21,6 +40,7 @@
     for(const [key,max] of [['guest',100],['property',80],['search',150],['recordId',100],['staff',80]])if(q[key]!==undefined&&q[key]!==null&&q[key]!==''){if(typeof q[key]!=='string'||q[key].length>max||!q[key].trim()||/[\u0000-\u001f\u007f]/.test(q[key]))throw Error('Please give a shorter record name.');out[key]=q[key].trim();}
     for(const key of ['start','end'])if(q[key]!==undefined&&q[key]!==null&&q[key]!==''){if(!date(q[key]))throw Error('Please give a valid date.');out[key]=q[key];}
     if(out.start&&out.end&&out.start>out.end)throw Error('The end date is before the start date.');
+    if(q.period!==undefined&&q.period!==null&&q.period!==''){if(!PERIODS.includes(q.period))throw Error('That period is not supported.');out.period=q.period;delete out.start;delete out.end;}
     if(q.status!==undefined){if(!STATUSES.includes(q.status))throw Error('That record status is not supported.');out.status=q.status;}
     if(q.dateBy!==undefined){if(!['stay','arrival','departure','due'].includes(q.dateBy))throw Error('That date filter is not supported.');out.dateBy=q.dateBy;}
     if(q.field!==undefined){if(!['arrival','departure','guests','crew','status','due','priority'].includes(q.field))throw Error('That record field is not supported.');out.field=q.field;}
@@ -54,10 +74,12 @@
       const active=d.bookings.filter(b=>b.propId===r.id&&b.status!=='cancelled'),next=active.filter(b=>date(b.checkIn)&&b.checkIn>=reference()).sort((a,b)=>a.checkIn.localeCompare(b.checkIn))[0];
       return {...base,property:clean(r.name,80),title:clean(r.name,80)||'Unnamed property',date:'',subtitle:'Property',facts:[fact('Active bookings in app',active.length),fact('Next recorded arrival',next?dated(next.checkIn):'None recorded'),fact('Open tasks',d.tasks.filter(t=>t.propId===r.id&&!t.done).length),fact('Open issues',d.issues.filter(i=>i.propId===r.id&&i.status==='open').length)]};
     }
-    function save(q,rows,total,text,extra={}){const result={query:copy(q),entity:q.entity,title:q.entity[0].toUpperCase()+q.entity.slice(1),rows,total,offset:q.offset||0,more:Math.max(0,total-(q.offset||0)-rows.length),text,...extra};last=result;return copy(result);}
+    let scopeText='',matched=[];
+    function save(q,rows,total,text,extra={}){text=scopeText+text;scopeText='';const result={query:copy(q),entity:q.entity,title:q.entity[0].toUpperCase()+q.entity.slice(1),rows,total,offset:q.offset||0,more:Math.max(0,total-(q.offset||0)-rows.length),text,...extra};last={...result,matchIds:matched};matched=[];return copy(result);}
     function run(input){
       let q;try{q=sanitizeQuery(input);}catch(e){return {text:e.message,rows:[],total:0,title:'App records',entity:'bookings',error:true};}
       const d=data(),td=reference();
+      if(q.period){const p=period(q.period,td);if(!p)return {text:'Please give a valid date.',rows:[],total:0,title:'App records',entity:q.entity,error:true};q.start=p.start;q.end=p.end;}
       if(q.option){const chosen=last?.entity===q.entity?last.rows[q.option-1]:null;if(!chosen)return {text:'Please choose an option from the displayed results.',rows:[],total:0,title:'Choose a record',entity:q.entity,error:true};q={entity:q.entity,view:q.view==='list'?'details':q.view,recordId:chosen.id,...(q.field?{field:q.field}:{})};}
       if(q.recordId==='selected'){if(!last||last.entity!==q.entity||last.rows.length!==1)return save(q,[],0,'Which record do you mean? Please name it or choose a displayed option.');q.recordId=last.rows[0].id;}
       let prop=null;if(q.property){const exact=d.props.filter(p=>norm(p.name)===norm(q.property)),matches=exact.length?exact:d.props.filter(p=>has(p.name,q.property));if(matches.length!==1)return save(q,[],0,matches.length?'More than one property matches. Which full property name do you mean?':'I cannot find a property named '+q.property+'. Please use its name from the app.');prop=matches[0];}
@@ -85,8 +107,18 @@
         return within(q.entity==='tasks'?r.dueDate:r.date);
       });
       all.sort((a,b)=>String(a.checkIn||a.date||a.dueDate||'9999').localeCompare(String(b.checkIn||b.date||b.dueDate||'9999'))||String(a.time||'99:99').padStart(5,'0').localeCompare(String(b.time||'99:99').padStart(5,'0'))||String(a.id).localeCompare(String(b.id)));
+      const matchIds=all.map(r=>String(r.id)).slice(0,500);
+      let scope='',found='';
+      if((q.start||q.end)&&['bookings','cleanings','tasks'].includes(q.entity)){
+        const range=q.start&&q.end?rangeLabel(q.start,q.end):q.start?'from '+longDate(q.start):'until '+longDate(q.end),n=all.length,s_=n===1?'':'s';
+        const name=q.period?q.period[0].toUpperCase()+q.period.slice(1).replace('_',' '):'';
+        scope=q.period?name+' is '+range+'. ':'For '+range+': ';
+        /* Stays overlapping a range, arrivals and departures are different questions; say which one was answered. */
+        found=q.entity==='bookings'?(q.dateBy==='arrival'?n+' arrival'+s_:q.dateBy==='departure'?n+' departure'+s_:n+' stay'+s_+' overlapping those dates'):q.entity==='tasks'?n+' task'+s_+' due':n+' cleaning'+s_;
+      }
       let suggestions=false;
       if(!all.length&&q.guest&&!q.recordId&&!d.bookings.some(b=>has(b.guestName,q.guest))&&norm(q.guest).length>=4){const needle=norm(q.guest);all=d.bookings.map(b=>({b,score:1-distance(norm(b.guestName).slice(0,100),needle)/Math.max(norm(b.guestName).length,needle.length)})).filter(x=>x.score>=.65).sort((a,b)=>b.score-a.score).slice(0,5).map(x=>x.b);suggestions=!!all.length;}
+      scopeText=scope;matched=matchIds;
       const offset=q.offset||0,rows=all.slice(offset,offset+PAGE).map(r=>project(d,q.entity,r));
       if(!rows.length)return save(q,[],all.length,all.length?'There are no more results on this page.':'I found no matching '+q.entity+' in the current app data. Try a full name, property or different dates.');
       const choices=suggestions||rows.length>1&&['payment','price','details'].includes(q.view);
@@ -119,10 +151,12 @@
       else if(q.entity==='bookings'&&q.view==='summary'){
         const projected=all.map(b=>({status:b.status,priceCents:b._excel?.priceUnknown?null:cents(b.totalPrice)})),priced=projected.filter(r=>r.status!=='cancelled'&&r.priceCents!==null),total=priced.reduce((n,r)=>n+r.priceCents,0),unknown=projected.filter(r=>r.status!=='cancelled'&&r.priceCents===null).length;
         text='There are '+all.length+' matching bookings in the app. The sum of recorded full prices for '+priced.length+' active bookings is '+money(Number.isSafeInteger(total)?total:null)+'. '+unknown+' active booking(s) have an unknown price. This is booked value, not payment receipts; cancelled bookings are excluded from that amount.';
-      }else text='I found '+all.length+' matching '+q.entity+' in the current app data. '+rows.slice(0,3).map((r,i)=>'Option '+(i+1)+': '+r.title+', '+r.subtitle+(q.entity==='cleanings'?'. '+r.facts.map(f=>f.label+': '+f.value).join('. '):q.entity==='tasks'?'. '+r.facts.filter(f=>f.label!=='Due').map(f=>f.label+': '+f.value).join('. '):'')).join('. ')+'.'+(rows.length>3?' There are '+rows.length+' results on this page. Say an option number for details.':'')+(all.length>offset+PAGE?' Say “show more” for the next page.':'');
+      }else text=(found?'I found '+found+'. ':'I found '+all.length+' matching '+q.entity+' in the current app data. ')+rows.slice(0,3).map((r,i)=>'Option '+(i+1)+': '+r.title+', '+r.subtitle+(q.entity==='cleanings'?'. '+r.facts.map(f=>f.label+': '+f.value).join('. '):q.entity==='tasks'?'. '+r.facts.filter(f=>f.label!=='Due').map(f=>f.label+': '+f.value).join('. '):'')).join('. ')+'.'+(rows.length>3?' There are '+rows.length+' results on this page. Say an option number for details.':'')+(all.length>offset+PAGE?' Say “show more” for the next page.':'');
       return save(q,rows,all.length,text);
     }
-    return {run,coverage,reset(){last=null;},current:()=>copy(last),context:()=>last?{query:copy(last.query),selected:last.rows.length===1?selector(last.rows[0]):null,choices:last.rows.map(selector),total:last.total,offset:last.offset}:null};
+    return {run,coverage,reset(){last=null;},current:()=>copy(last),
+      /* The complete matched set of the latest result (not just the visible page), for follow-up operations. */
+      matches:()=>last?{entity:last.entity,query:copy(last.query),ids:[...(last.matchIds||[])],page:last.rows.map(r=>r.id),total:last.total,choices:last.choices===true}:null,context:()=>last?{query:copy(last.query),selected:last.rows.length===1?selector(last.rows[0]):null,choices:last.rows.map(selector),total:last.total,offset:last.offset}:null};
   }
-  return Object.freeze({create,sanitizeQuery});
+  return Object.freeze({create,sanitizeQuery,period,rangeLabel,PERIODS});
 });

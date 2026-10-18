@@ -56,3 +56,16 @@ function svDevSeedData(){
   ];
   return {props:props,cleaners:cleaners,sessions:sessions,tasks:tasks,issues:issues,scratch:'',supplies:[],projects:[],focusSetDate:'',bookings:bookings,events:[],contacts:[],_migrations:[],_devSeededOn:t};
 }
+/* Fictional cleaning-plan demo for the preview, loaded once from ?demo=operations: the sample data plus next-week
+   checkouts at Villa Mar and Villa Marjals (one with a same-day arrival) and a cancelled stay. */
+function svDevOperationsDemo(){
+  var data=svDevSeedData();
+  function pad(n){return String(n).padStart(2,'0');}
+  var toMon=(8-new Date().getDay())%7||7;
+  function nw(n){var d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+toMon+n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+  function booking(id,propId,checkIn,checkOut,o){var b={id:id,propId:propId,platform:'airbnb',agencyName:'',checkIn:checkIn,checkOut:checkOut,guestName:'Sample Guest '+id.slice(5),guestCount:4,totalPrice:1500,notes:'',status:'confirmed',linkedCleaningId:''};for(var k in o)b[k]=o[k];return b;}
+  data.props.push({id:'dev-p4',name:'Villa Mar',notes:'Sample property.',photos:[]},{id:'dev-p5',name:'Villa Marjals',notes:'Sample property.',photos:[]});
+  data.bookings.push(booking('dev-b7','dev-p4',nw(-3),nw(1)),booking('dev-b8','dev-p5',nw(-2),nw(2)),booking('dev-b9','dev-p5',nw(2),nw(9),{checkInTime:'16:00'}),
+    booking('dev-b10','dev-p4',nw(4),nw(6)),booking('dev-b11','dev-p2',nw(3),nw(5),{status:'cancelled'}));
+  return data;
+}

@@ -1,4 +1,7 @@
 // Development preview: seed sample data into development storage only, once
+if(DEV_MODE&&/[?&]demo=operations(?:&|$)/.test(location.search)&&!SV_STORAGE.getItem(DB+'_demoOperations')){
+  try{SV_STORAGE.setItem(DB,JSON.stringify(svDevOperationsDemo()));SV_STORAGE.setItem(DB+'_demoOperations','1');}catch(e){}
+}
 if(DEV_MODE&&!SV_STORAGE.getItem(DB)){
   try{SV_STORAGE.setItem(DB,JSON.stringify(svDevSeedData()));}catch(e){}
 }
