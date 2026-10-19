@@ -6,7 +6,7 @@ const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../src/assistant/jarvis.js'),'utf8');
 // Run the actual shell transitions against disposable view elements; no microphone, provider or storage.
 function app(){
-  const elements=Object.fromEntries(['jarvis-bookings-page','jarvis-cleanings-page'].map(id=>[id,{hidden:true}]));
+  const elements=Object.fromEntries(['jarvis-bookings-page','jarvis-cleanings-page','jarvis-tasks-page'].map(id=>[id,{hidden:true}]));
   const events=[];const modal={open:false};
   const ctx=vm.createContext({elements,events,modal,console});
   vm.runInContext(`let root={dataset:{},classList:{toggle(k,on){on?classes.add(k):classes.delete(k)},contains(k){return classes.has(k)}}};
@@ -33,7 +33,7 @@ test('natural navigation: ordinary and imperfect wording opens the real internal
     assert.equal(a.run('navigationWords("close it")'),true);assert.equal(a.run('page'),'overview');assert.equal(a.elements['jarvis-bookings-page'].hidden,true);
   }
   for(const [words,page] of [['go to the cleaning schedule','cleanings'],['show me the cleanins','cleanings'],['go back to the dashboard','overview'],['home screen please','overview']]){a.run('navigationTurn("bookings")');assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),true,words);assert.equal(a.run('page'),page,words);}
-  for(const words of ['show me my tasks','open the to do list','open tasks']){a.run('expanded=null');assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),true,words);assert.equal(a.run('expanded'),'tasks',words);assert.equal(a.run('page'),'overview');}
+  for(const words of ['show me my tasks','open the to do list','open tasks']){a.run('navigationTurn("overview")');assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),true,words);assert.equal(a.run('page'),'tasks',words);assert.equal(a.elements['jarvis-tasks-page'].hidden,false);assert.ok(a.events.includes('render:tasks'));}
   assert.ok(!a.events.some(e=>/stop|closed jarvis|paused/.test(e)),'navigation never ends the conversation');
   for(const words of ['don’t open the booking tab','open that booking','show me the bookings for next week','what bookings do we have?','should I open bookings?','open the pool','open Bex'])assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),false,words);
 });
@@ -43,7 +43,7 @@ test('close dismisses the foreground dialog, panel or record before the underlyi
   a.modal.open=true;a.run('navigationWords("close that")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'bookings','a dialog closes before the page');
   a.run('recordsView={id:"fictional"};navigationTurn("close")');assert.equal(a.run('recordsView'),null);assert.equal(a.run('page'),'bookings');
   a.run('navigationTurn("close");navigationTurn("close")');assert.equal(a.run('page'),'overview');assert.match(a.events.at(-2),/already on the dashboard/);
-  a.run('navigationTurn("tasks")');assert.equal(a.run('expanded'),'tasks');a.run('navigationWords("close tasks")');assert.equal(a.run('expanded'),null);assert.match(a.events.filter(e=>/^Closed/.test(e)).at(-1),/Closed Tasks/);
+  a.run('navigationTurn("tasks")');assert.equal(a.run('page'),'tasks');a.modal.open=true;a.run('navigationWords("close it")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'tasks','a task dialog closes before the Tasks page');a.run('navigationWords("close tasks")');assert.equal(a.run('page'),'overview');assert.equal(a.elements['jarvis-tasks-page'].hidden,true);
 });
 test('ending the conversation is distinct from closing a view; other screens keep their existing routes',()=>{
   const a=app();

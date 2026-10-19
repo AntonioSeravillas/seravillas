@@ -955,7 +955,7 @@
     +'<div class="jp-cal-body"><div class="jp-cal-date" aria-hidden="true"><small id="jarvis-cal-month"></small><b id="jarvis-cal-daynum"></b><small id="jarvis-cal-weekday"></small></div><div class="jp-scroll"><p class="jarvis-date" id="jarvis-today-date"></p><ol class="jarvis-rows jp-timeline" id="jarvis-today-list"></ol></div></div></section>'
     +'<section class="jp-panel jp-tasks" id="jarvis-tasks-section">'+panelHead('tasks','jarvis-tasks-title','Tasks',viewAll('nav-tasks','View all tasks (opens the Tasks page)'))+filters('task','task-filter','Task window',[['today','Today'],['week','This week'],['later','Later']])+'<ol class="jarvis-rows jp-scroll jp-task-list" id="jarvis-task-list"></ol></section>'
     +'<section class="jp-panel jp-cleanings" id="jarvis-cleanings-section">'+panelHead('broom','jarvis-cleanings-title','Cleanings',viewAll('nav-cleaning','View all cleanings (opens the Cleaning page)'))+'<ol class="jp-scroll jp-clean-list" id="jarvis-clean-list"></ol></section></aside>'
-    +'<section class="jarvis-page" id="jarvis-bookings-page" aria-label="Bookings" hidden></section><section class="jarvis-page" id="jarvis-cleanings-page" aria-label="Cleanings" hidden></section>'
+    +'<section class="jarvis-page" id="jarvis-bookings-page" aria-label="Bookings" hidden></section><section class="jarvis-page" id="jarvis-cleanings-page" aria-label="Cleanings" hidden></section><section class="jarvis-page" id="jarvis-tasks-page" aria-label="Tasks" hidden></section>'
     +'<main class="jarvis-presence" aria-label="Jarvis"><div class="jarvis-greeting"><small id="jarvis-greet">Good evening</small><h1>'+BUSINESS.owner+'</h1><p id="jarvis-longdate"></p></div>'
     +'<div class="jarvis-stage"><div class="jarvis-orbit"><svg class="jarvis-guides" viewBox="-100 -100 200 200" aria-hidden="true" focusable="false"><circle r="52.2"/><circle r="71.3" class="mid"/><circle r="84.3"/>'
     +[[-135,52.2],[-45,52.2],[40,52.2],[90,50.6],[138,52.2],[-137,84.3],[-43,84.3],[42,82]].map(([a,r])=>'<circle class="dot" r=".75" cx="'+(Math.cos(a*Math.PI/180)*r).toFixed(1)+'" cy="'+(Math.sin(a*Math.PI/180)*r).toFixed(1)+'"/>').join('')
@@ -981,7 +981,7 @@
   /* Working pages inside the Jarvis shell. Switching pages is presentation only: the voice session, drafts, reviews
      and renderers keep running; nothing is stopped, started or saved. */
   let page='overview',pageReply=false;
-  const PAGES={bookings:{id:'jarvis-bookings-page',nav:'bookings'},cleanings:{id:'jarvis-cleanings-page',nav:'cleaning'}};
+  const PAGES={bookings:{id:'jarvis-bookings-page',nav:'bookings'},cleanings:{id:'jarvis-cleanings-page',nav:'cleaning'},tasks:{id:'jarvis-tasks-page',nav:'tasks'}};
   function showPage(next){
     if(!root)return;const target=PAGES[next]?next:'overview',changed=target!==page;page=target;root.dataset.page=page;root.classList.toggle('is-workpage',page!=='overview');
     for(const [name,cfg] of Object.entries(PAGES)){const host=el(cfg.id);if(host)host.hidden=name!==page;}
@@ -1102,15 +1102,18 @@
     }else if(['bookings','cleanings','overview','tasks'].includes(destination)){
       if(document.querySelector?.('#modal-root .modal')&&typeof closeModal==='function')closeModal();
       if(panel)closePanel();if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();
-      if(expanded)expandPanel(expanded);showPage(destination==='tasks'?'overview':destination);
-      if(destination==='tasks'){expandPanel('tasks');focusPanel('tasks');}
-      message=destination==='bookings'?(page==='bookings'?'Here’s the Bookings calendar.':'The calendar could not open.'):destination==='cleanings'?(page==='cleanings'?'Here are the cleanings.':'Cleanings could not open.'):destination==='tasks'?(expanded==='tasks'?'Here are your tasks.':'Tasks could not open.'):'Back to the dashboard.';
+      if(expanded)expandPanel(expanded);showPage(destination);
+      message=destination==='bookings'?(page==='bookings'?'Here’s the Bookings calendar.':'The calendar could not open.'):destination==='cleanings'?(page==='cleanings'?'Here are the cleanings.':'Cleanings could not open.'):destination==='tasks'?(page==='tasks'?'Here are your tasks.':'Tasks could not open.'):'Back to the dashboard.';
     }else if(['properties','issues'].includes(destination)){showPage('overview');showRecords({entity:destination,view:'list'});message='Here are the '+destination+'.';}
     else if(destination==='reports'){goWorkspace('booking-report');return true;}
     else return false;
     add('Jarvis',message,{keepTask:true});speak(message);live?.updateContext(liveContext());return true;
   }
-  function renderWorkPage(){renderBookingsPage();renderCleaningsPage();}
+  function renderWorkPage(){renderBookingsPage();renderCleaningsPage();renderTasksPage();}
+  function renderTasksPage(){
+    const host=el('jarvis-tasks-page');if(!host||page!=='tasks'||!window.SV_TASKS_VIEW)return;
+    try{SV_TASKS_VIEW.bind(host);SV_TASKS_VIEW.render(host);}catch{host.textContent='The task list could not load. The rest of Jarvis still works.';}
+  }
   function renderCleaningsPage(){
     const host=el('jarvis-cleanings-page');if(!host||page!=='cleanings'||!window.SV_CLEANINGS_VIEW)return;
     try{SV_CLEANINGS_VIEW.bind(host);SV_CLEANINGS_VIEW.render(host);}catch{host.textContent='The cleaning plan could not load. The rest of Jarvis still works.';}
@@ -1187,7 +1190,7 @@
       if(action==='records-workspace'){openRecordWorkspace();return;}
       if(action==='nav-overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();if(expanded)expandPanel(expanded);showPage('overview');return;}
       if(action==='nav-cleaning'){showPage('cleanings');return;}
-      if(action==='nav-tasks'){goWorkspace('tasks');return;}
+      if(action==='nav-tasks'){showPage('tasks');return;}
       if(action==='new'){tasks?.reset();renderTaskCard();waConversation?.cancel();records?.reset();operations?.reset();renderPlan(null);recordsView=null;closeRecords();stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
       if(e.target===el('jarvis-panel'))closePanel();
     });

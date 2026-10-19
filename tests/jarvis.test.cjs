@@ -319,11 +319,15 @@ test('live WhatsApp readings use the natural voice directly and only completed, 
     if(outcome==='interrupt')options.onInterruption();if(outcome==='new-turn')options.onMessage({source:'user',message:'Wait a moment',event_id:3});options.onModeChange({mode:'listening'});await flush();assert.equal(reads.length,outcome==='complete'?1:0);app.click('close');
   }
 });
-test('Jarvis navigation avoids workspace data-nav capture; Tasks (not yet themed) closes Jarvis and navigates on desktop and phone',async()=>{
-  for(const desktop of [true,false])for(const [action,destination] of [['nav-tasks','tasks']]){
-    const app=desktopRuntime({desktop}),visited=[];app.context.workspaceNavigate=target=>visited.push(target);app.run('openJarvis()');await flush();
+test('Jarvis navigation avoids workspace data-nav capture; Tasks opens its internal page and Reports keeps its workspace route, desktop and phone',async()=>{
+  for(const desktop of [true,false]){
+    const app=desktopRuntime({desktop}),visited=[],renders=[];app.context.workspaceNavigate=target=>visited.push(target);
+    app.context.SV_TASKS_VIEW={bind(){},render(host){renders.push(host);}};app.run('openJarvis()');await flush();
     assert.doesNotMatch(app.root().innerHTML,/\sdata-nav=/);assert.match(app.root().innerHTML,/data-jarvis-nav="whatsapp"/);
-    app.click(action);assert.deepEqual(visited,[destination]);assert.equal(app.root().removed,true);assert.equal(app.background.hasAttribute('inert'),false);
+    app.click('nav-tasks');assert.deepEqual(visited,[]);assert.equal(app.root().removed,false,'Tasks stays inside Jarvis');
+    assert.equal(app.root().dataset.page,'tasks');assert.equal(app.el('jarvis-tasks-page').hidden,false);assert.equal(app.el('jarvis-bookings-page').hidden,true);assert.equal(renders.length,1);
+    app.click('nav-overview');assert.equal(app.root().dataset.page,'overview');assert.equal(app.el('jarvis-tasks-page').hidden,true);
+    app.click('nav-reports');assert.deepEqual(visited,['booking-report']);assert.equal(app.root().removed,true);assert.equal(app.background.hasAttribute('inert'),false);
   }
 });
 test('WhatsApp announcements wait for audio opt-in, finish before marking read, pause quiet recognition and stop on close',async()=>{
@@ -799,6 +803,8 @@ test('voice task: decline, yes with nothing pending, side question then yes, and
   // Opening and closing views keeps the conversation and the pending draft.
   await h.user('Open the booking tab');assert.equal(h.app.root().dataset.page,'bookings');h.app.finishSpeech();await flush();
   await h.user('close it');assert.equal(h.app.root().dataset.page,'overview');assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review');h.app.finishSpeech();await flush();
+  await h.user('show me my tasks');assert.equal(h.app.root().dataset.page,'tasks');assert.equal(h.app.el('jarvis-task-review').hidden,false,'the review card stays visible on the Tasks page');h.app.finishSpeech();await flush();
+  await h.user('close it');assert.equal(h.app.root().dataset.page,'overview');assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review','the draft survives the Tasks page');h.app.finishSpeech();await flush();
   // A side question answered by the agent: a bare yes is then a short re-check, not a save.
   await h.user('Who is arriving tomorrow?');o.onMessage({source:'ai',message:'Nobody is arriving tomorrow, it is a quiet day.',event_id:900});await flush();
   m=h.said().length;await h.user('Yes');assert.equal(tasks().length,0);assert.match(h.lastLine(),/^Just to check: save the new task “Order pool chlorine”/);
@@ -844,8 +850,10 @@ test('live voice navigation: views open inside Jarvis immediately, the agent sta
   h.app.run(TASK_STORE+"D.tasks=[{id:'a',text:'Check pool pump',propId:'p-test',priority:'medium',done:false,dueDate:''}];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
   await h.user('Could you open the booking tab for me?');assert.equal(h.app.root().dataset.page,'bookings');assert.equal(h.app.el('jarvis-bookings-page').hidden,false);
   assert.equal(h.vol.at(-1),0,'the app answers; the agent reply to that turn stays silent');assert.equal(h.app.phase()==='paused',false);h.app.finishSpeech();await flush();
-  await h.user('show me my tasks');assert.equal(h.app.root().dataset.page,'overview');assert.ok(h.app.el('jarvis-tasks-section').classList.contains('is-expanded'),'the real Tasks panel opens');h.app.finishSpeech();await flush();
-  await h.user('close it');assert.ok(!h.app.el('jarvis-tasks-section').classList.contains('is-expanded'));h.app.finishSpeech();await flush();
+  await h.user('show me my tasks');assert.equal(h.app.root().dataset.page,'tasks','the Tasks page opens inside Jarvis');assert.equal(h.app.el('jarvis-tasks-page').hidden,false);assert.equal(h.app.el('jarvis-bookings-page').hidden,true);h.app.finishSpeech();await flush();
+  // A factual task question keeps its lookup route instead of opening the page.
+  await h.user('What tasks are due tomorrow?');assert.equal(h.app.root().dataset.page,'tasks');assert.notEqual(h.vol.at(-1),0,'the agent answers a factual question (lookup), not the app navigation');
+  await h.user('close it');assert.equal(h.app.root().dataset.page,'overview');assert.equal(h.app.el('jarvis-tasks-page').hidden,true);h.app.finishSpeech();await flush();
   // The conversation is still live: a normal question still goes to the agent.
   await h.user('Who is arriving tomorrow?');o.onMessage({source:'ai',message:'Nobody is arriving tomorrow.',event_id:901});await flush();assert.match(h.lastLine(),/Nobody is arriving tomorrow/);
   assert.deepEqual(visited,[],'nothing left Jarvis');

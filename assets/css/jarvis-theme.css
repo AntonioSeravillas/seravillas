@@ -178,6 +178,12 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 @media(max-width:1099px){
   .jarvis-root.is-workpage .jarvis-today,.jarvis-root.is-workpage .jarvis-side:not(.has-expanded){display:none}
   .jarvis-root.is-workpage.review-open .jarvis-side,.jarvis-root.is-workpage.has-context .jarvis-side{display:flex}
+  /* The stacked side column has no fixed height here, so the conversation (and its review card) takes its natural height
+     instead of the desktop flex share, which collapsed it and clipped the card. */
+  .jarvis-root.is-workpage.review-open #jarvis-chat-body{flex:none!important;height:auto;overflow:visible}
+  /* The notes are not pinned here, so the latest reply stays in flow beside the ask bar instead of floating over the
+     page content (it was anchored to the scrolling overlay and covered rows). */
+  .jarvis-root.is-workpage .jarvis-last-reply{position:static;margin:0 0 12px}
   .jarvis-root.is-workpage .jarvis-page{order:0;display:flex;flex-direction:column;padding:16px 12px;border:1px solid var(--jv-line);border-radius:12px;background:#0e0e0f}
   .jarvis-root.is-workpage .jarvis-presence{order:1}
   .jarvis-root.is-workpage .jarvis-greeting,.jarvis-root.is-workpage .jarvis-insight,.jarvis-root.is-workpage .jarvis-shortcuts{display:none}
@@ -332,4 +338,51 @@ body.jarvis-open #modal-root{--red:#c9603f;--red-text:var(--jv-danger);--red-bg:
   .jc-more{margin-left:8px}
   .jc-plan li{grid-template-columns:1fr auto;row-gap:2px;padding:8px 0}.jc-plan-when,.jc-plan-what{grid-column:1}
   .jc-body{max-height:68dvh}
+}
+
+/* ── Tasks page (Stage 3). Same header, summary, scroll area and section headings as Cleanings; status columns from
+   the app's board; orange only for high priority and due/overdue. ── */
+.jt-chips{display:none;gap:8px;flex-wrap:wrap;margin:clamp(10px,.8vw,16px) 0}
+.jt-chips .jv-btn span{margin-left:4px;color:var(--jv-text-3)}
+.jt-board{display:grid;grid-template-columns:var(--jt-cols,repeat(4,minmax(0,1fr)));gap:clamp(14px,1.1vw,26px);align-items:start;padding:clamp(10px,.8vw,16px) 0 12px}
+.jt-col h3,.jt-body .jc-day h3{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.jt-col h3 span{font-size:var(--jb-small);font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--jv-text-3)}
+.jt-col h3 b{font-weight:400;font-size:var(--jb-small);color:var(--jv-text-3)}
+.jt-body .jc-day h3 .jt-count{margin-left:0;color:var(--jv-text-3)}
+.jarvis-root .jt-body .jc-day h3 .jt-add{margin-left:auto;height:calc(var(--jv-ctl) - 6px);padding:0 12px;font-size:calc(var(--jb-font) - 1.5px)}
+.jt-body.is-properties .jc-days,.jt-body.is-projects .jc-days,.jt-body.is-done .jc-days{padding-top:clamp(10px,.8vw,16px)}
+.jt-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--jv-line)}
+.jt-task{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:10px;padding:4px 0;border-bottom:1px solid var(--jv-line)}
+.jarvis-root .jt-check{flex:none;display:grid;place-items:center;width:clamp(22px,1.35vw,30px);height:clamp(22px,1.35vw,30px);margin-left:4px;padding:0;border:1.5px solid #6b6b6b;border-radius:50%;background:transparent;color:transparent;cursor:pointer;transition:border-color .2s,color .2s}
+.jarvis-root .jt-check:hover{border-color:var(--jv-accent);color:var(--jv-accent-text)}
+.jarvis-root .jt-check:focus-visible{outline:none;box-shadow:var(--jv-focus)}
+.jt-check.is-on{border-color:#6b6b6b;background:#6b6b6b;color:#111;cursor:default}
+.jarvis-root .jt-main{display:flex;flex-direction:column;gap:4px;min-width:0;min-height:var(--jc-row);justify-content:center;padding:6px 8px;border-radius:var(--jv-radius-sm);text-align:left;font-family:var(--jv-font);font-size:var(--jb-font);color:var(--jv-text);background:transparent;border:0;cursor:pointer}
+.jarvis-root .jt-main:hover{background:rgba(255,255,255,.03)}
+.jarvis-root .jt-main:focus-visible{outline:none;box-shadow:var(--jv-focus)}
+.jt-main b{font-weight:400;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.jt-main small{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:var(--jb-small);letter-spacing:.02em;color:var(--jv-text-3)}
+.jt-main small .is-high,.jt-main small .is-late{color:var(--jv-accent-text)}
+.jt-task.is-done .jt-main b{color:var(--jv-text-2)}
+.jt-task.is-open .jc-expand svg{transform:rotate(180deg)}.jt-actions{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:8px;margin:2px 8px 10px}
+.jarvis-root .jt-actions .jv-btn{height:calc(var(--jv-ctl) - 4px);padding:0 12px;font-size:calc(var(--jb-font) - 1.5px)}
+@media(max-width:1500px){.jarvis-root.is-workpage .jt-board{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Task dialogs (details, new/edit, waiting): the booking/cleaning dialog layout. */
+.jt-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:14px}
+.jt-field-label{display:block;margin-bottom:6px;font-family:var(--jv-font);font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--jv-text-3)}
+.jt-form-error{margin:-6px 0 12px}
+.jv-modal-help{margin:-6px 0 4px;font-size:12px;color:var(--jv-text-3)}
+.jt-photo{display:block;width:100%;max-height:200px;object-fit:cover;margin:0 0 16px;border:1px solid var(--jv-line);border-radius:var(--jv-radius)}
+.jt-delete{display:inline-flex;align-items:center;gap:8px}
+.jt-delete-ask{display:none;align-items:center;gap:8px;font-size:12.5px;color:var(--jv-text-2)}
+.jt-delete.is-asking>.jv-btn{display:none}.jt-delete.is-asking .jt-delete-ask{display:inline-flex}
+#modal-root .jt-dialog .chips{display:flex;margin-top:0}
+/* The dialog box itself receives focus on open (so screen readers announce it); controls inside keep their focus ring. */
+body.jarvis-open #modal-root .modal:has(.jt-dialog):focus{outline:none}
+@media(max-width:520px){.jt-fields{grid-template-columns:1fr}.jv-actions-end{flex-wrap:wrap}}
+@media(max-width:767px){
+  .jt-chips{display:flex}
+  .jarvis-root.is-workpage .jt-board{grid-template-columns:1fr;padding-top:0}
+  .jt-col:not(.is-tab){display:none}
+  .jt-col h3{display:none}
 }

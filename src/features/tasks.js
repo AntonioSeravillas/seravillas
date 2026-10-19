@@ -372,9 +372,15 @@ function tcbReopen(id){
 function tcbWaiting(id){
   var task=D.tasks.find(function(t){return t.id===id;});
   if(!task)return;
-  var who=prompt('Waiting for whom?',task.waitingFor||'');
-  if(who===null)return;
-  task.status='waiting';task.waitingFor=who.trim();
+  /* Inside Jarvis the same step uses its themed dialog. */
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_TASKS_VIEW){SV_TASKS_VIEW.openWaiting(id);return;}
+  tcbSetWaiting(id,prompt('Waiting for whom?',task.waitingFor||''));
+}
+/* null = cancelled (nothing changes); any text, even empty, moves the task to Waiting. */
+function tcbSetWaiting(id,who){
+  var task=D.tasks.find(function(t){return t.id===id;});
+  if(!task||who===null||who===undefined)return;
+  task.status='waiting';task.waitingFor=String(who).trim();
   save();render();
 }
 
@@ -526,6 +532,7 @@ function openTaskDetail(id){
   const t=D.tasks.find(x=>x.id===id);if(!t)return;
   migrateTask(t);
   window._dtid=id; // store for onclick handlers
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_TASKS_VIEW){showModal(SV_TASKS_VIEW.detail(t));return;}
   const prioC=PRIO_CFG[t.priority||'low'];
   const propBadge=t.propId?'<span class="prop-badge pc-'+propColorIdx(t.propId)+'" style="font-size:11px;padding:3px 9px">'+esc(propName(t.propId))+'</span>':'';
   const photoSection=t.photo
@@ -561,6 +568,7 @@ function openNewTaskModal(prefillPropId, prefillType, prefillProjectId){
   prefillType=prefillType||'ops';
   prefillProjectId=prefillProjectId||'';
   window._ntType=prefillType;
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_TASKS_VIEW){showModal(SV_TASKS_VIEW.taskForm('new',null,{propId:prefillPropId||'',type:prefillType,projectId:prefillProjectId}));setTimeout(()=>document.getElementById('nt-text')?.focus(),60);return;}
   const po='<option value="">No property</option>'+D.props.map(p=>'<option value="'+p.id+'"'+(prefillPropId===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('');
   const projOpts='<option value="">Unassigned</option>'+D.projects.map(p=>'<option value="'+p.id+'"'+(prefillProjectId===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('');
   showModal('<div class="modal-handle"></div><div class="modal-title">New task</div>'
@@ -606,6 +614,7 @@ function saveNewTask(){
 function openEditTaskModal(id){
   const t=D.tasks.find(x=>x.id===id);if(!t)return;migrateTask(t);
   window._etType=t.type||'ops';
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_TASKS_VIEW){window._dtid=id;showModal(SV_TASKS_VIEW.taskForm('edit',t));setTimeout(()=>document.getElementById('et-text')?.focus(),60);return;}
   const po='<option value="">No property</option>'+D.props.map(p=>'<option value="'+p.id+'"'+(t.propId===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('');
   const projOpts='<option value="">Unassigned</option>'+D.projects.map(p=>'<option value="'+p.id+'"'+(t.projectId===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('');
   showModal('<div class="modal-handle"></div><div class="modal-title">Edit task</div>'
