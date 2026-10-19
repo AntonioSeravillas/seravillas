@@ -756,7 +756,8 @@
     error('');caption('');const id=generation;add('You',text);if(el('jarvis-input')&&!fromVoice)el('jarvis-input').value='';setPhase('thinking');
     if(STOP_TALKING.test(text)){add('You',text);replyDone();return;}
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){voice?.pause('Paused. Tap the microphone to talk again.');add('Jarvis','Paused. Tap the microphone when you want to talk again.');if(!voice?.active)setPhase('paused');return;}
-    if(navigationWords(text)||taskWords(text,fromVoice?'voice':'typed'))return;
+    const nav=navigationWords(text);if(nav===true)return;if(nav?.rest)text=nav.rest;
+    if(taskWords(text,fromVoice?'voice':'typed'))return;
     const personal=personalIntent(text);if(personal){await personalTurn(text,personal,id);return;}memoryPending=null;
     // Always recognise owner approval locally. The AI cannot propose or grant approval.
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
@@ -803,7 +804,10 @@
     if(STOP_TALKING.test(text)){cancelReply();add('You',text);setPhase('listening');return true;}
     liveOwnerText=text;liveChannel=liveTyped&&liveTyped===text?'typed':'voice';liveTyped='';cancelReply();clearFocus();error('');add('You',text);
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){pauseVoice('Paused. Tap the microphone to talk again.');return true;}
-    if(navigationWords(text)||taskWords(text,liveChannel))return true;
+    /* The view changes first, through the same showPage() as the tab buttons; the agent only answers any other words. */
+    const nav=navigationWords(text);if(nav===true)return true;
+    if(nav?.rest){text=nav.rest;liveOwnerText=text;live?.note('The app has just opened the requested view itself. Do not open, look up or announce any app view; answer only his other words: '+JSON.stringify(text.slice(0,300)));}
+    if(taskWords(text,liveChannel))return true;
     const personal=personalIntent(text);if(personal){setPhase('thinking');void personalTurn(text,personal);return true;}memoryPending=null;
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
     if(['approve','cancel','review'].includes(literal?.kind)||['ambiguousApproval','readDraft'].includes(literal?.kind)&&waConversation?.snapshot()?.stage==='review'){void whatsappTurn(text,generation);return true;}
@@ -1070,18 +1074,48 @@
     const scored=Object.entries(NAV_VIEWS).flatMap(([view,names])=>names.filter(n=>!n.includes(' ')&&n.length>=5).map(n=>({view,d:navEdit(p,n)}))).sort((a,b)=>a.d-b.d);
     return scored[0]&&scored[0].d<=Math.max(1,Math.floor(p.length*0.25))&&!scored.some(s=>s.view!==scored[0].view&&s.d===scored[0].d)?scored[0].view:'';
   }
+  /* Real recognised speech (provider history, 19 Oct) wraps the request: "Hi, Jarvis. Can you open my Tasks tab?",
+     "No, open tasks dashboard.", "Can you open me Bookings tab?", "Open tasks. Mm. So how much usage do I have?".
+     Each sentence is read on its own: greetings, a leading yes/no, politeness, pronouns and words such as tab/page/panel
+     are ignored, and the view name may be misheard. Anything else left over (a date, a name, "for next week") makes the
+     sentence a question for the conversation instead, so factual task/booking questions keep their lookups. */
+  const NAV_LEAD=/^(?:(?:hi|hello|hey|ok|okay|so|right|alright|well|no|nope|yes|yeah|now|then|and|also|please|sorry|mm+|hmm+|hm+|ah+|oh)\s+)+/;
+  const NAV_POLITE=/^(?:(?:can|could|would|will) you(?: please)?|(?:can|could|may) i(?: please)?|i (?:want|need|would like|d like)(?: you)? to|lets|let s|id like to)\s+/;
+  const NAV_DROP=new Set(['me','my','us','our','the','a','up','to','into','over','for','now','tab','tap','tabs','page','pages','panel','panels','view','views','screen','section','list','schedule','plan','window','again','back','one']);
+  const NAV_CLOSE=/^(?:close|dismiss|hide|shut|exit|put away|get rid of|go back|back)(?: (?:it|that|this|that one|this one|(?:the )?(?:view|tab|page|panel|window|list|dialog|popup|pop up|form|records?|calendar|bookings?|cleanings?|tasks?|whatsapp|dashboard)))?(?: (?:tab|page|view|panel|window))?$/;
+  const NAV_END=/^(?:(?:end|finish|stop|close) (?:the |this |our )?(?:conversation|session|chat|call)|thats all(?: for now)?|thats it for now|goodbye|good bye|bye(?: bye)?|see you(?: later)?|talk (?:to you )?later)$/;
+  function navSentence(sentence){
+    const w=((navWords(sentence)+' ').replace(NAV_LEAD,'').replace(NAV_POLITE,'')+' ').replace(NAV_LEAD,'').trim();
+    if(!w)return {empty:true};
+    if(/\b(?:dont|do not|not|never|no need|without|if|whether|should|shall|what|why|how|when|which|who|later|after|before|tomorrow|tonight)\b/.test(w))return null;
+    if(NAV_END.test(w))return {view:'end'};
+    if(NAV_CLOSE.test(w))return {view:'close'};
+    const m=w.match(/^(?:open(?: up)?|show(?: me)?|go(?: back)? to|go into|take me(?: back)? to|bring up|pull up|switch(?: over)? to|jump to|navigate to|display|let me see|see|view|back to|return to|get me) (.+)$/)||w.match(/^(.+) (?:tab|tap|page|screen|section|panel)$/);
+    if(!m)return null;
+    let phrase=' '+m[1]+' ';
+    for(const [a,b] of [['to dos','todos'],['to do','todo'],['home screen','home'],['main screen','home'],['main page','home'],['task list','tasks']])phrase=phrase.split(' '+a+' ').join(' '+b+' ');
+    let words=phrase.trim().split(' ').filter(t=>t&&!NAV_DROP.has(t));
+    if(words.length>1)words=words.filter(t=>t!=='dashboard'&&t!=='overview');
+    const views=[...new Set(words.map(navView))];
+    return words.length&&words.length<=2&&views.length===1&&views[0]?{view:views[0]}:null;
+  }
+  /* The first navigation sentence wins; other sentences (not filler) are returned as `rest` for the conversation. */
+  function navigationIntent(text){
+    let view='';const rest=[];
+    for(const part of String(text||'').split(/(?<=[.!?;])\s+/).map(s=>s.trim()).filter(Boolean)){
+      const r=navSentence(part);if(r?.empty)continue;
+      if(r&&!view){view=r.view;continue;}
+      rest.push(part);
+    }
+    return view?{view,rest:rest.join(' ')}:null;
+  }
+  /* true: handled entirely; {rest}: the view changed and these other words still need an answer; false: not navigation. */
   function navigationWords(text){
     /* "Jarvis" is otherwise a filler, so closing Jarvis itself is recognised first. */
     if(/^(?:(?:hey|ok|okay|please) )*(?:close|exit|quit|shut down|turn off) (?:jarvis|the assistant)(?: please| now)?$/.test(String(text||'').toLowerCase().replace(/[^\p{L}\s]/gu,' ').replace(/\s+/g,' ').trim()))return navigationTurn('exit');
-    let w=navWords(text).replace(/^(?:(?:can|could|would|will) you|i (?:want|need|would like|d like) (?:you )?to|lets|let s|id like to)\s+/,'');
-    if(!w||/\b(?:dont|do not|not|never|no need|without|if|whether|should|shall|what|why|how|when|which|who|later|after|before|tomorrow|tonight)\b/.test(w))return false;
-    /* Ending the conversation is distinct from closing a view. */
-    if(/^(?:(?:end|finish|stop) (?:the |this |our )?(?:conversation|session|chat|call)|thats all(?: for now)?|thats it for now|goodbye|good bye|bye(?: bye)?|see you(?: later)?|talk (?:to you )?later)$/.test(w))return navigationTurn('end');
-    if(/^(?:close|dismiss|hide|shut|exit|put away|get rid of|go back|back)(?: (?:it|that|this|that one|this one|(?:the )?(?:view|tab|page|panel|window|list|dialog|popup|pop up|form|records?|calendar|bookings?|cleanings?|tasks?|whatsapp)))?(?: (?:tab|page|view|panel|window))?$/.test(w))return navigationTurn('close');
-    const m=w.match(/^(?:open(?: up)?|show(?: me)?|go(?: back)? to|go into|take me(?: back)? to|bring up|pull up|switch to|jump to|navigate to|display|let me see|can i see|i want to see|back to|return to|view) (.+)$/)||w.match(/^((?:the )?\S+(?: \S+)?) (?:tab|tap|page|view|screen|section)$/);
-    if(!m)return false;
-    const view=navView(m[1])||navView(m[1].replace(NAV_SUFFIX,''));
-    return view?navigationTurn(view):false;
+    const nav=navigationIntent(text);if(!nav)return false;
+    if(!navigationTurn(nav.view))return false;
+    return nav.rest&&!['end','exit'].includes(nav.view)?{rest:nav.rest}:true;
   }
   const PANEL_NAMES={calendar:'the calendar',tasks:'Tasks',cleanings:'Cleanings',conversation:'Conversation',whatsapp:'WhatsApp',issues:'Issues'};
   function navigationTurn(destination){
@@ -1093,6 +1127,8 @@
       /* The foreground item first: a dialog, a Jarvis panel, WhatsApp, records, an expanded panel, then the page. */
       if(document.querySelector?.('#modal-root .modal')&&typeof closeModal==='function'){closeModal();message='Closed it.';}
       else if(panel){closePanel();message='Closed the panel.';}
+      /* On a working page "close" means the page: back to Overview, clearing any side result it showed. */
+      else if(page!=='overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();showPage('overview');message='Back to the dashboard.';}
       else if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.()){SV_JARVIS_WHATSAPP.close();message='Closed WhatsApp.';}
       else if(recordsView){closeRecords();message='Closed the records.';}
       else if(root.classList.contains('has-context')){closeContext();message='Closed the view.';}

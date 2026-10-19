@@ -41,7 +41,10 @@ test('close dismisses the foreground dialog, panel or record before the underlyi
   const a=app();a.run('navigationTurn("bookings");panel="settings";navigationTurn("close")');
   assert.equal(a.run('panel'),null);assert.equal(a.run('page'),'bookings');
   a.modal.open=true;a.run('navigationWords("close that")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'bookings','a dialog closes before the page');
-  a.run('recordsView={id:"fictional"};navigationTurn("close")');assert.equal(a.run('recordsView'),null);assert.equal(a.run('page'),'bookings');
+  /* On a working page, close means the page: back to Overview, clearing a side result with it. */
+  a.run('recordsView={id:"fictional"};navigationTurn("close")');assert.equal(a.run('recordsView'),null);assert.equal(a.run('page'),'overview');
+  /* On Overview a records result is the foreground item and closes first. */
+  a.run('recordsView={id:"fictional"};navigationTurn("close")');assert.equal(a.run('recordsView'),null);assert.match(a.events.at(-2),/Closed the records/);a.run('navigationTurn("bookings")');
   a.run('navigationTurn("close");navigationTurn("close")');assert.equal(a.run('page'),'overview');assert.match(a.events.at(-2),/already on the dashboard/);
   a.run('navigationTurn("tasks")');assert.equal(a.run('page'),'tasks');a.modal.open=true;a.run('navigationWords("close it")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'tasks','a task dialog closes before the Tasks page');a.run('navigationWords("close tasks")');assert.equal(a.run('page'),'overview');assert.equal(a.elements['jarvis-tasks-page'].hidden,true);
 });
@@ -51,4 +54,18 @@ test('ending the conversation is distinct from closing a view; other screens kee
   a.run('navigationWords("close Jarvis")');assert.ok(a.events.includes('closed jarvis'));
   a.run('navigationTurn("issues")');assert.ok(a.events.includes('records:issues'));
   a.run('navigationTurn("reports")');assert.ok(a.events.includes('workspace:booking-report'),'Reports keeps its existing full-page route');
+});
+test('real recognised owner speech (provider history, 19 Oct) reaches the internal views; filters and questions do not',()=>{
+  const a=app();
+  for(const [words,page] of [['Hi, Jarvis. Can you open my Tasks tab?','tasks'],['No, open tasks.','tasks'],['No, open tasks dashboard.','tasks'],['Can you open me Bookings tab?','bookings'],['Open bookings panel.','bookings'],
+    ['Open bookings','bookings'],['Open the booking tab.','bookings'],['Okay, open cleanings.','cleanings'],['Could you please open the tasks tab?','tasks'],['Open the booking calendar.','bookings'],['Yeah, go to the dashboard.','overview']]){
+    a.run('navigationTurn("overview")');if(page==='overview')a.run('navigationTurn("tasks")');
+    assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),true,words);assert.equal(a.run('page'),page,words);
+  }
+  /* A view plus another question: the view opens and only the other words are left for the conversation. */
+  a.run('navigationTurn("overview")');assert.equal(a.run('JSON.stringify(navigationWords("Open tasks. Mm. So how much usage do I have?"))'),JSON.stringify({rest:'So how much usage do I have?'}));assert.equal(a.run('page'),'tasks');
+  a.run('navigationTurn("overview")');
+  for(const words of ['What tasks are due tomorrow?','Show me the tasks due tomorrow','Show me the bookings for next week','Open that booking','Open Villa Mar','Don’t open bookings','Mm.','No.'])assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),false,words);
+  assert.equal(a.run('page'),'overview');
+  a.run('navigationWords("Close the conversation")');assert.ok(a.events.some(e=>/^paused: /.test(e)),'closing the conversation ends it, distinct from closing a view');
 });

@@ -860,3 +860,32 @@ test('live voice navigation: views open inside Jarvis immediately, the agent sta
   await h.user('End the conversation');assert.equal(h.app.phase(),'paused');assert.equal(h.app.root().removed,false,'ending the conversation keeps Jarvis on screen');
   h.app.click('close');
 });
+test('live voice event path: real phrasings open Bookings and the full Tasks page, it stays open across turns, close returns to Overview, a dialog closes first, a draft survives',async()=>{
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions}),visited=[];h.app.context.workspaceNavigate=d=>visited.push(d);
+  const renders=[];h.app.context.SV_TASKS_VIEW={bind(){},render(host){renders.push(host);}};
+  const modal={open:false};const q=h.app.context.document.querySelector;h.app.context.document.querySelector=s=>s==='#modal-root .modal'?(modal.open?{}:null):q(s);h.app.context.closeModal=()=>{modal.open=false;};
+  h.app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const page=()=>h.app.root().dataset.page,live=()=>h.app.phase()!=='paused'&&h.app.phase()!=='idle';
+  // 1. Bookings, as actually recognised; the agent's own reply and tool call for that turn are refused.
+  await h.user('Can you open me Bookings tab?');assert.equal(page(),'bookings');assert.equal(h.app.el('jarvis-bookings-page').hidden,false);assert.equal(h.vol.at(-1),0);
+  assert.match(await o.clientTools.lookup_records({entity:'tasks',view:'count'}),/paused|superseded/,'the agent cannot turn a navigation turn into a record search');assert.equal(page(),'bookings');
+  h.app.finishSpeech();await flush();
+  // 2. The full Tasks page (same showPage as the tab), not the dashboard panel or a record list.
+  await h.user('No, open tasks dashboard.');assert.equal(page(),'tasks');assert.equal(h.app.el('jarvis-tasks-page').hidden,false);assert.equal(h.app.el('jarvis-bookings-page').hidden,true);assert.ok(renders.length>=1);
+  assert.ok(!h.app.el('jarvis-tasks-section').classList.contains('is-expanded'),'not the compact dashboard panel');h.app.finishSpeech();await flush();
+  // 3. Conversation continues; agent replies and lookups do not reset the page.
+  await h.user('Who is arriving tomorrow?');const r=await o.clientTools.lookup_records({entity:'bookings',view:'list',start:h.app.run('addDays(today(),1)'),end:h.app.run('addDays(today(),1)'),dateBy:'arrival'});assert.doesNotMatch(r,/paused/);
+  o.onMessage({source:'ai',message:'Nobody is arriving tomorrow.',event_id:950});o.onModeChange({mode:'speaking'});o.onModeChange({mode:'listening'});await flush();assert.equal(page(),'tasks','Tasks stays open across replies');
+  // A view plus a question: the view opens (stays), the agent answers only the question.
+  await h.user('Open tasks. Mm. So how much usage do I have?');assert.equal(page(),'tasks');assert.doesNotMatch(await o.clientTools.lookup_records({entity:'tasks',view:'count'}),/paused/,'the other words still reach the agent');h.app.finishSpeech();await flush();
+  // 4. "Close" returns to Overview with the live session still running.
+  await h.user('Close.');assert.equal(page(),'overview');assert.ok(live(),'the conversation keeps running');assert.notEqual(h.mic.at(-1),true);h.app.finishSpeech();await flush();
+  // 5. A dialog in front closes first.
+  await h.user('Open the tasks tab');assert.equal(page(),'tasks');h.app.finishSpeech();await flush();modal.open=true;
+  await h.user('Close it');assert.equal(modal.open,false);assert.equal(page(),'tasks','the dialog closed, the page stayed');h.app.finishSpeech();await flush();
+  // 6. A pending task draft survives switching and closing views.
+  decisions.push({kind:'task',operation:{action:'create',text:'order pool salt'}});await h.user('Add a task to order pool salt');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  for(const [words,expect] of [['Hi, Jarvis. Can you open my bookings tab?','bookings'],['Open cleanings.','cleanings'],['Open tasks','tasks'],['Close it','overview']]){await h.user(words);assert.equal(page(),expect,words);assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review',words);h.app.finishSpeech();await flush();}
+  assert.ok(live());assert.deepEqual(visited,[]);assert.equal(h.app.root().removed,false);
+  h.app.click('close');
+});
