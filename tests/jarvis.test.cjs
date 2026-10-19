@@ -129,7 +129,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
-  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-operations.js','src/assistant/jarvis-dashboard.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
+  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-operations.js','src/assistant/jarvis-tasks.js','src/assistant/jarvis-dashboard.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
   const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,pcmSources,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
     click(j,extra={}){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j,...extra}})}});}finally{inGesture=false;}},
@@ -677,10 +677,10 @@ test('connector: drawn from the ring membrane to the focused row on desktop, red
   assert.equal(narrow.el('jarvis-link').hasAttribute('hidden'),true);assert.ok(!narrow.el('jarvis-link-path').attrs.d);assert.equal(focusRows(narrow).length,1);
 });
 /* Live interruption with fictional chats and records. The live SDK, WhatsApp API and Hermes decisions are fakes; nothing is sent. */
-function liveInterruptRuntime({desktop,decisions=[]}){
+function liveInterruptRuntime({desktop,decisions=[],bodies=null}){
   let options;const mic=[],vol=[],sends=[],reviews=[],key='a'.repeat(20),chat={key,name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1};
   const liveSdk={Conversation:{startSession:async o=>{options=o;return {endSession:async()=>{},setMicMuted:v=>mic.push(v),setVolume:v=>vol.push(v.volume),getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){},sendUserMessage(){}};}}};
-  const app=desktopRuntime({agent:true,desktop,liveSdk,understand:async()=>decisions.shift()||{kind:'reply',text:'Okay.'},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
+  const app=desktopRuntime({agent:true,desktop,liveSdk,understand:async body=>{bodies?.push(body);return decisions.shift()||{kind:'reply',text:'Okay.'};},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
     if(url.endsWith('/status'))return {available:true,requestToken:'FICTIONAL_SESSION'};
     if(url.includes('/inbox'))return {connection:{state:'open'},chats:[chat],chat,unreadCount:0};
     const body=JSON.parse(init.body);if(url.endsWith('/review')){reviews.push(body.text);return {reviewToken:'R'.repeat(24),version:1,text:body.text,recipient:chat,expiresAt:Date.now()+300000};}
@@ -738,5 +738,117 @@ test('interrupting a spoken cleaning plan: the plan stays, an interrupted read-b
   h.app.finishSpeech();await flush();
   assert.ok(!h.said().some(t=>/approve and send|confirm these cleanings|\bgo ahead\b|\bconfirm\b/i.test(t)),'no spoken control phrases: '+JSON.stringify(h.said()));
   m=h.said().length;await h.user('Go ahead and schedule it');assert.equal(h.app.run('D.sessions.length'),1);assert.match(h.spokenSince(m),/^Scheduled one checkout cleaning\./);
+  h.app.click('close');
+});
+
+test('spoken booking navigation and close operate the internal shell and preserve the listening session',async()=>{
+  const app=desktopRuntime({agent:true}),visited=[];app.context.workspaceNavigate=d=>visited.push(d);
+  app.run('openJarvis()');await flush();app.click('mic');
+  app.hear('Open the booking tab');await flush();
+  assert.equal(app.root().dataset.page,'bookings');assert.equal(app.el('jarvis-bookings-page').hidden,false);assert.equal(app.root().removed,false);assert.deepEqual(visited,[]);
+  // Finish the app acknowledgement and advance the existing continuous-listening delay.
+  app.finishSpeech();app.runDelay(450);
+  app.hear('close it');await flush();assert.equal(app.root().dataset.page,'overview');assert.equal(app.root().removed,false);assert.deepEqual(visited,[]);
+  app.click('close');
+});
+test('Hermes navigation decisions use the same internal calendar instead of leaving Jarvis',async()=>{
+  const app=desktopRuntime({agent:true,understand:async()=>({kind:'navigate',destination:'bookings'})}),visited=[];app.context.workspaceNavigate=d=>visited.push(d);
+  app.run('openJarvis()');await flush();app.click('mic');app.hear('Could we have a look at the reservation page?');await flush();
+  assert.equal(app.root().dataset.page,'bookings');assert.equal(app.root().removed,false);assert.deepEqual(visited,[]);app.click('close');
+});
+
+/* ── Natural tasks entirely by voice (live session, FICTIONAL records, in-memory storage; no provider or real data). ── */
+const TASK_STORE="var __store={};var DB='seravillas_v1';SV_STORAGE={getItem:k=>__store[k]||null,setItem:(k,v)=>{__store[k]=String(v);},removeItem:k=>{delete __store[k];}};var __saves=0;save=function(){__saves++;SV_STORAGE.setItem(DB,JSON.stringify(D));};var __n=0;uid=function(){return 'task'+(++__n);};render=function(){};D.props=[{id:'p-test',name:'Villa Test'},{id:'p-other',name:'Casa Ficticia'}];";
+function friday(app){return app.run("(()=>{const t=today();const d=new Date(t+'T12:00:00Z').getUTCDay();return addDays(t,((5-d+7)%7)||7);})()");}
+test('voice task: draft, interrupted review, correction, local spoken yes saves once; model output never approves',async()=>{
+  const bodies=[];const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions,bodies});
+  h.app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const tasks=()=>JSON.parse(h.app.run('JSON.stringify(D.tasks)')),card=()=>h.app.el('jarvis-task-review');
+  decisions.push({kind:'task',operation:{action:'create',text:'check the pool pump',property:'Villa Test',dueDate:h.app.run('addDays(today(),1)')}});
+  let m=h.said().length;await h.user('Add a task to check the pool pump at Villa Test tomorrow');await o.clientTools.ask_hermes({request:'add a task'});await flush();
+  assert.match(h.lastLine(),/^New task: “Check the pool pump” at Villa Test, due \w+ \d+ \w+, medium priority\. Shall I save it\?$/);
+  assert.equal(card().hidden,false,'the draft is shown inside Jarvis');assert.equal(h.vol.at(-1),0,'the agent stays silent while the app reads the draft');assert.equal(tasks().length,0);
+  // Antonio talks over the review: playback stops; an incomplete review cannot approve and is presented again.
+  o.onVadScore({vadScore:.9});o.onVadScore({vadScore:.9});h.app.finishSpeech();await flush();
+  m=h.said().length;await h.user('Yes');assert.equal(tasks().length,0,'an interrupted review is not approval');assert.match(h.lastLine(),/^Before I save anything, here are the details\./);
+  h.app.finishSpeech();await flush();
+  // A correction goes to the agent -> Hermes; only the changed fields change and a fresh approval is needed.
+  decisions.push({kind:'task',operation:{action:'revise',dueDate:friday(h.app),priority:'high'}});
+  m=h.said().length;await h.user('Actually Friday, and make it high priority');await o.clientTools.ask_hermes({request:'revise the task'});await flush();
+  assert.equal(bodies.at(-1).context.dialogue.taskDraft.awaitingApproval,true);assert.equal(bodies.at(-1).context.dialogue.taskDraft.text,'Check the pool pump');
+  assert.match(h.lastLine(),/^Updated\. New task: “Check the pool pump” at Villa Test, due Friday \d+ \w+, high priority\. Shall I save it\?$/);
+  // A model decision or tool argument cannot approve.
+  decisions.push({kind:'task',operation:{action:'confirm'}});await h.user('Okay go on then and do whatever');await o.clientTools.ask_hermes({request:'confirm the task'});await flush();assert.equal(tasks().length,0);
+  h.app.finishSpeech();await flush();
+  await h.user('read it again');h.app.finishSpeech();await flush();
+  m=h.said().length;await h.user('Yes');assert.equal(tasks().length,1,'saved once');assert.match(h.spokenSince(m),/^Done, that’s on your task list\./);
+  const t=tasks()[0];assert.deepEqual([t.text,t.propId,t.dueDate,t.priority,t.urgent],['Check the pool pump','p-test',friday(h.app),'high',true]);
+  assert.equal(JSON.parse(h.app.run('__store.seravillas_v1')).tasks.length,1,'verified in storage');assert.equal(card().hidden,true);
+  await h.user('Confirm');await h.user('Yes');assert.equal(tasks().length,1,'repeated approval never saves twice');assert.equal(h.app.run('__saves'),1);
+  assert.ok(!h.said().some(t=>/\b(?:yes|confirm|approve and send)\b/i.test(t)),'Jarvis never says an approval word aloud: '+JSON.stringify(h.said()));
+  h.app.click('close');
+});
+test('voice task: decline, yes with nothing pending, side question then yes, and views opened/closed keep the draft',async()=>{
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions});
+  h.app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();const tasks=()=>JSON.parse(h.app.run('JSON.stringify(D.tasks)'));
+  await h.user('Yes');assert.equal(tasks().length,0,'yes before any approval request saves nothing');
+  decisions.push({kind:'task',operation:{action:'create',text:'oil the gate hinges'}});await h.user('Add a task to oil the gate hinges');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  let m=h.said().length;await h.user('No thanks');assert.match(h.lastLine(),/^Okay, cancelled\. Nothing was saved\./);assert.equal(h.app.el('jarvis-task-review').hidden,true);
+  await h.user('Yes');assert.equal(tasks().length,0,'a declined draft cannot be revived by yes');
+  decisions.push({kind:'task',operation:{action:'create',text:'order pool chlorine'}});await h.user('Add a task to order pool chlorine');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  // Opening and closing views keeps the conversation and the pending draft.
+  await h.user('Open the booking tab');assert.equal(h.app.root().dataset.page,'bookings');h.app.finishSpeech();await flush();
+  await h.user('close it');assert.equal(h.app.root().dataset.page,'overview');assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review');h.app.finishSpeech();await flush();
+  // A side question answered by the agent: a bare yes is then a short re-check, not a save.
+  await h.user('Who is arriving tomorrow?');o.onMessage({source:'ai',message:'Nobody is arriving tomorrow, it is a quiet day.',event_id:900});await flush();
+  m=h.said().length;await h.user('Yes');assert.equal(tasks().length,0);assert.match(h.lastLine(),/^Just to check: save the new task “Order pool chlorine”/);
+  h.app.finishSpeech();await flush();await h.user('Yes');assert.equal(tasks().length,1);assert.equal(tasks()[0].text,'Order pool chlorine');
+  h.app.click('close');
+});
+test('voice task edits: ambiguous match, one field only, removing a deadline, stale edit and storage failure',async()=>{
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions});
+  h.app.run(TASK_STORE+"D.tasks=[{id:'a',text:'Check pool pump',propId:'p-test',priority:'medium',urgent:false,done:false,dueDate:addDays(today(),3)},{id:'b',text:'Fix pool light',propId:'p-other',priority:'low',urgent:false,done:false,dueDate:addDays(today(),4)}];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const task=id=>JSON.parse(h.app.run('JSON.stringify(D.tasks.find(t=>t.id==="'+id+'"))'));const before=task('b');
+  decisions.push({kind:'task',operation:{action:'update',task:'pool',priority:'high'}});
+  let m=h.said().length;await h.user('Make the pool task high priority');await o.clientTools.ask_hermes({request:'task'});await flush();
+  assert.match(h.lastLine(),/More than one task matches: 1\. Check pool pump \(Villa Test\); 2\. Fix pool light \(Casa Ficticia\)\. Which one\?/);h.app.finishSpeech();await flush();
+  decisions.push({kind:'reply',text:'Which task do you mean, the first or the second?'});
+  await h.user('Yes');assert.deepEqual(task('b'),before,'yes to a which-one question changes nothing');h.app.finishSpeech();await flush();
+  await h.user('The second one');h.app.finishSpeech();await flush();await h.user('Yes');
+  assert.deepEqual({...task('b'),priority:'low',urgent:false},before,'only the priority changed');assert.equal(task('b').priority,'high');
+  decisions.push({kind:'task',operation:{action:'update',task:'it',dueDate:''}});await h.user('Remove the deadline from it');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  await h.user('Confirm');assert.equal(task('b').dueDate,'');
+  // Stale: the task changes elsewhere after the review; nothing is written and the change is offered again.
+  decisions.push({kind:'task',operation:{action:'update',task:'check pool pump',priority:'low'}});await h.user('Make check pool pump low priority');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  h.app.run("D.tasks[0].text='Check pool pump and filter'");m=h.said().length;await h.user('Yes');assert.equal(task('a').priority,'medium');assert.match(h.lastLine(),/changed since I read it, so nothing was saved/);
+  h.app.finishSpeech();await flush();await h.user('Yes');assert.equal(task('a').priority,'low');
+  // Storage failure: reported as unverified, never retried.
+  h.app.run("save=function(){__saves++;}");const saves=h.app.run('__saves');
+  decisions.push({kind:'task',operation:{action:'create',text:'test the smoke alarm'}});await h.user('Add a task to test the smoke alarm');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  await h.user('Yes');assert.match(h.lastLine(),/couldn’t verify that the task was stored/);assert.match(h.app.el('jarvis-error').textContent,/could not be verified/);
+  await h.user('Confirm');assert.equal(h.app.run('__saves'),saves+1,'one attempt only');assert.equal(h.app.run('D.tasks.filter(t=>t.text==="Test the smoke alarm").length'),1);
+  h.app.click('close');
+});
+test('typed task approval and the on-screen Confirm button use the same draft; a stale button version is refused',async()=>{
+  const decisions=[{kind:'task',operation:{action:'create',text:'restock towels',property:'Villa Test'}},{kind:'task',operation:{action:'create',text:'service the boiler'}}];
+  const app=desktopRuntime({agent:true,understand:async()=>decisions.shift()});app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();
+  await app.context.SV_JARVIS.send('Add a task to restock towels at Villa Test');await flush();assert.equal(app.el('jarvis-task-review').hidden,false);
+  await app.context.SV_JARVIS.send('yes');assert.equal(app.run('D.tasks.length'),1,'typed yes after the draft is shown');
+  await app.context.SV_JARVIS.send('Add a task to service the boiler');await flush();
+  const version=app.el('jarvis-task-review').dataset.version;app.el('jarvis-task-review').dataset.version='0';app.click('task-confirm');assert.equal(app.run('D.tasks.length'),1,'an old screen version cannot approve');
+  app.el('jarvis-task-review').dataset.version=String(Number(version)+1);app.click('task-confirm');assert.equal(app.run('D.tasks.length'),2);assert.equal(app.run('D.tasks[1].text'),'Service the boiler');
+  app.click('close');
+});
+test('live voice navigation: views open inside Jarvis immediately, the agent stays silent, the conversation continues; ending it is separate',async()=>{
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions}),visited=[];h.app.context.workspaceNavigate=d=>visited.push(d);
+  h.app.run(TASK_STORE+"D.tasks=[{id:'a',text:'Check pool pump',propId:'p-test',priority:'medium',done:false,dueDate:''}];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  await h.user('Could you open the booking tab for me?');assert.equal(h.app.root().dataset.page,'bookings');assert.equal(h.app.el('jarvis-bookings-page').hidden,false);
+  assert.equal(h.vol.at(-1),0,'the app answers; the agent reply to that turn stays silent');assert.equal(h.app.phase()==='paused',false);h.app.finishSpeech();await flush();
+  await h.user('show me my tasks');assert.equal(h.app.root().dataset.page,'overview');assert.ok(h.app.el('jarvis-tasks-section').classList.contains('is-expanded'),'the real Tasks panel opens');h.app.finishSpeech();await flush();
+  await h.user('close it');assert.ok(!h.app.el('jarvis-tasks-section').classList.contains('is-expanded'));h.app.finishSpeech();await flush();
+  // The conversation is still live: a normal question still goes to the agent.
+  await h.user('Who is arriving tomorrow?');o.onMessage({source:'ai',message:'Nobody is arriving tomorrow.',event_id:901});await flush();assert.match(h.lastLine(),/Nobody is arriving tomorrow/);
+  assert.deepEqual(visited,[],'nothing left Jarvis');
+  await h.user('End the conversation');assert.equal(h.app.phase(),'paused');assert.equal(h.app.root().removed,false,'ending the conversation keeps Jarvis on screen');
   h.app.click('close');
 });

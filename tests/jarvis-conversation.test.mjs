@@ -46,3 +46,16 @@ test('structured understanding travels through the existing authenticated n8n ro
   modelAnswer=JSON.stringify({kind:'whatsapp',intent:{kind:'approve'}});response=await ask();assert.equal(response.status,200);assert.equal((await response.json()).decision.kind,'clarify');
   assert.ok(calls.every(c=>!c.url.includes('/whatsapp/send')));
 });
+
+test('navigation and structured tasks carry bounded current UI and draft context, never approval',()=>{
+  assert.deepEqual(parseDecision('{"kind":"navigate","destination":"close"}'),{kind:'navigate',destination:'close'});
+  assert.deepEqual(parseDecision('{"kind":"task","operation":{"action":"revise","dueDate":"2026-10-23"}}'),{kind:'task',operation:{action:'revise',dueDate:'2026-10-23'}});
+  assert.throws(()=>parseDecision('{"kind":"task","operation":{"action":"confirm"}}'));
+  assert.throws(()=>parseDecision('{"kind":"task","operation":{"action":"create","approve":true}}'));
+  assert.deepEqual(parseDecision('{"kind":"task","operation":{"action":"update","option":2}}'),{kind:'task',operation:{action:'update',option:2}});
+  assert.throws(()=>parseDecision('{"kind":"task","operation":{"action":"update","option":9}}'));
+  assert.deepEqual(parseDecision('{"kind":"task","operation":{"action":"cancel"}}'),{kind:'task',operation:{action:'cancel'}});
+  assert.throws(()=>parseDecision('{"kind":"task","operation":{"action":"save"}}'));
+  const c=conversationContext({schema:1,ui:{page:'bookings',records:true},taskDraft:{type:'create',stage:'review',awaitingApproval:true,text:'Inspect pool',property:'Villa Mar',dueDate:'2026-10-23',priority:'high',secret:'PRIVATE',approvalToken:'PRIVATE'}},[]);
+  assert.equal(c.ui.page,'bookings');assert.deepEqual([c.taskDraft.text,c.taskDraft.property,c.taskDraft.stage,c.taskDraft.awaitingApproval],['Inspect pool','Villa Mar','review',true]);assert.ok(!JSON.stringify(c).includes('PRIVATE'));
+});

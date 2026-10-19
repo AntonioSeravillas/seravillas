@@ -403,3 +403,13 @@ button.jp-check:hover{border-color:var(--j-accent)!important;background:rgba(239
 @media(min-width:2400px){.jarvis-root .jarvis-today,.jarvis-root .jarvis-side{zoom:1.26}}
 @media(min-width:2800px){.jarvis-root .jarvis-today,.jarvis-root .jarvis-side{zoom:1.38}}
 @media(min-width:3400px){.jarvis-root .jarvis-today,.jarvis-root .jarvis-side{zoom:1.55}}
+
+/* ── Task review card (in Conversation): proposed fields, with the previous value struck through for an edit. ── */
+.jarvis-task-fields{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:10px 0 8px;font-size:13px;line-height:1.45}
+.jarvis-task-fields dt{color:var(--j-muted);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;align-self:baseline}
+.jarvis-task-fields dd{margin:0;color:var(--j-text);overflow-wrap:anywhere}
+.jarvis-task-fields dd.is-changed{color:var(--j-accent)}
+.jarvis-task-fields s{margin-left:6px;color:var(--j-muted);font-size:12px}
+.jp-panel .jarvis-task-review #jarvis-task-note{font-size:12px;color:var(--j-muted)}
+/* On working pages the side column floats over the ring stage; keep review cards (task, plan, WhatsApp) legible. */
+.jarvis-root.is-workpage .jp-panel .jarvis-voice-review{background:linear-gradient(rgba(239,122,46,.045),rgba(239,122,46,.045)),rgba(15,12,10,.96)}
