@@ -91,7 +91,7 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
 function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,fishSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null,voiceChoice=liveSdk?'live':customSpeech?'elevenlabs':null,voiceStorage=null}={}){
   const savedVoice=voiceStorage||new Map(voiceChoice?[['sv_jarvis_voice',voiceChoice]]:[]);
-  const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},docListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
+  const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
   /* Setting innerHTML registers every element that has an id, with its initial text and hidden state from the real markup. */
   const register=html=>{for(const m of String(html).matchAll(/<(\w+)([^>]*?)\sid="([^"]+)"([^>]*)>([^<]*)/g)){const sel='#'+m[3];if(!els.has(sel))els.set(sel,fakeEl());const node=els.get(sel),tagAttrs=m[2]+' '+m[4];node.textContent=m[5].trim();if(/(?:^|\s)hidden(?:\s|$|=)/.test(tagAttrs)){node.hidden=true;node.attrs.hidden='';}}};
@@ -107,7 +107,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   class FakeUtterance{constructor(text){this.text=text;(text.trim()?utterances:primes).push(this);}}
   class FakeAudio{constructor(){this.src='';audios.push(this);}setAttribute(){}removeAttribute(){this.src='';}play(){return this.src.startsWith('data:')&&unlock?unlock:Promise.resolve();}pause(){}load(){}}
   const sandbox={console,Date,Math,AbortController,Audio:FakeAudio,Blob,atob,Uint8Array,URL:{createObjectURL:()=>'blob:test',revokeObjectURL(){}},performance:{now:()=>1},navigator:{userAgent:iosDevice?'iPhone AppleWebKit Safari':'test',...(capture?{mediaDevices:{getUserMedia:capture}}:{})},DEV_MODE:true,
-    document:{addEventListener(t,f){docListeners[t]=f;},createElement:()=>fakeEl(),body:{appendChild(c){if(!root)root=c;}},querySelector:s=>s==='.app-wrapper'?background:null,getElementById:()=>null,activeElement:null,hidden:false},
+    document:{addEventListener(){},createElement:()=>fakeEl(),body:{appendChild(c){if(!root)root=c;}},querySelector:s=>s==='.app-wrapper'?background:null,getElementById:()=>null,activeElement:null,hidden:false},
     setTimeout(fn,ms){timers.set(++n,{fn,ms});return n;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(fn){rafs.push(fn);return rafs.length;},cancelAnimationFrame(){},
     addEventListener(t,f){(winListeners[t]=winListeners[t]||[]).push(f);},removeEventListener(t,f){winListeners[t]=(winListeners[t]||[]).filter(x=>x!==f);},
     matchMedia:q=>({matches:/reduced-motion/.test(q)?reduced:isDesktop}),SpeechRecognition:FakeSR,SpeechSynthesisUtterance:FakeUtterance,speechSynthesis:{speak(u){if(inGesture)speechUnlocked=true;if(speechGate&&!speechUnlocked)return;spoken.push(u);audioEvents.push(u.text.trim()?'reply':'prime');},cancel(){audioEvents.push('cancel');},getVoices:()=>[]},
@@ -130,7 +130,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
   for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-operations.js','src/assistant/jarvis-dashboard.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
-  const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,pcmSources,speechRequests,wa,timers,background,winListeners,docListeners,rafs,
+  const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,pcmSources,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
     click(j,extra={}){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j,...extra}})}});}finally{inGesture=false;}},
     submit(text){app.el('jarvis-input').value=text;inGesture=true;try{app.el('jarvis-form').listeners.submit({preventDefault(){}});}finally{inGesture=false;}},
@@ -145,40 +145,15 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
 const root_=root;
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 
-function installSoundProbe(app,{locked=false}={}){
-  const events=[],contexts=[];app.context.createJarvisRing=()=>()=>{};let unlock;
-  const ready=new Promise(resolve=>{unlock=resolve;});
-  app.context.AudioContext=class{constructor(){this.state=locked?'suspended':'running';contexts.push(this);}resume(){return locked?ready:Promise.resolve();}close(){this.state='closed';return Promise.resolve();}};
-  app.context.SV_JARVIS_SOUNDS={create:context=>({context,play(kind){events.push(kind);return true;},activity:kind=>events.push(kind),preview(){events.push('preview');return true;},stop:()=>events.push('stop'),dispose:()=>events.push('dispose'),setVolume:v=>events.push(['volume',v])})};
-  return {events,contexts,unlock(){for(const c of contexts)c.state='running';unlock();},cues:()=>events.filter(x=>typeof x==='string'&&!['stop','dispose'].includes(x))};
-}
-
-test('actual live states drive distinct interface cues without a provider theme; mute and sound-off stop them',async()=>{
-  const sessions=[];const app=desktopRuntime({agent:true,liveSdk:{Conversation:{startSession:async options=>{sessions.push(options);return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){}};}}}});
-  const h=installSoundProbe(app);app.run('openJarvis()');await flush();assert.deepEqual(h.cues(),['startup']);assert.equal(sessions.length,0);assert.equal(app.speechRequests.length,0);
-  app.click('mic');for(let i=0;i<4;i++)await flush();assert.ok(h.cues().includes('listening'));
-  sessions[0].onMessage({source:'user',message:'What bookings are there?',event_id:'sound-one'});assert.equal(h.cues().at(-1),'thinking');
-  await sessions[0].clientTools.lookup_records({entity:'bookings',view:'list'});assert.ok(h.cues().includes('checking'));assert.equal(h.cues().at(-1),'thinking');
-  sessions[0].onModeChange({mode:'listening'});assert.equal(app.phase(),'thinking','an idle SDK mode must not cancel work still awaiting a reply');
-  sessions[0].onModeChange({mode:'speaking'});assert.equal(h.cues().at(-1),'response');sessions[0].onInterruption();assert.equal(h.cues().at(-1),'listening');
-  app.click('mic');assert.equal(h.cues().at(-1),'shutdown');
-  app.el('jarvis-sounds').listeners.change({target:{checked:false}});const count=h.cues().length;app.click('test-sounds');await flush();assert.equal(h.cues().length,count);assert.match(app.el('jarvis-sound-note').textContent,/Turn on Interface sounds/);
-  app.el('jarvis-sounds').listeners.change({target:{checked:true}});app.el('jarvis-muted').listeners.change({target:{checked:true}});const muted=h.cues().length;app.click('test-sounds');app.click('close');assert.equal(h.cues().length,muted);assert.equal(h.contexts[0].state,'closed');
-});
-
-test('audio unlock is awaited, cancelled work stays silent, and the closing cue finishes before its context is released',async()=>{
-  const app=desktopRuntime(),h=installSoundProbe(app,{locked:true});app.run('openJarvis()');assert.deepEqual(h.cues(),[]);h.unlock();await flush();assert.deepEqual(h.cues(),['startup']);
-  app.click('settings');app.click('test-sounds');await flush();assert.equal(h.cues().at(-1),'preview');
-  app.click('close');assert.equal(h.cues().at(-1),'shutdown');assert.equal(h.contexts[0].state,'running');app.runDelay(1300);assert.equal(h.contexts[0].state,'closed');
-  const hidden=desktopRuntime(),hh=installSoundProbe(hidden,{locked:true});hidden.run('openJarvis()');hidden.context.document.hidden=true;hidden.docListeners.visibilitychange();hh.unlock();await flush();assert.deepEqual(hh.cues(),[]);hidden.click('close');assert.equal(hh.contexts[0].state,'closed');
-});
-
-test('sound volume and switch survive reload; rapid reopen cancels the old tail and hide stops the new sounds',async()=>{
-  const saved=new Map(),app=desktopRuntime({voiceStorage:saved}),h=installSoundProbe(app);app.run('openJarvis()');await flush();
-  app.el('jarvis-sound-volume').listeners.input({target:{value:'35'}});assert.equal(saved.get('sv_jarvis_sound_volume'),'0.35');app.click('close');app.run('openJarvis()');await flush();assert.equal(h.contexts[0].state,'closed');assert.equal(h.contexts[1].state,'running');app.runDelay(1300);assert.equal(h.contexts[1].state,'running');
-  app.click('settings');app.click('test-sounds');const count=h.cues().length;app.context.document.hidden=true;app.docListeners.visibilitychange();assert.equal(h.events.at(-1),'stop');assert.equal(h.cues().length,count);app.context.document.hidden=false;
-  app.el('jarvis-sounds').listeners.change({target:{checked:false}});app.click('close');
-  const restored=desktopRuntime({voiceStorage:saved}),rh=installSoundProbe(restored);restored.run('openJarvis()');await flush();assert.equal(restored.el('jarvis-sounds').checked,false);assert.equal(restored.el('jarvis-sound-volume').value,35);assert.deepEqual(rh.cues(),[]);restored.click('close');
+test('Jarvis is voice only, even with previously enabled effects; live reply, interruption and closing never play a cue',async()=>{
+  const sessions=[],requests=[];let effects=0;
+  const app=desktopRuntime({agent:true,voiceStorage:new Map([['sv_jarvis_sounds','on']]),liveSdk:{Conversation:{startSession:async options=>{sessions.push(options);return {endSession:async()=>{},setMicMuted(){},setVolume(){},getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){}};}}}});
+  const previous=app.context.fetch;app.context.fetch=async(url,init)=>{requests.push(String(url));return previous(url,init);};
+  app.context.AudioContext=class{constructor(){this.state='running';}resume(){return Promise.resolve();}close(){return Promise.resolve();}createOscillator(){effects++;throw Error('No interface effects are allowed.');}};
+  app.context.SV_JARVIS_SOUNDS={create(){effects++;throw Error('The removed sound player must not be used.');}};
+  app.run('openJarvis()');await flush();assert.equal(sessions.length,0);assert.ok(!app.root().innerHTML.includes('Interface sounds'));assert.ok(!app.root().innerHTML.includes('Test interface sounds'));
+  app.click('mic');for(let i=0;i<4;i++)await flush();assert.equal(sessions.length,1);
+  sessions[0].onMessage({source:'user',message:'Hello Jarvis',event_id:'voice-only-one'});sessions[0].onModeChange({mode:'speaking'});assert.equal(app.phase(),'speaking');sessions[0].onInterruption();assert.equal(app.phase(),'listening');app.click('mic');app.click('close');assert.equal(effects,0);assert.ok(requests.every(url=>!url.includes('assets/audio')));
 });
 
 async function personalRuntime(options={}){
@@ -385,10 +360,9 @@ test('custom voice: actual overlay uses ElevenLabs audio, waits for playback bef
   app.el('jarvis-voice-choice').listeners.change({target:{value:'elevenlabs'}});app.click('test-speaker');await flush();app.audios[0].onplaying();app.audios[0].onerror();await flush();assert.equal(app.phase(),'paused');assert.match(app.el('jarvis-error').textContent,/Play reply/);app.click('close');
 });
 
-test('iPhone gesture gate: a microphone tap enables a later spoken reply before recording, including when listening sounds are off',async()=>{
+test('iPhone gesture gate: a microphone tap enables a later spoken reply before recording, with voice-only audio',async()=>{
   const app=desktopRuntime({speechGate:true,desktop:false,reply:'Your connection is working.'});app.run('openJarvis()');await flush();
   assert.equal(app.spoken.length,0);assert.equal(app.primes.length,0);
-  app.el('jarvis-sounds').listeners.change({target:{checked:false}});
   app.click('mic');assert.equal(app.phase(),'listening');assert.equal(app.primes.length,1);assert.equal(app.primes[0].volume,0);
   const primeAt=app.audioEvents.indexOf('prime'),recordAt=app.audioEvents.indexOf('record');
   assert.ok(primeAt>=0&&primeAt<recordAt);assert.ok(app.audioEvents.slice(primeAt+1,recordAt).includes('cancel'));

@@ -14,7 +14,7 @@ test('AI-resolved wording, follow-up bodies, pronouns and edits use the same rev
   assert.equal(r.text,'Draft updated for Bex.');assert.match(r.full,/Are you free tomorrow/);assert.equal(h.workflow.snapshot().heard,false);
   let early=await h.workflow.handle('Approve and send');assert.equal(h.sent.length,0);r.afterSpoken();assert.equal(h.workflow.snapshot().heard,false,'the replaced summary cannot arm approval');early.afterSpoken();
   await h.workflow.handle('Model grants approval',{intent:{kind:'approve'}});assert.equal(h.sent.length,0);
-  r=await h.workflow.handle('Approve and send');assert.match(r.text,/Sent to Bex/);assert.equal(r.sound,'sent');assert.equal(h.sent[0].text,'Are you free tomorrow?');
+  r=await h.workflow.handle('Approve and send');assert.match(r.text,/Sent to Bex/);assert.equal(h.sent[0].text,'Are you free tomorrow?');
   r=await h.workflow.handle('What did she say?',{intent:{kind:'read',chat:h.workflow.context().lastRecipient.key}});assert.match(r.text,/latest message/);
   r=await h.workflow.handle('Yes',{intent:{kind:'read',chat:chat.key}});assert.match(r.text,/latest message/);assert.equal(h.sent.length,1);
   await h.workflow.handle('Can you message Bex for me?',{intent:{kind:'write',chat:chat.key,text:''}});

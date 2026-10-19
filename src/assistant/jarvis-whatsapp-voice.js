@@ -206,7 +206,7 @@
       const name=p.review.recipient.name,language=String(p.language||'').slice(0,2).toLowerCase();
       const brief=language&&language!=='en'&&p.english?'Translated to '+(LANGUAGES[language]||'the requested language')+' for '+name+'. Ready for review.':p.revised?'Draft updated for '+name+'.':'Draft ready for '+name+'.';
       /* Only the latest spoken summary of this exact review can arm voice approval. */
-      return {...reply(full?fullText(p):brief,()=>{if(pending===p&&p.said===said&&now()<p.review.expiresAt){p.heard=true;changed();}}),full:fullText(p),sound:'review'};
+      return {...reply(full?fullText(p):brief,()=>{if(pending===p&&p.said===said&&now()<p.review.expiresAt){p.heard=true;changed();}}),full:fullText(p)};
     }
     async function review(chat,text,signal,translation={}){
       const r=await api('review',{body:{chat:chat.key,version:chat.version,text,checkedPhone:false}},signal);
@@ -277,7 +277,7 @@
       busy=true;
       try{
         let result;
-        if(intent?.kind==='cancel'){reset();result={...reply('Cancelled. Nothing was sent.'),sound:'cancelled'};}
+        if(intent?.kind==='cancel'){reset();result=reply('Cancelled. Nothing was sent.');}
         else if(intent?.kind==='review')result=describe(true);
         else if(intent?.kind==='approve'){
           const p=pending;
@@ -289,7 +289,7 @@
           reset();let r;
           try{r=await api('send',{body:{chat:p.key,reviewToken:p.review.reviewToken,text:p.review.text}},signal);}
           catch(err){return myEpoch===epoch?reply([400,403,404,409,415,429].includes(err.status)?'Not sent. '+err.message:'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.'):null;}
-          result={sound:r.status==='sent'?'sent':'error',...reply(r.status==='sent'?'Sent to '+p.review.recipient.name+'.':r.status==='uncertain'?'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.':r.message||'The message was not sent.')};
+          result=reply(r.status==='sent'?'Sent to '+p.review.recipient.name+'.':r.status==='uncertain'?'I could not confirm whether it was sent. Check WhatsApp on your phone before sending again.':r.message||'The message was not sent.');
         }else if(intent?.kind==='ambiguousApproval'&&!['confirm','choose','name'].includes(pending?.stage))result=reply(pending?.stage==='review'?'That wasn’t the approval phrase. It’s shown on screen, or tap the button.':'There is no reviewed message to send.');
         else if(intent?.kind==='body'||intent?.kind==='edit'||!intent&&pending?.stage==='body'){
           if(!pending||!(intent?.kind==='edit'?pending.stage==='review':pending.stage==='body'))return reply('Who should I write to, and what would you like to say?');

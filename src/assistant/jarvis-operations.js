@@ -286,7 +286,7 @@
       if(now()>plan.expires){plan=null;return {kind:'clarify',text:'That plan expired, so I dropped it. Shall I prepare it again?'};}
       const next=copy(plan);return revise_(next,op);
     }
-    function cancel(){const had=!!plan&&!plan.committed;plan=null;partial=null;return {kind:'reply',sound:had?'cancelled':null,text:had?'Okay, I’ve dropped that plan. Nothing was saved.':'There’s nothing pending, and nothing was saved.'};}
+    function cancel(){const had=!!plan&&!plan.committed;plan=null;partial=null;return {kind:'reply',text:had?'Okay, I’ve dropped that plan. Nothing was saved.':'There’s nothing pending, and nothing was saved.'};}
     /* “Read it again”: the full plan, spoken in full. */
     function repeat(){if(!plan)return {kind:'reply',text:'There’s no cleaning plan waiting.'};const r=publish(copy(plan));r.spoken=r.text.replace(/ Say “confirm these cleanings”, tap Confirm, or tell me what to change.$/,'');return r;}
 
