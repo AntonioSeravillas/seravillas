@@ -889,3 +889,26 @@ test('live voice event path: real phrasings open Bookings and the full Tasks pag
   assert.ok(live());assert.deepEqual(visited,[]);assert.equal(h.app.root().removed,false);
   h.app.click('close');
 });
+
+test('light/dark toggle: dark by default, switches instantly without touching voice, page, draft or records, saved per device, scoped to Jarvis',async()=>{
+  let ended=0;const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions});
+  const bodyClasses=new Set();h.app.context.document.body.classList={add:(...c)=>c.forEach(x=>bodyClasses.add(x)),remove:(...c)=>c.forEach(x=>bodyClasses.delete(x)),toggle(c,on){on?bodyClasses.add(c):bodyClasses.delete(c);return on;},contains:c=>bodyClasses.has(c)};
+  h.app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const root=h.app.root(),toggle=h.app.el('jarvis-theme-toggle');
+  assert.equal(root.classList.contains('jv-light'),false,'dark is the default');assert.equal(toggle.attrs['aria-pressed'],'false');assert.match(root.innerHTML,/data-j="theme"[^>]*aria-label="Light mode"/);
+  decisions.push({kind:'task',operation:{action:'create',text:'oil the gate hinges'}});await h.user('Add a task to oil the gate hinges');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  await h.user('Open tasks');h.app.finishSpeech();await flush();
+  const before={page:root.dataset.page,draft:h.app.run('SV_JARVIS.preview.task().stage'),lines:h.app.texts(h.app.el('jarvis-transcript')).length,phase:h.app.phase(),records:h.app.run('__store.seravillas_v1||null'),saves:h.app.run('__saves'),mic:h.mic.length};
+  h.app.click('theme');
+  assert.equal(root.classList.contains('jv-light'),true);assert.ok(bodyClasses.has('jarvis-light'),'dialogs outside the Jarvis root follow');
+  assert.equal(toggle.attrs['aria-pressed'],'true');assert.equal(toggle.title,'Switch to dark mode');assert.equal(h.app.run("SV_STORAGE.getItem('sv_jarvis_theme')"),'light');
+  assert.deepEqual({page:root.dataset.page,draft:h.app.run('SV_JARVIS.preview.task().stage'),lines:h.app.texts(h.app.el('jarvis-transcript')).length,phase:h.app.phase(),records:h.app.run('__store.seravillas_v1||null'),saves:h.app.run('__saves'),mic:h.mic.length},before,'presentation only');
+  assert.equal(h.app.run("document.documentElement?.getAttribute?.('data-theme')??null"),null,'the app’s own theme attribute is untouched');
+  // Conversation continues normally in light mode.
+  await h.user('Close it');assert.equal(root.dataset.page,'overview');assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review');
+  h.app.click('close');assert.ok(!bodyClasses.has('jarvis-light')&&!bodyClasses.has('jarvis-open'),'closing Jarvis leaves the surrounding app untouched');
+  // Reopening restores the saved choice; switching back saves dark.
+  /* (The harness keeps returning the first root after a reopen, so the reopened state is read from the toggle and page.) */
+  h.app.run('openJarvis()');await flush();assert.ok(bodyClasses.has('jarvis-light'));assert.equal(h.app.el('jarvis-theme-toggle').attrs['aria-pressed'],'true');assert.equal(h.app.run('SV_JARVIS.preview.theme()'),'light');
+  h.app.click('theme');assert.ok(!bodyClasses.has('jarvis-light'));assert.equal(h.app.el('jarvis-theme-toggle').attrs['aria-pressed'],'false');assert.equal(h.app.run("SV_STORAGE.getItem('sv_jarvis_theme')"),'dark');h.app.click('close');
+});

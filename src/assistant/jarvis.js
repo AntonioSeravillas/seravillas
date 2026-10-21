@@ -32,8 +32,17 @@
     gear:'<circle cx="12" cy="12" r="3"/><path d="M19.3 13.6a7.5 7.5 0 0 0 0-3.2l1.9-1.5-1.9-3.3-2.3.9a7.5 7.5 0 0 0-2.7-1.6L14 2.5h-4l-.4 2.4a7.5 7.5 0 0 0-2.7 1.6l-2.3-.9-1.9 3.3 1.9 1.5a7.5 7.5 0 0 0 0 3.2l-1.9 1.5 1.9 3.3 2.3-.9a7.5 7.5 0 0 0 2.7 1.6l.4 2.4h4l.4-2.4a7.5 7.5 0 0 0 2.7-1.6l2.3.9 1.9-3.3z"/>',
     plus:'<path d="M12 5.5v13M5.5 12h13"/>',arrow:'<path d="M5 12h13.5M13 6.5l5.5 5.5-5.5 5.5"/>',dots:'<path d="M5.5 12h.01M12 12h.01M18.5 12h.01" stroke-width="2.6"/>',
     wave:'<path d="M3.5 10.5v3M6.5 8v8M9.5 5v14M12.5 8.5v7M15.5 6.5v11M18.5 9v6M21 11v2"/>',doc:'<path d="M14 3.2H6.4v17.6h11.2V6.8z"/><path d="M14 3.2v3.6h3.6M9 12.2h6M9 15.8h6"/>',
-    group:'<circle cx="9" cy="9" r="2.7"/><circle cx="16.2" cy="9.6" r="2.1"/><path d="M3.8 18.4c.5-2.7 2.5-4.5 5.2-4.5s4.7 1.8 5.2 4.5M14.8 14.1c2.4-.3 4.6 1.3 5.3 4"/>',check:'<path d="m6.8 12.4 3.3 3.3 7.1-7.4"/>',back:'<path d="M19 12H5.5M11 6.5 5.5 12l5.5 5.5"/>'});
+    group:'<circle cx="9" cy="9" r="2.7"/><circle cx="16.2" cy="9.6" r="2.1"/><path d="M3.8 18.4c.5-2.7 2.5-4.5 5.2-4.5s4.7 1.8 5.2 4.5M14.8 14.1c2.4-.3 4.6 1.3 5.3 4"/>',check:'<path d="m6.8 12.4 3.3 3.3 7.1-7.4"/>',sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',moon:'<path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1z"/>',back:'<path d="M19 12H5.5M11 6.5 5.5 12l5.5 5.5"/>'});
   const el=id=>root?.querySelector('#'+id);
+  /* Jarvis appearance: presentation only, saved on this device and separate from the app's own theme (html[data-theme]).
+     Dark is the default. Switching never touches voice, the conversation, drafts, the open page or any record. */
+  const THEME_KEY='sv_jarvis_theme';let jarvisTheme='dark';
+  function readTheme(){try{jarvisTheme=SV_STORAGE.getItem(THEME_KEY)==='light'?'light':'dark';}catch{jarvisTheme='dark';}}
+  function applyTheme(){
+    if(!root)return;const light=jarvisTheme==='light';root.classList.toggle('jv-light',light);document.body.classList?.toggle?.('jarvis-light',light);
+    const b=el('jarvis-theme-toggle');if(b){b.setAttribute('aria-pressed',String(light));b.title=light?'Switch to dark mode':'Switch to light mode';}
+  }
+  function switchTheme(){jarvisTheme=jarvisTheme==='light'?'dark':'light';try{SV_STORAGE.setItem(THEME_KEY,jarvisTheme);}catch{}applyTheme();}
   const desktop=()=>!!window.matchMedia?.('(min-width: 1100px)')?.matches;
   function newId(){return window.crypto?.randomUUID?.()||'sv-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);}
   function restoreSession(){try{sessionId=SV_STORAGE.getItem('sv_jarvis_session')||newId();SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{sessionId=newId();}}
@@ -953,6 +962,7 @@
     +'<nav class="jarvis-nav" aria-label="Jarvis">'+TOP.map(([name,label])=>navButton([name,'',label,''],false)).join('')+'</nav>'
     +'<div class="jarvis-header-right"><button class="jarvis-connection" data-j="settings" aria-label="Connection and voice settings"><i id="jarvis-mode-dot"></i><span id="jarvis-mode-text">App tools</span></button>'
     +'<div class="jarvis-when"><small>'+BUSINESS.place+'</small><span id="jarvis-day-short"></span></div><time class="jarvis-clock" id="jarvis-clock"></time>'
+    +'<button type="button" class="jarvis-icon jarvis-theme-toggle" data-j="theme" id="jarvis-theme-toggle" aria-label="Light mode" aria-pressed="false" title="Switch to light mode"><span class="jarvis-theme-sun">'+svg('sun',17)+'</span><span class="jarvis-theme-moon">'+svg('moon',17)+'</span></button>'
     +'<button class="jarvis-icon jarvis-close" data-j="close" aria-label="Close Jarvis">'+svg('close',18)+'</button></div></header>'
     +'<aside class="jarvis-today jarvis-col" id="jarvis-today-col" aria-label="Calendar, tasks and cleanings">'
     +'<section class="jp-panel jp-calendar" id="jarvis-today-section">'+panelHead('calendar','jarvis-today-title','Calendar','<label class="jp-select"><span class="jarvis-sr">Calendar day</span><select id="jarvis-cal-day"></select>'+svg('chevron',14)+'</label><button type="button" class="jp-add" data-j="cal-add" aria-label="Create a booking, cleaning or task (opens the workspace)" title="Create (opens the workspace)">'+svg('plus',16)+'</button>')
@@ -1200,6 +1210,7 @@
     root.addEventListener('click',e=>{
       const action=e.target.closest('[data-j]')?.dataset.j;
       if(action==='close'){closeJarvis();return;}
+      if(action==='theme'){switchTheme();return;}
       if(action!=='more'&&!e.target.closest?.('#jarvis-more-menu'))closeMenu();
       if(dashboardClick(action,e.target.closest('[data-j]')))return;
       if(action==='close-panel')closePanel();
@@ -1242,7 +1253,7 @@
     el('jarvis-data-note').textContent=DEV_MODE?'This local preview uses fictional data until you restore your private app backup in Settings. Hermes receives a limited operations summary when you send an agent message.':'App tools read your current app data. Hermes runs on the Jarvis PC; other devices reach it through the live relay.';
     el('jarvis-message-alerts').checked=settings.messageAnnouncements;el('jarvis-message-alerts').addEventListener('change',e=>{settings.messageAnnouncements=e.target.checked;if(!settings.messageAnnouncements)announcements=[];});
     if(viaRelay())el('jarvis-relay').hidden=false;
-    setContinuous(settings.continuous);renderTranscript();renderDashboard(true);renderTaskCard();
+    readTheme();applyTheme();setContinuous(settings.continuous);renderTranscript();renderDashboard(true);renderTaskCard();
     if(typeof window.setInterval==='function')clockTimer=window.setInterval(()=>{if(root&&!document.hidden)renderDashboard();},20000);
     atmosphere=startAtmosphere();
     try{ringCleanup=createJarvisRing(el('jarvis-ring'),visualPhase,visualMotion);}catch{error('The ring animation could not start. Conversation is still available.');}setPhase('idle');updateConnection();el('jarvis-mic').focus();void checkConnection();startInbox();
@@ -1257,7 +1268,7 @@
     try{el('jarvis-bookings-page')?._jbCleanup?.();}catch{}
     if(clockTimer){window.clearInterval?.(clockTimer);clockTimer=null;}atmosphere?.();atmosphere=null;visualSim=null;calDay='';taskFilter='today';waFilter='all';expanded='';panelSig={};doneTasks.clear();
     customAudio?.dispose();customAudio=null;ringCleanup?.();ringCleanup=null;root?.remove();root=null;panel=null;requestToken='';mode='local';appToolsSelected=false;
-    if(background&&!wasInert)background.removeAttribute('inert');background=null;document.body.classList?.remove('jarvis-open');window.svAfterRender=null;page='overview';try{void audioContext?.close().catch(()=>{});}catch{}audioContext=null;returnFocus?.focus?.();returnFocus=null;
+    if(background&&!wasInert)background.removeAttribute('inert');background=null;document.body.classList?.remove('jarvis-open','jarvis-light');window.svAfterRender=null;page='overview';try{void audioContext?.close().catch(()=>{});}catch{}audioContext=null;returnFocus?.focus?.();returnFocus=null;
   }
   document.addEventListener('visibilitychange',()=>{if(!root)return;if(document.hidden){operations?.unheard();tasks?.unheard();waConversation?.cancel();inboxMonitor?.stop();inboxMonitor=null;announcements=[];stop();}else startInbox();});
   window.openJarvis=openJarvis;window.closeJarvis=closeJarvis;
@@ -1266,6 +1277,6 @@
     /* Fictional preview only: drive the same live tool and owner-turn paths without a microphone or provider call. */
     ...(typeof DEV_MODE!=='undefined'&&DEV_MODE?{preview:{user:text=>liveUser(text),tool:async(name,args)=>copy_(await liveTool(name,args,{current:()=>true})),heard:()=>{const v=operations?.view();if(v)operations.heard(v.version);renderPlan(operations?.view());},plan:()=>operations?.view()||null,task:()=>tasks?.view()||null,
       /* A typed task operation as Hermes would return it, and a completed read-back, for previews without a provider. */
-      taskOperation:operation=>{taskTurn(operation);return tasks?.view()||null;},taskHeard:()=>{const v=tasks?.view();if(v)tasks.heard(v.version);renderTaskCard();return tasks?.view()||null;},page:()=>page,simulate:simulateVisual,atmosphere:()=>atmosphereStats?.()||null}}:{})};
+      taskOperation:operation=>{taskTurn(operation);return tasks?.view()||null;},taskHeard:()=>{const v=tasks?.view();if(v)tasks.heard(v.version);renderTaskCard();return tasks?.view()||null;},page:()=>page,theme:()=>jarvisTheme,simulate:simulateVisual,atmosphere:()=>atmosphereStats?.()||null}}:{})};
   const copy_=v=>v?JSON.parse(JSON.stringify(v)):v;
 })();

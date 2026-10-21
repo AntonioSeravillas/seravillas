@@ -4,8 +4,8 @@
 .jarvis-launch-ring{width:19px;height:19px;border:1px solid currentColor;border-radius:47% 53% 52% 48%;box-shadow:inset 0 0 0 2px var(--card,#fff),inset 0 0 0 3px currentColor;opacity:.8}
 @media(max-width:700px){.workspace-jarvis-launch{padding:8px 11px;min-height:38px}.workspace-jarvis-launch>span:last-child{display:none}}
 
-.jarvis-root{--j-bg:#050505;--j-text:#e8e8e8;--j-soft:#b9b9b9;--j-muted:#7c7c7c;--j-faint:#4a4a4a;--j-line:#1c1c1c;--j-accent:#e0874d;
-  position:fixed;inset:0;z-index:1200;background:var(--j-bg);color:var(--j-text);color-scheme:dark;overflow:auto;isolation:isolate;
+.jarvis-root{--j-bg:var(--jv-n000,#050505);--j-text:var(--jv-n090,#e8e8e8);--j-soft:var(--jv-n075,#b9b9b9);--j-muted:var(--jv-n050,#7c7c7c);--j-faint:var(--jv-n030,#4a4a4a);--j-line:var(--jv-n010,#1c1c1c);--j-accent:#e0874d;
+  position:fixed;inset:0;z-index:1200;background:var(--j-bg);color:var(--j-text);color-scheme:var(--jv-scheme,dark);overflow:auto;isolation:isolate;
   font-family:"Segoe UI Variable Text","Segoe UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-weight:300;-webkit-font-smoothing:antialiased;animation:jarvis-in .32s ease-out}
 @keyframes jarvis-in{from{opacity:0}to{opacity:1}}
 .jarvis-root *{box-sizing:border-box}
@@ -21,7 +21,7 @@
 .jarvis-header-right{display:flex;align-items:center;gap:22px}
 .jarvis-connection{display:flex;align-items:center;gap:10px;min-height:36px;font-size:14px;color:var(--j-soft)}
 .jarvis-connection i{width:6px;height:6px;border-radius:50%;background:var(--j-faint)}.jarvis-connection i.live{background:var(--j-accent)}
-.jarvis-icon{display:grid;place-items:center;width:44px;height:44px;color:var(--j-soft)}.jarvis-icon:hover{color:#fff}
+.jarvis-icon{display:grid;place-items:center;width:44px;height:44px;color:var(--j-soft)}.jarvis-icon:hover{color:var(--jv-n100,#fff)}
 .jarvis-kicker{margin:0 0 6px;font-size:12px;font-weight:400;letter-spacing:.42em;text-transform:uppercase;color:var(--j-soft)}
 
 /* Left: Today and Tasks as quiet rows with hairlines. */
@@ -45,14 +45,14 @@
 .jarvis-status{margin-top:4px;font-size:clamp(20px,1.7vw,25px);font-weight:300;letter-spacing:.2em;transition:opacity .25s}
 .jarvis-hint{margin:8px 0 0;font-size:14px;color:var(--j-muted);letter-spacing:.03em;text-align:center}
 .jarvis-caption{max-width:460px;margin:12px 0 0;font-size:14px;line-height:1.6;color:var(--j-soft);text-align:center;white-space:pre-line}.jarvis-caption[hidden]{display:none}
-.jarvis-error{max-width:460px;margin-top:14px;padding:10px 14px;border:1px solid #3a2d24;border-radius:10px;font-size:13px;line-height:1.55;color:#d9c2b2}.jarvis-error[hidden]{display:none}
+.jarvis-error{max-width:460px;margin-top:14px;padding:10px 14px;border:1px solid var(--jv-n020,#3a2d24);border-radius:10px;font-size:13px;line-height:1.55;color:var(--jv-warm-text,#d9c2b2)}.jarvis-error[hidden]{display:none}
 .jarvis-keep{display:inline-flex;align-items:center;gap:10px;min-height:36px;margin-top:18px;padding:0 6px;font-size:14px;color:var(--j-soft)}
 .jarvis-keep i{width:7px;height:7px;border-radius:50%;background:var(--j-faint);transition:background .2s}
 .jarvis-keep[aria-pressed="true"] i{background:var(--j-accent)}
 .jarvis-controls{display:flex;align-items:center;justify-content:center;gap:clamp(48px,5vw,80px);margin-top:18px}
-.jarvis-mic{width:84px;height:84px;display:grid;place-items:center;border:1px solid #4d4d4d!important;border-radius:50%;color:var(--j-text);transition:border-color .2s,box-shadow .3s}
-.jarvis-mic:hover{border-color:#8a8a8a!important}
-.jarvis-mic.active{border-color:#cfcfcf!important;box-shadow:0 0 30px #ffffff10}
+.jarvis-mic{width:84px;height:84px;display:grid;place-items:center;border:1px solid var(--jv-n030,#4d4d4d)!important;border-radius:50%;color:var(--j-text);transition:border-color .2s,box-shadow .3s}
+.jarvis-mic:hover{border-color:var(--jv-n055,#8a8a8a)!important}
+.jarvis-mic.active{border-color:var(--jv-n080,#cfcfcf)!important;box-shadow:0 0 30px #ffffff10}
 .jarvis-root[data-phase="listening"] .jarvis-mic{border-color:var(--j-accent)!important}
 .jarvis-play{display:inline-flex;align-items:center;gap:8px;min-height:36px;margin:14px 0 6px;font-size:12px;color:var(--j-muted)}.jarvis-play:hover{color:var(--j-soft)}
 
@@ -86,19 +86,19 @@
 
 /* Settings sheet. */
 .jarvis-voice-review[hidden]{display:none}.jarvis-voice-review{border-top:1px solid var(--j-line);border-bottom:1px solid var(--j-line);padding:18px 0;margin:12px 0}.jarvis-voice-review small{color:var(--j-accent);font-size:10px;letter-spacing:.2em;text-transform:uppercase}.jarvis-voice-review p{font-size:12px;line-height:1.6;color:var(--j-muted)}.jarvis-voice-review .jarvis-review-message{white-space:pre-wrap;font-size:16px;color:var(--j-text)}.jarvis-voice-review>div{display:flex;gap:22px;flex-wrap:wrap}.jarvis-voice-review button{min-height:40px;font:inherit;font-size:12px}.jarvis-voice-review button:first-child{color:var(--j-accent)}
-.jarvis-plan-items{list-style:none;margin:10px 0;padding:0}.jarvis-plan-item{border-top:1px solid var(--j-line);padding:10px 0}.jarvis-plan-item p{margin:0;font-size:14px;color:var(--j-text)}.jarvis-plan-item small{display:block;margin-top:4px;font-size:11px;letter-spacing:0;text-transform:none;line-height:1.5;color:var(--j-muted)}.jarvis-plan-item.is-create small,.jarvis-plan-item.is-link small{color:var(--j-accent)}.jarvis-plan-item.is-blocked small{color:var(--red-text,#e88)}.jarvis-plan-item.is-left_out p,.jarvis-plan-item.is-skip p,.jarvis-plan-item.is-exists p{color:var(--j-muted)}.jarvis-plan-item>div{display:flex;gap:16px;align-items:center;margin-top:6px;font-size:12px;color:var(--j-muted)}.jarvis-root .jarvis-plan-item input[type=time]{color-scheme:dark;font:inherit;background:transparent;width:auto;margin:0 0 0 6px;color:var(--j-text);border:1px solid var(--j-line);border-radius:6px;padding:2px 6px;min-height:32px}.jarvis-plan button:disabled{opacity:.4}
+.jarvis-plan-items{list-style:none;margin:10px 0;padding:0}.jarvis-plan-item{border-top:1px solid var(--j-line);padding:10px 0}.jarvis-plan-item p{margin:0;font-size:14px;color:var(--j-text)}.jarvis-plan-item small{display:block;margin-top:4px;font-size:11px;letter-spacing:0;text-transform:none;line-height:1.5;color:var(--j-muted)}.jarvis-plan-item.is-create small,.jarvis-plan-item.is-link small{color:var(--j-accent)}.jarvis-plan-item.is-blocked small{color:var(--red-text,#e88)}.jarvis-plan-item.is-left_out p,.jarvis-plan-item.is-skip p,.jarvis-plan-item.is-exists p{color:var(--j-muted)}.jarvis-plan-item>div{display:flex;gap:16px;align-items:center;margin-top:6px;font-size:12px;color:var(--j-muted)}.jarvis-root .jarvis-plan-item input[type=time]{color-scheme:var(--jv-scheme,dark);font:inherit;background:transparent;width:auto;margin:0 0 0 6px;color:var(--j-text);border:1px solid var(--j-line);border-radius:6px;padding:2px 6px;min-height:32px}.jarvis-plan button:disabled{opacity:.4}
 .jarvis-inbox-status{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}.jarvis-inbox-status button{font:inherit;min-height:36px;text-align:left}.jarvis-inbox-status button:hover{color:var(--j-text)}
 .jarvis-panel-backdrop{position:fixed;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:#000a;padding:24px}.jarvis-panel-backdrop[hidden]{display:none}
-.jarvis-sheet{width:100%;max-width:480px;max-height:88dvh;overflow:auto;background:#0c0c0c;border:1px solid #232323;border-radius:16px;padding:24px 26px}
+.jarvis-sheet{width:100%;max-width:480px;max-height:88dvh;overflow:auto;background:var(--jv-n005,#0c0c0c);border:1px solid var(--jv-n015,#232323);border-radius:16px;padding:24px 26px}
 .jarvis-sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .jarvis-sheet small{font-size:10px;letter-spacing:.3em;color:var(--j-muted)}.jarvis-sheet h2{margin:6px 0 0;font-size:20px;font-weight:300}
 .jarvis-settings[hidden]{display:none}
 .jarvis-settings label{display:block;margin:18px 0;font-size:13px;color:var(--j-soft)}
 .jarvis-settings label[hidden]{display:none}
-.jarvis-settings select{display:block;width:100%;margin-top:8px;padding:11px 10px;border:1px solid #2a2a2a;border-radius:8px;background:#121212;color:var(--j-text);font-size:14px}
+.jarvis-settings select{display:block;width:100%;margin-top:8px;padding:11px 10px;border:1px solid var(--jv-n015,#2a2a2a);border-radius:8px;background:var(--jv-n005,#121212);color:var(--j-text);font-size:14px}
 .jarvis-settings .jarvis-check{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.jarvis-wide{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:10px 0;padding:12px;border:1px solid #2a2a2a!important;border-radius:8px;font-size:13px}
-.jarvis-connection-detail{padding:12px 14px;border:1px solid #232323;border-radius:10px;font-size:12px;line-height:1.6;color:var(--j-soft)}
+.jarvis-wide{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:10px 0;padding:12px;border:1px solid var(--jv-n015,#2a2a2a)!important;border-radius:8px;font-size:13px}
+.jarvis-connection-detail{padding:12px 14px;border:1px solid var(--jv-n015,#232323);border-radius:10px;font-size:12px;line-height:1.6;color:var(--j-soft)}
 .jarvis-privacy{font-size:12px;line-height:1.7;color:var(--j-muted)}
 
 /* WhatsApp inbox embedded in the right column: same controls, dark and quiet. */
@@ -139,7 +139,7 @@
 /* Desktop with enough height: the grid fits the viewport, supporting columns scroll inside, the centre stays fixed. */
 @media(min-width:1100px) and (min-height:640px){
   .jarvis-shell{height:100dvh;min-height:0;grid-template-rows:auto minmax(0,1fr) auto}
-  .jarvis-today,.jarvis-side{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#2a2a2a transparent}
+  .jarvis-today,.jarvis-side{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--jv-n015,#2a2a2a) transparent}
   .jarvis-presence{min-height:0;overflow:hidden}
   .jarvis-side{padding-right:6px}
   .jarvis-context{min-height:0}

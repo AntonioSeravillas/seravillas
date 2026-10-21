@@ -3,49 +3,49 @@
    dialogs/toasts opened while Jarvis is open, so the legacy workspace keeps its own look until its tab is themed. */
 .jarvis-root,body.jarvis-open #modal-root,body.jarvis-open .toast-wrap{
   --jv-font:'Jarvis Sans','Manrope',"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
-  --jv-bg:#040404;--jv-surface:#0f0f10;--jv-surface-2:#151516;--jv-surface-3:#1d1d1f;--jv-bar:#232325;--jv-bar-hover:#2c2c2f;
-  --jv-text:#ededed;--jv-text-2:#bdbdbd;--jv-text-3:#8e8e8e;--jv-text-4:#5f5f5f;
-  --jv-line:rgba(255,255,255,.065);--jv-line-2:rgba(255,255,255,.11);--jv-line-3:rgba(255,255,255,.18);
+  --jv-bg:var(--jv-n000,#040404);--jv-surface:var(--jv-n005,#0f0f10);--jv-surface-2:var(--jv-n010,#151516);--jv-surface-3:var(--jv-n010,#1d1d1f);--jv-bar:var(--jv-n015,#232325);--jv-bar-hover:var(--jv-n020,#2c2c2f);
+  --jv-text:var(--jv-n095,#ededed);--jv-text-2:var(--jv-n075,#bdbdbd);--jv-text-3:var(--jv-n055,#8e8e8e);--jv-text-4:var(--jv-n035,#5f5f5f);
+  --jv-line:rgba(var(--jv-ink,255,255,255),.065);--jv-line-2:rgba(var(--jv-ink,255,255,255),.11);--jv-line-3:rgba(var(--jv-ink,255,255,255),.18);
   --jv-accent:#ef7a2e;--jv-accent-text:#f2a46c;--jv-accent-soft:rgba(239,122,46,.1);--jv-accent-line:rgba(239,122,46,.5);
   --jv-danger:#e2846f;--jv-radius:9px;--jv-radius-sm:6px;--jv-ctl:30px;
-  --jv-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 26px 50px -26px rgba(0,0,0,.95),0 8px 20px -12px rgba(0,0,0,.85);
+  --jv-shadow:inset 0 1px 0 rgba(var(--jv-ink,255,255,255),.035),0 26px 50px -26px rgba(var(--jv-shade,0,0,0),.95),0 8px 20px -12px rgba(var(--jv-shade,0,0,0),.85);
   --jv-focus:0 0 0 1px rgba(239,122,46,.55),0 0 0 4px rgba(239,122,46,.12);--jv-ease:cubic-bezier(.22,.8,.26,1);
 }
 /* Typographic roles */
 .jv-label{display:block;font-family:var(--jv-font);font-size:10.5px;font-weight:600;letter-spacing:.3em;text-transform:uppercase;color:var(--jv-text-2)}
 /* Controls: compact, hairline, regular weight; orange only for primary/selected/focus */
-.jarvis-root .jv-btn,#modal-root .jv-btn,.jarvis-root .jv-icon-btn,#modal-root .jv-icon-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:var(--jv-ctl);min-width:var(--jv-ctl);padding:0 12px;border:1px solid var(--jv-line-2)!important;border-radius:var(--jv-radius-sm);background:rgba(255,255,255,.015);color:var(--jv-text);font-family:var(--jv-font);font-size:12px;font-weight:400;line-height:1;cursor:pointer;transition:border-color .2s,background .2s,color .2s;white-space:nowrap}
+.jarvis-root .jv-btn,#modal-root .jv-btn,.jarvis-root .jv-icon-btn,#modal-root .jv-icon-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:var(--jv-ctl);min-width:var(--jv-ctl);padding:0 12px;border:1px solid var(--jv-line-2)!important;border-radius:var(--jv-radius-sm);background:rgba(var(--jv-ink,255,255,255),.015);color:var(--jv-text);font-family:var(--jv-font);font-size:12px;font-weight:400;line-height:1;cursor:pointer;transition:border-color .2s,background .2s,color .2s;white-space:nowrap}
 .jarvis-root .jv-icon-btn,#modal-root .jv-icon-btn{padding:0;width:var(--jv-ctl)}
-.jarvis-root .jv-btn:hover,#modal-root .jv-btn:hover,.jarvis-root .jv-icon-btn:hover,#modal-root .jv-icon-btn:hover{border-color:var(--jv-line-3)!important;background:rgba(255,255,255,.04)}
-.jarvis-root .jv-btn:active,#modal-root .jv-btn:active,.jarvis-root .jv-icon-btn:active,#modal-root .jv-icon-btn:active{background:rgba(255,255,255,.07)}
+.jarvis-root .jv-btn:hover,#modal-root .jv-btn:hover,.jarvis-root .jv-icon-btn:hover,#modal-root .jv-icon-btn:hover{border-color:var(--jv-line-3)!important;background:rgba(var(--jv-ink,255,255,255),.04)}
+.jarvis-root .jv-btn:active,#modal-root .jv-btn:active,.jarvis-root .jv-icon-btn:active,#modal-root .jv-icon-btn:active{background:rgba(var(--jv-ink,255,255,255),.07)}
 .jarvis-root .jv-btn-primary,#modal-root .jv-btn-primary{background:var(--jv-accent);border-color:var(--jv-accent)!important;color:#fff}
 .jarvis-root .jv-btn-primary:hover,#modal-root .jv-btn-primary:hover{background:#ff8a3c;border-color:#ff8a3c!important}
 .jarvis-root .jv-btn-danger,#modal-root .jv-btn-danger{color:var(--jv-danger)}
 .jarvis-root .jv-btn:focus-visible,.jarvis-root .jv-icon-btn:focus-visible,body.jarvis-open #modal-root .jv-btn:focus-visible{outline:none;box-shadow:var(--jv-focus);border-color:var(--jv-accent-line)!important}
 .jv-select{position:relative;display:inline-flex;align-items:center;height:var(--jv-ctl);border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);color:var(--jv-text-2);transition:border-color .2s}
 .jv-select:hover{border-color:var(--jv-line-3)}
-.jarvis-root .jv-select select{appearance:none;-webkit-appearance:none;height:100%;min-height:0;width:auto;margin:0;padding:0 30px 0 12px;border:0!important;border-radius:var(--jv-radius-sm);background:transparent!important;color:var(--jv-text)!important;font-family:var(--jv-font);font-size:12px;font-weight:400;box-shadow:none!important;outline:none;cursor:pointer;color-scheme:dark}
-.jarvis-root .jv-select select option{background:#111;color:#eee}
+.jarvis-root .jv-select select{appearance:none;-webkit-appearance:none;height:100%;min-height:0;width:auto;margin:0;padding:0 30px 0 12px;border:0!important;border-radius:var(--jv-radius-sm);background:transparent!important;color:var(--jv-text)!important;font-family:var(--jv-font);font-size:12px;font-weight:400;box-shadow:none!important;outline:none;cursor:pointer;color-scheme:var(--jv-scheme,dark)}
+.jarvis-root .jv-select select option{background:var(--jv-n005,#111);color:var(--jv-n095,#eee)}
 .jv-select svg{position:absolute;right:9px;pointer-events:none}
 .jv-select:focus-within{border-color:var(--jv-accent-line);box-shadow:var(--jv-focus)}
-.jv-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:30;display:flex;flex-direction:column;min-width:230px;padding:6px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius);background:var(--jv-surface);box-shadow:0 24px 50px -16px #000}
+.jv-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:30;display:flex;flex-direction:column;min-width:230px;padding:6px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius);background:var(--jv-surface);box-shadow:0 24px 50px -16px var(--jv-n000,#000)}
 .jv-menu[hidden]{display:none}
 .jv-menu>button{display:flex;align-items:center;min-height:36px;padding:0 12px;border-radius:var(--jv-radius-sm);font-family:var(--jv-font);font-size:12.5px;color:var(--jv-text-2);text-align:left}
-.jv-menu>button:hover,.jv-menu>button:focus-visible{background:rgba(255,255,255,.05);color:#fff;outline:none}
+.jv-menu>button:hover,.jv-menu>button:focus-visible{background:rgba(var(--jv-ink,255,255,255),.05);color:var(--jv-n100,#fff);outline:none}
 
 /* ── Dialogs opened while Jarvis is open: same tokens; legacy variables are remapped so inline var() styles follow. ── */
-body.jarvis-open .modal-wrap{z-index:1300;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center}
+body.jarvis-open .modal-wrap{z-index:1300;background:var(--jv-scrim,rgba(0,0,0,.6));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center}
 body.jarvis-open .toast-wrap{z-index:1310;bottom:96px}
 body.jarvis-open #modal-root{--accent:var(--jv-accent);--accent-bg:var(--jv-accent-soft);--accent-border:rgba(239,122,46,.28);--accent-text:var(--jv-accent-text);--surface:var(--jv-surface-2);--surface2:var(--jv-surface-3);--border:var(--jv-line);--border2:var(--jv-line-2);--text:var(--jv-text);--text2:var(--jv-text-2);--text3:var(--jv-text-3);--bg:var(--jv-bg);--amber:var(--jv-accent-text);--radius-sm:var(--jv-radius-sm);--radius-pill:var(--jv-radius-sm)}
-html body.jarvis-open #modal-root .modal{max-width:520px;margin:0 16px;padding:24px 24px 22px;border:1px solid var(--jv-line-2);border-radius:12px;background:var(--jv-surface);backdrop-filter:none;-webkit-backdrop-filter:none;color:var(--jv-text);font-family:var(--jv-font);font-weight:400;box-shadow:0 40px 90px -30px #000,inset 0 1px 0 rgba(255,255,255,.04);animation:jv-dialog-in .28s var(--jv-ease)}
+html body.jarvis-open #modal-root .modal{max-width:520px;margin:0 16px;padding:24px 24px 22px;border:1px solid var(--jv-line-2);border-radius:12px;background:var(--jv-surface);backdrop-filter:none;-webkit-backdrop-filter:none;color:var(--jv-text);font-family:var(--jv-font);font-weight:400;box-shadow:0 40px 90px -30px var(--jv-n000,#000),inset 0 1px 0 rgba(var(--jv-ink,255,255,255),.04);animation:jv-dialog-in .28s var(--jv-ease)}
 @keyframes jv-dialog-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 body.jarvis-open #modal-root .modal-handle{display:none}
 body.jarvis-open #modal-root .modal-close{color:var(--jv-text-3);background:transparent;border:0}
-body.jarvis-open #modal-root .modal-close:hover{color:#fff}
-body.jarvis-open #modal-root .modal-title{margin:4px 0 16px;font-family:var(--jv-font);font-size:22px;font-weight:300;letter-spacing:0;color:#f4f4f4}
+body.jarvis-open #modal-root .modal-close:hover{color:var(--jv-n100,#fff)}
+body.jarvis-open #modal-root .modal-title{margin:4px 0 16px;font-family:var(--jv-font);font-size:22px;font-weight:300;letter-spacing:0;color:var(--jv-n095,#f4f4f4)}
 body.jarvis-open #modal-root .field{margin-bottom:14px}
 body.jarvis-open #modal-root .field label{font-family:var(--jv-font);font-size:10.5px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--jv-text-3)}
-body.jarvis-open #modal-root input:not([type=checkbox]):not([type=radio]),body.jarvis-open #modal-root select,body.jarvis-open #modal-root textarea{width:100%;min-height:38px;padding:8px 11px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:var(--jv-surface-2);color:var(--jv-text);font-family:var(--jv-font);font-size:13.5px;font-weight:400;box-shadow:none;outline:none;color-scheme:dark;transition:border-color .2s,box-shadow .2s}
+body.jarvis-open #modal-root input:not([type=checkbox]):not([type=radio]),body.jarvis-open #modal-root select,body.jarvis-open #modal-root textarea{width:100%;min-height:38px;padding:8px 11px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:var(--jv-surface-2);color:var(--jv-text);font-family:var(--jv-font);font-size:13.5px;font-weight:400;box-shadow:none;outline:none;color-scheme:var(--jv-scheme,dark);transition:border-color .2s,box-shadow .2s}
 body.jarvis-open #modal-root input:not([type=checkbox]):not([type=radio]):hover,body.jarvis-open #modal-root select:hover,body.jarvis-open #modal-root textarea:hover{border-color:var(--jv-line-3)}
 body.jarvis-open #modal-root input:not([type=checkbox]):not([type=radio]):focus,body.jarvis-open #modal-root input:not([type=checkbox]):not([type=radio]):focus-visible,html body.jarvis-open #modal-root select:focus,html body.jarvis-open #modal-root select:focus-visible,html body.jarvis-open #modal-root textarea:focus,html body.jarvis-open #modal-root textarea:focus-visible{outline:none;border-color:var(--jv-accent-line);box-shadow:0 0 0 3px rgba(239,122,46,.12)}
 body.jarvis-open #modal-root input::placeholder,body.jarvis-open #modal-root textarea::placeholder{color:var(--jv-text-4)}
@@ -53,9 +53,9 @@ body.jarvis-open #modal-root input[type=checkbox]{accent-color:var(--jv-accent)}
 body.jarvis-open #modal-root .chips{gap:6px}
 body.jarvis-open #modal-root .chip{padding:7px 13px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text-2);font-family:var(--jv-font);font-size:12.5px;font-weight:400}
 body.jarvis-open #modal-root .chip:hover{border-color:var(--jv-line-3);color:var(--jv-text)}
-body.jarvis-open #modal-root .chip.on{background:var(--jv-accent-soft);border-color:var(--jv-accent-line);color:#fff;font-weight:400}
+body.jarvis-open #modal-root .chip.on{background:var(--jv-accent-soft);border-color:var(--jv-accent-line);color:var(--jv-n100,#fff);font-weight:400}
 body.jarvis-open #modal-root .btn{width:auto;min-height:38px;padding:0 16px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-family:var(--jv-font);font-size:13px;font-weight:500;box-shadow:none}
-body.jarvis-open #modal-root .btn:hover{border-color:var(--jv-line-3);background:rgba(255,255,255,.04)}
+body.jarvis-open #modal-root .btn:hover{border-color:var(--jv-line-3);background:rgba(var(--jv-ink,255,255,255),.04)}
 body.jarvis-open #modal-root .btn-primary{background:var(--jv-accent);border-color:var(--jv-accent);color:#fff}
 body.jarvis-open #modal-root .btn-primary:hover{background:#ff8a3c}
 body.jarvis-open #modal-root .btn-danger,body.jarvis-open #modal-root .btn-red-sm{background:transparent;border-color:rgba(226,132,111,.35);color:var(--jv-danger)}
@@ -63,9 +63,9 @@ body.jarvis-open #modal-root .btn-amber-sm{background:transparent;border-color:v
 body.jarvis-open #modal-root button:focus-visible{outline:none;box-shadow:var(--jv-focus)}
 body.jarvis-open #modal-root .divider{background:var(--jv-line)}
 body.jarvis-open #modal-root .filter-option,body.jarvis-open #modal-root .create-menu button{border:1px solid var(--jv-line);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-family:var(--jv-font);font-weight:400}
-body.jarvis-open #modal-root .filter-option:hover,body.jarvis-open #modal-root .create-menu button:hover{border-color:var(--jv-line-3);background:rgba(255,255,255,.03)}
+body.jarvis-open #modal-root .filter-option:hover,body.jarvis-open #modal-root .create-menu button:hover{border-color:var(--jv-line-3);background:rgba(var(--jv-ink,255,255,255),.03)}
 body.jarvis-open #modal-root .filter-option[aria-pressed="true"]{border-color:var(--jv-accent-line)}
-body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:var(--jv-surface);color:var(--jv-text);font-family:var(--jv-font);font-weight:400;box-shadow:0 18px 40px -16px #000}
+body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:var(--jv-surface);color:var(--jv-text);font-family:var(--jv-font);font-weight:400;box-shadow:0 18px 40px -16px var(--jv-n000,#000)}
 /* Jarvis booking dialog */
 .jv-modal .modal-title{margin-top:6px}
 .jv-modal-sub{margin:-8px 0 18px;font-size:13px;color:var(--jv-text-2)}
@@ -91,7 +91,7 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
   .jarvis-root.is-workpage .jarvis-header .jarvis-nav{justify-self:center}
   .jarvis-root.is-workpage .jarvis-today,.jarvis-root.is-workpage .jarvis-side{display:none}
   .jarvis-root.is-workpage .jarvis-page{grid-column:2;grid-row:2;display:flex;flex-direction:column;min-width:0;min-height:0;margin:0 0 clamp(92px,15vh,140px) clamp(4px,.9vw,16px);padding:clamp(18px,2.6vh,28px) clamp(14px,1.4vw,24px) 14px;
-    border:1px solid var(--jv-line);border-radius:12px;background:linear-gradient(180deg,rgba(20,20,22,.94),rgba(12,12,13,.95));box-shadow:var(--jv-shadow);animation:jv-page-in .35s var(--jv-ease)}
+    border:1px solid var(--jv-line);border-radius:12px;background:linear-gradient(180deg,rgba(var(--jv-paper,20,20,22),.94),rgba(var(--jv-paper,12,12,13),.95));box-shadow:var(--jv-shadow);animation:jv-page-in .35s var(--jv-ease)}
   @keyframes jv-page-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .jarvis-root.is-workpage .jarvis-presence{grid-column:3;grid-row:2;grid-template-rows:minmax(0,1fr);padding-bottom:clamp(92px,15vh,140px)}
   .jarvis-root.is-workpage .jarvis-greeting,.jarvis-root.is-workpage .jarvis-insight,.jarvis-root.is-workpage .jarvis-shortcuts{display:none}
@@ -105,7 +105,7 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 }
 /* Latest reply above the ask bar on working pages */
 .jarvis-last-reply[hidden]{display:none}
-.jarvis-last-reply{position:absolute;left:0;right:0;bottom:4px;display:flex;align-items:flex-start;gap:12px;padding:10px 14px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius);background:rgba(14,14,15,.92);backdrop-filter:blur(6px);font-size:12.5px;line-height:1.5;color:var(--jv-text-2)}
+.jarvis-last-reply{position:absolute;left:0;right:0;bottom:4px;display:flex;align-items:flex-start;gap:12px;padding:10px 14px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius);background:rgba(var(--jv-paper,14,14,15),.92);backdrop-filter:blur(6px);font-size:12.5px;line-height:1.5;color:var(--jv-text-2)}
 .jarvis-last-reply p{flex:1;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
 .jarvis-last-reply button{flex:none;font-size:11.5px;color:var(--jv-accent-text);min-height:22px}
 
@@ -113,10 +113,10 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 .jb-head{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:clamp(14px,2.2vh,22px)}
 .jb-heading{display:flex;flex-direction:column;gap:6px;margin-right:6px}
 .jb-title{display:flex;align-items:center;gap:6px}
-.jb-title h2{margin:0;font-family:var(--jv-font);font-size:clamp(22px,1.75vw,28px);font-weight:300;letter-spacing:0;color:#f4f4f4;white-space:nowrap}
+.jb-title h2{margin:0;font-family:var(--jv-font);font-size:clamp(22px,1.75vw,28px);font-weight:300;letter-spacing:0;color:var(--jv-n095,#f4f4f4);white-space:nowrap}
 .jb-month-pick{position:relative;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--jv-radius-sm);color:var(--jv-text-2);cursor:pointer}
-.jb-month-pick:hover{color:#fff;background:rgba(255,255,255,.04)}
-.jb-month-pick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;color-scheme:dark}
+.jb-month-pick:hover{color:var(--jv-n100,#fff);background:rgba(var(--jv-ink,255,255,255),.04)}
+.jb-month-pick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0;color-scheme:var(--jv-scheme,dark)}
 .jb-month-pick:focus-within{box-shadow:var(--jv-focus)}
 .jb-filter{margin-bottom:2px}
 .jb-tools{display:flex;align-items:center;gap:8px;margin-left:auto;margin-bottom:2px}
@@ -125,52 +125,52 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 .jb-body{display:flex;flex-direction:column;flex:1;min-height:0}
 .jb-empty{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:28px 6px;font-size:13px;color:var(--jv-text-2)}.jb-empty p{margin:0;color:var(--jv-text)}.jb-empty small{color:var(--jv-text-3)}
 /* Timeline */
-.jb-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--jv-line);scrollbar-width:thin;scrollbar-color:#3a3a3d transparent}
-.jb-scroll::-webkit-scrollbar{height:8px;width:8px}.jb-scroll::-webkit-scrollbar-thumb{background:#3a3a3d;border-radius:8px}.jb-scroll::-webkit-scrollbar-track{background:transparent}
+.jb-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--jv-line);scrollbar-width:thin;scrollbar-color:var(--jv-n025,#3a3a3d) transparent}
+.jb-scroll::-webkit-scrollbar{height:8px;width:8px}.jb-scroll::-webkit-scrollbar-thumb{background:var(--jv-n025,#3a3a3d);border-radius:8px}.jb-scroll::-webkit-scrollbar-track{background:transparent}
 .jb-grid{width:calc(var(--prop) + var(--days) * var(--day));display:flex;flex-direction:column}
 .jb-row{display:flex;flex:none;height:calc(var(--jb-row) + (var(--lanes,1) - 1) * var(--jb-lane));border-bottom:1px solid var(--jv-line)}
 .jb-row:last-child{border-bottom:0}
-.jb-dates{position:sticky;top:0;z-index:4;flex:0 0 auto;background:#111112}
-.jb-corner,.jb-prop{position:sticky;left:0;z-index:3;flex:none;width:var(--prop);background:#111112;border-right:1px solid var(--jv-line)}
+.jb-dates{position:sticky;top:0;z-index:4;flex:0 0 auto;background:var(--jv-n005,#111112)}
+.jb-corner,.jb-prop{position:sticky;left:0;z-index:3;flex:none;width:var(--prop);background:var(--jv-n005,#111112);border-right:1px solid var(--jv-line)}
 .jb-dates .jb-corner{z-index:5}
 .jb-prop{display:flex;align-items:center;padding:0 14px;font-size:13px;font-weight:400;color:var(--jv-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jb-day{flex:none;width:var(--day);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px 0 10px;border-left:1px solid transparent}
 .jb-day small{font-size:9.5px;font-weight:500;letter-spacing:.14em;color:var(--jv-text-3);white-space:nowrap}
 .jb-day b{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:14.5px;font-weight:400;color:var(--jv-text)}
-.jb-day.is-weekend{background:rgba(255,255,255,.022)}
+.jb-day.is-weekend{background:rgba(var(--jv-ink,255,255,255),.022)}
 .jb-day.is-today small{color:var(--jv-accent-text)}
 .jb-day.is-today b{background:var(--jv-accent);color:#fff;box-shadow:0 0 14px rgba(239,122,46,.45)}
 .jb-day.is-month-start{border-left-color:var(--jv-line-2)}
 .jb-day.is-month-start small{color:var(--jv-accent-text)}
 .jb-lane{position:relative;flex:none;width:calc(var(--days) * var(--day));cursor:copy}
 .jb-shade{position:absolute;inset:0;pointer-events:none}
-.jb-shade i{position:absolute;top:0;bottom:0;width:var(--day);background:rgba(255,255,255,.022)}
+.jb-shade i{position:absolute;top:0;bottom:0;width:var(--day);background:rgba(var(--jv-ink,255,255,255),.022)}
 .jb-shade b{position:absolute;top:0;bottom:0;width:1px;background:rgba(239,122,46,.3)}
-.jb-clean{position:absolute;bottom:7px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:#7d7d7d;pointer-events:auto}
-.jarvis-root .jb-stay{position:absolute;top:50%;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:10px;height:clamp(30px,3.9vh,36px);padding:0 12px;transform:translateY(-50%);border:1px solid rgba(255,255,255,.07)!important;border-radius:var(--jv-radius-sm);background:linear-gradient(180deg,#29292c,#222224);color:var(--jv-text);font-family:var(--jv-font);font-size:12.5px;font-weight:400;text-align:left;cursor:pointer;box-shadow:0 6px 14px -8px rgba(0,0,0,.8);transition:background .2s,border-color .2s}
-.jarvis-root .jb-stay:hover{background:linear-gradient(180deg,#303034,#28282b);border-color:rgba(255,255,255,.16)!important}
+.jb-clean{position:absolute;bottom:7px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--jv-n050,#7d7d7d);pointer-events:auto}
+.jarvis-root .jb-stay{position:absolute;top:50%;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:10px;height:clamp(30px,3.9vh,36px);padding:0 12px;transform:translateY(-50%);border:1px solid rgba(var(--jv-ink,255,255,255),.07)!important;border-radius:var(--jv-radius-sm);background:linear-gradient(180deg,var(--jv-n015,#29292c),var(--jv-n015,#222224));color:var(--jv-text);font-family:var(--jv-font);font-size:12.5px;font-weight:400;text-align:left;cursor:pointer;box-shadow:0 6px 14px -8px rgba(var(--jv-shade,0,0,0),.8);transition:background .2s,border-color .2s}
+.jarvis-root .jb-stay:hover{background:linear-gradient(180deg,var(--jv-n020,#303034),var(--jv-n015,#28282b));border-color:rgba(var(--jv-ink,255,255,255),.16)!important}
 .jarvis-root .jb-stay:focus-visible,.jarvis-root .jb-stay.is-selected{outline:none;border-color:var(--jv-accent-line)!important;box-shadow:var(--jv-focus)}
 .jarvis-root .jb-stay.clip-start{border-top-left-radius:0;border-bottom-left-radius:0;border-left-style:dashed!important}
 .jarvis-root .jb-stay.clip-end{border-top-right-radius:0;border-bottom-right-radius:0;border-right-style:dashed!important}
 .jarvis-root .jb-stay.is-pending{border-style:dashed!important}
-.jarvis-root .jb-stay.is-blocked{background:repeating-linear-gradient(135deg,#1f1f21 0 6px,#242427 6px 12px);color:var(--jv-text-2)}
+.jarvis-root .jb-stay.is-blocked{background:repeating-linear-gradient(135deg,var(--jv-n015,#1f1f21) 0 6px,var(--jv-n015,#242427) 6px 12px);color:var(--jv-text-2)}
 .jb-stay-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .jb-stay-dates{flex:none;font-size:11.5px;color:var(--jv-accent-text);white-space:nowrap}
 /* Month (secondary view): the existing month grid in the theme; its own header/legend give way to the page toolbar. */
-.jb-month{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#3a3a3d transparent}
+.jb-month{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--jv-n025,#3a3a3d) transparent}
 .jb-month .wm-header,.jb-month .wm-legend,.jb-month>.sv-subtitle{display:none}
 .jb-month .wm-calendar{border:0;border-top:1px solid var(--jv-line);border-radius:0;background:transparent}
 .jb-month .wm-dow{background:transparent;border-bottom:1px solid var(--jv-line)}
 .jb-month .wm-dow span{padding:12px 14px;font-size:10px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--jv-text-3);text-align:center}
 .jb-month .wm-week{border-bottom:1px solid var(--jv-line)}
 .jb-month .wm-day{border-right:1px solid var(--jv-line);color:var(--jv-text);font-family:var(--jv-font);transition:background .2s}
-.jb-month .wm-day:hover{background:rgba(255,255,255,.025)}
+.jb-month .wm-day:hover{background:rgba(var(--jv-ink,255,255,255),.025)}
 .jb-month .wm-day.other-month{color:var(--jv-text-4)}
 .jb-month .wm-number{font-size:14px;font-weight:400}
 .jb-month .wm-day.is-today .wm-number{display:grid;place-items:center;width:26px;height:26px;margin:-4px 0 0 -6px;border-radius:50%;background:var(--jv-accent);color:#fff}
 .jb-month .wm-signal{border:0;background:transparent;color:var(--jv-text-3);font-size:10.5px}
-.jb-month .wm-stay{height:24px;border:1px solid rgba(255,255,255,.07)!important;border-radius:var(--jv-radius-sm);background:linear-gradient(180deg,#29292c,#222224)!important;color:var(--jv-text)!important;font-family:var(--jv-font);font-size:11.5px;font-weight:400}
-.jb-month .wm-stay:hover{border-color:rgba(255,255,255,.16)!important}
+.jb-month .wm-stay{height:24px;border:1px solid rgba(var(--jv-ink,255,255,255),.07)!important;border-radius:var(--jv-radius-sm);background:linear-gradient(180deg,var(--jv-n015,#29292c),var(--jv-n015,#222224))!important;color:var(--jv-text)!important;font-family:var(--jv-font);font-size:11.5px;font-weight:400}
+.jb-month .wm-stay:hover{border-color:rgba(var(--jv-ink,255,255,255),.16)!important}
 .jb-month .wm-stay i{color:var(--jv-accent-text)}
 .jb-month .wm-day:focus-visible,.jb-month .wm-stay:focus-visible{outline:none;box-shadow:var(--jv-focus)}
 
@@ -184,7 +184,7 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
   /* The notes are not pinned here, so the latest reply stays in flow beside the ask bar instead of floating over the
      page content (it was anchored to the scrolling overlay and covered rows). */
   .jarvis-root.is-workpage .jarvis-last-reply{position:static;margin:0 0 12px}
-  .jarvis-root.is-workpage .jarvis-page{order:0;display:flex;flex-direction:column;padding:16px 12px;border:1px solid var(--jv-line);border-radius:12px;background:#0e0e0f}
+  .jarvis-root.is-workpage .jarvis-page{order:0;display:flex;flex-direction:column;padding:16px 12px;border:1px solid var(--jv-line);border-radius:12px;background:var(--jv-n005,#0e0e0f)}
   .jarvis-root.is-workpage .jarvis-presence{order:1}
   .jarvis-root.is-workpage .jarvis-greeting,.jarvis-root.is-workpage .jarvis-insight,.jarvis-root.is-workpage .jarvis-shortcuts{display:none}
   .jarvis-root.is-workpage .jarvis-ring{width:min(60vw,30dvh,300px)}
@@ -195,8 +195,8 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 @media(prefers-reduced-motion:reduce){.jarvis-root.is-workpage .jarvis-page,html body.jarvis-open #modal-root .modal{animation:none}}
 /* Legacy views mounted inside a themed page (the existing month grid) read these variables: map them to the theme,
    whatever the workspace's light/dark setting is. */
-.jarvis-root .jarvis-page{--accent:var(--jv-accent);--accent-bg:var(--jv-accent-soft);--accent-text:var(--jv-accent-text);--surface:transparent;--surface2:rgba(255,255,255,.012);--border:var(--jv-line);--border2:var(--jv-line-2);--text:var(--jv-text);--text2:var(--jv-text-2);--text3:var(--jv-text-3);--bg:var(--jv-bg);color:var(--jv-text);font-family:var(--jv-font)}
-.jb-month .wm-day.other-month{background:rgba(255,255,255,.012)}
+.jarvis-root .jarvis-page{--accent:var(--jv-accent);--accent-bg:var(--jv-accent-soft);--accent-text:var(--jv-accent-text);--surface:transparent;--surface2:rgba(var(--jv-ink,255,255,255),.012);--border:var(--jv-line);--border2:var(--jv-line-2);--text:var(--jv-text);--text2:var(--jv-text-2);--text3:var(--jv-text-3);--bg:var(--jv-bg);color:var(--jv-text);font-family:var(--jv-font)}
+.jb-month .wm-day.other-month{background:rgba(var(--jv-ink,255,255,255),.012)}
 .jb-month .wm-day.is-today{background:rgba(239,122,46,.045)}
 @media(max-width:767px){.jb-prop{padding:0 10px;font-size:12px}}
 
@@ -217,8 +217,8 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 .jb-stay-dates{font-size:clamp(11.5px,.68vw,15.5px)}
 .jb-clean{width:clamp(4px,.25vw,6px);height:clamp(4px,.25vw,6px)}
 /* Very faint daily separators in the header and every villa row. */
-.jb-dates>.jb-day+.jb-day{box-shadow:inset 1px 0 0 rgba(255,255,255,.035)}
-.jb-lane{background-image:linear-gradient(to right,rgba(255,255,255,.032) 1px,transparent 1px);background-size:var(--day) 100%}
+.jb-dates>.jb-day+.jb-day{box-shadow:inset 1px 0 0 rgba(var(--jv-ink,255,255,255),.035)}
+.jb-lane{background-image:linear-gradient(to right,rgba(var(--jv-ink,255,255,255),.032) 1px,transparent 1px);background-size:var(--day) 100%}
 /* The ring column holds the same ring at the reference's share of the screen (no px cap below 4K). */
 @media(min-width:1100px){
   .jarvis-root.is-workpage .jarvis-orbit{--ring:min(82cqw,80cqh,1200px)}
@@ -230,13 +230,13 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
   .jarvis-root.is-workpage .jarvis-notes{bottom:calc(clamp(18px,3.6vh,36px) + clamp(46px,2.9vw,72px) + 12px)}
 }
 /* Pinned villa labels cover the timeline to the scroller's edge even at fractional device-pixel offsets (125 % scaling). */
-.jb-corner,.jb-prop{box-shadow:-6px 0 0 #111112}
+.jb-corner,.jb-prop{box-shadow:-6px 0 0 var(--jv-n005,#111112)}
 
 /* ── Cleanings page (Stage 2). Same tokens, header and controls as Bookings; bounded rows; neutral surfaces; orange
    only for what needs attention. Status is always written in words, never colour alone. ── */
 .jarvis-root .jarvis-page{--jc-row:clamp(56px,3.5vw,84px);--jc-time:clamp(54px,3.4vw,84px)}
-.jarvis-root .jb-tools .jv-btn.is-current{border-color:var(--jv-accent-line)!important;color:#fff}
-.jc-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--jv-line);padding-right:4px;scrollbar-width:thin;scrollbar-color:#3a3a3d transparent}
+.jarvis-root .jb-tools .jv-btn.is-current{border-color:var(--jv-accent-line)!important;color:var(--jv-n100,#fff)}
+.jc-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--jv-line);padding-right:4px;scrollbar-width:thin;scrollbar-color:var(--jv-n025,#3a3a3d) transparent}
 .jc-summary{margin:clamp(10px,.8vw,16px) 0;font-size:var(--jb-font);color:var(--jv-text-3)}
 .jc-summary em{font-style:normal;color:var(--jv-accent-text)}
 .jc-menu-note{margin:4px 6px 2px;padding-top:8px;border-top:1px solid var(--jv-line);font-size:11px;line-height:1.5;color:var(--jv-text-3)}
@@ -261,7 +261,7 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 .jc-none{margin:4px 0 0;font-size:var(--jb-font);color:var(--jv-text-3)}
 .jc-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:8px;border-bottom:1px solid var(--jv-line)}
 .jarvis-root .jc-main{display:grid;grid-template-columns:var(--jc-time) minmax(190px,1.55fr) minmax(170px,1.65fr) minmax(130px,.9fr) minmax(118px,.75fr);align-items:center;gap:clamp(10px,.9vw,20px);min-height:var(--jc-row);padding:6px 8px;border-radius:var(--jv-radius-sm);text-align:left;font-family:var(--jv-font);font-size:var(--jb-font);color:var(--jv-text);transition:background .2s}
-.jarvis-root .jc-main:hover{background:rgba(255,255,255,.03)}
+.jarvis-root .jc-main:hover{background:rgba(var(--jv-ink,255,255,255),.03)}
 .jarvis-root .jc-main:focus-visible{outline:none;box-shadow:var(--jv-focus)}
 .jc-time{font-variant-numeric:tabular-nums;color:var(--jv-text);font-size:clamp(13px,.82vw,18px)}
 .jc-villa{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -269,19 +269,19 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 .jc-villa small{font-size:var(--jb-small);letter-spacing:.02em;color:var(--jv-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jc-villa small.is-turn{color:var(--jv-accent-text)}
 .jc-team{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
-.jc-member{display:inline-flex;align-items:baseline;gap:6px;padding:4px 9px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:rgba(255,255,255,.02);font-size:calc(var(--jb-font) - 1px);color:var(--jv-text);white-space:nowrap}
+.jc-member{display:inline-flex;align-items:baseline;gap:6px;padding:4px 9px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:rgba(var(--jv-ink,255,255,255),.02);font-size:calc(var(--jb-font) - 1px);color:var(--jv-text);white-space:nowrap}
 .jc-member small{font-size:var(--jb-small);color:var(--jv-text-3)}
 .jc-member.is-offered{border-style:dashed}
 .jc-member.is-offered small{color:var(--jv-accent-text)}
 .jc-member.is-none{border-color:transparent;background:none;padding-left:0;color:var(--jv-text-3)}
 .jc-cover{color:var(--jv-text-2);font-size:calc(var(--jb-font) - .5px)}
 .jc-state{display:inline-flex;align-items:center;gap:8px;color:var(--jv-text-2);white-space:nowrap}
-.jc-state i{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid #9a9a9a}
-.jc-row.is-covered .jc-state i{background:#9a9a9a}
+.jc-state i{flex:none;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--jv-n060,#9a9a9a)}
+.jc-row.is-covered .jc-state i{background:var(--jv-n060,#9a9a9a)}
 .jc-row.is-pending .jc-state{color:var(--jv-text)}.jc-row.is-pending .jc-state i{border-color:var(--jv-accent)}
 .jc-row.is-alert .jc-state{color:var(--jv-accent-text)}.jc-row.is-alert .jc-state i{border-color:var(--jv-accent);background:var(--jv-accent);box-shadow:0 0 8px rgba(239,122,46,.55)}
-.jc-row.is-done .jc-main{color:var(--jv-text-2)}.jc-row.is-done .jc-state i{border-color:#6b6b6b;background:#6b6b6b}
-.jc-row.is-cancelled .jc-main{color:var(--jv-text-3)}.jc-row.is-cancelled .jc-villa b{text-decoration:line-through;text-decoration-color:#555}.jc-row.is-cancelled .jc-state i{border-style:dashed}
+.jc-row.is-done .jc-main{color:var(--jv-text-2)}.jc-row.is-done .jc-state i{border-color:var(--jv-n040,#6b6b6b);background:var(--jv-n040,#6b6b6b)}
+.jc-row.is-cancelled .jc-main{color:var(--jv-text-3)}.jc-row.is-cancelled .jc-villa b{text-decoration:line-through;text-decoration-color:var(--jv-n035,#555)}.jc-row.is-cancelled .jc-state i{border-style:dashed}
 .jarvis-root .jc-expand{margin-right:4px}
 .jarvis-root .jc-expand svg{transition:transform .25s var(--jv-ease)}
 .jc-row.is-open .jc-expand svg{transform:rotate(180deg)}
@@ -292,14 +292,14 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 /* By cleaner */
 .jc-grid-wrap{overflow:auto;margin-top:4px}
 .jc-grid{width:100%;min-width:760px;border-collapse:collapse;table-layout:fixed;font-size:calc(var(--jb-font) - .5px)}
-.jc-grid th,.jc-grid td{border-bottom:1px solid var(--jv-line);border-left:1px solid rgba(255,255,255,.035);padding:8px 6px;vertical-align:top;text-align:left}
-.jc-grid thead th{position:sticky;top:0;z-index:1;background:#111112;text-align:center;font-weight:400}
+.jc-grid th,.jc-grid td{border-bottom:1px solid var(--jv-line);border-left:1px solid rgba(var(--jv-ink,255,255,255),.035);padding:8px 6px;vertical-align:top;text-align:left}
+.jc-grid thead th{position:sticky;top:0;z-index:1;background:var(--jv-n005,#111112);text-align:center;font-weight:400}
 .jc-grid thead small{display:block;font-size:var(--jb-small);letter-spacing:.14em;color:var(--jv-text-3)}
 .jc-grid thead b{display:inline-grid;place-items:center;width:clamp(26px,1.6vw,38px);height:clamp(26px,1.6vw,38px);margin-top:4px;border-radius:50%;font-weight:400;font-size:clamp(14px,.86vw,19px)}
 .jc-grid thead th.is-today b{background:var(--jv-accent);color:#fff}
 .jc-grid .jc-who{width:clamp(110px,7vw,170px);border-left:0;font-weight:400;color:var(--jv-text);vertical-align:middle}
 .jc-grid td.is-today{background:rgba(239,122,46,.03)}
-.jarvis-root .jc-chip{display:flex;flex-direction:column;gap:2px;width:100%;margin-bottom:4px;padding:6px 8px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:linear-gradient(180deg,#29292c,#222224);text-align:left;font-family:var(--jv-font);color:var(--jv-text)}
+.jarvis-root .jc-chip{display:flex;flex-direction:column;gap:2px;width:100%;margin-bottom:4px;padding:6px 8px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:linear-gradient(180deg,var(--jv-n015,#29292c),var(--jv-n015,#222224));text-align:left;font-family:var(--jv-font);color:var(--jv-text)}
 .jarvis-root .jc-chip:hover{border-color:var(--jv-line-3)}
 .jarvis-root .jc-chip:focus-visible{outline:none;box-shadow:var(--jv-focus)}
 .jc-chip b{font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -324,8 +324,8 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
 .jc-seg{display:inline-flex;margin:0 10px 10px 0;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);overflow:hidden}
 #modal-root .jc-seg-btn{min-width:42px;height:34px;padding:0 12px;border:0;border-right:1px solid var(--jv-line-2);background:transparent;color:var(--jv-text-2);font-family:var(--jv-font);font-size:12.5px;cursor:pointer}
 #modal-root .jc-seg-btn:last-child{border-right:0}
-#modal-root .jc-seg-btn:hover{background:rgba(255,255,255,.04);color:#fff}
-#modal-root .jc-seg-btn.is-on{background:var(--jv-accent-soft);color:#fff;box-shadow:inset 0 -2px 0 var(--jv-accent)}
+#modal-root .jc-seg-btn:hover{background:rgba(var(--jv-ink,255,255,255),.04);color:var(--jv-n100,#fff)}
+#modal-root .jc-seg-btn.is-on{background:var(--jv-accent-soft);color:var(--jv-n100,#fff);box-shadow:inset 0 -2px 0 var(--jv-accent)}
 #modal-root .jc-seg-btn.is-over{opacity:.45}
 #modal-root .jc-seg-btn:focus-visible{outline:none;box-shadow:var(--jv-focus)}
 /* Legacy cleaning dialogs (add / edit session) */
@@ -353,12 +353,12 @@ body.jarvis-open #modal-root{--red:#c9603f;--red-text:var(--jv-danger);--red-bg:
 .jt-body.is-properties .jc-days,.jt-body.is-projects .jc-days,.jt-body.is-done .jc-days{padding-top:clamp(10px,.8vw,16px)}
 .jt-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--jv-line)}
 .jt-task{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:10px;padding:4px 0;border-bottom:1px solid var(--jv-line)}
-.jarvis-root .jt-check{flex:none;display:grid;place-items:center;width:clamp(22px,1.35vw,30px);height:clamp(22px,1.35vw,30px);margin-left:4px;padding:0;border:1.5px solid #6b6b6b;border-radius:50%;background:transparent;color:transparent;cursor:pointer;transition:border-color .2s,color .2s}
+.jarvis-root .jt-check{flex:none;display:grid;place-items:center;width:clamp(22px,1.35vw,30px);height:clamp(22px,1.35vw,30px);margin-left:4px;padding:0;border:1.5px solid var(--jv-n040,#6b6b6b);border-radius:50%;background:transparent;color:transparent;cursor:pointer;transition:border-color .2s,color .2s}
 .jarvis-root .jt-check:hover{border-color:var(--jv-accent);color:var(--jv-accent-text)}
 .jarvis-root .jt-check:focus-visible{outline:none;box-shadow:var(--jv-focus)}
-.jt-check.is-on{border-color:#6b6b6b;background:#6b6b6b;color:#111;cursor:default}
+.jt-check.is-on{border-color:var(--jv-n040,#6b6b6b);background:var(--jv-n040,#6b6b6b);color:var(--jv-n005,#111);cursor:default}
 .jarvis-root .jt-main{display:flex;flex-direction:column;gap:4px;min-width:0;min-height:var(--jc-row);justify-content:center;padding:6px 8px;border-radius:var(--jv-radius-sm);text-align:left;font-family:var(--jv-font);font-size:var(--jb-font);color:var(--jv-text);background:transparent;border:0;cursor:pointer}
-.jarvis-root .jt-main:hover{background:rgba(255,255,255,.03)}
+.jarvis-root .jt-main:hover{background:rgba(var(--jv-ink,255,255,255),.03)}
 .jarvis-root .jt-main:focus-visible{outline:none;box-shadow:var(--jv-focus)}
 .jt-main b{font-weight:400;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .jt-main small{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:var(--jb-small);letter-spacing:.02em;color:var(--jv-text-3)}
@@ -386,3 +386,16 @@ body.jarvis-open #modal-root .modal:has(.jt-dialog):focus{outline:none}
   .jt-col:not(.is-tab){display:none}
   .jt-col h3{display:none}
 }
+
+/* ── Light mode (Jarvis only; saved per device). The neutral tones above read var(--jv-nSS / ink / paper / shade, <dark
+   original>); these tokens exist only here, so dark mode and everything outside Jarvis keep their exact colours. Orange
+   accents, layout and components are shared; accent text is darkened for contrast on light surfaces. ── */
+.jarvis-root.jv-light,body.jarvis-light #modal-root,body.jarvis-light .toast-wrap{
+  color-scheme:light;--jv-scheme:light;
+  --jv-n000:#fbf9f6;--jv-n005:#f0eeeb;--jv-n010:#e5e3e0;--jv-n015:#dad8d5;--jv-n020:#cfcdca;--jv-n025:#c4c2bf;--jv-n030:#b9b7b4;--jv-n035:#aeaca9;--jv-n040:#a3a19e;--jv-n050:#8d8b88;--jv-n055:#82807d;--jv-n060:#777572;--jv-n065:#6c6a67;--jv-n070:#615f5c;--jv-n075:#565451;--jv-n080:#4b4946;--jv-n085:#403e3b;--jv-n090:#353330;--jv-n095:#2a2825;--jv-n100:#1f1d1a;
+  --jv-ink:34,28,22;--jv-paper:255,253,250;--jv-shade:96,78,60;--jv-scrim:rgba(240,236,231,.62);
+  --jv-accent-text:#b4541a;--jv-warm-text:#b4541a;--jv-danger:#b8432c;--jv-danger-text:#b42318;--jv-accent-line:rgba(213,98,26,.6);
+}
+/* The ring and the space backdrop keep their motion; in light mode their tones are inverted (orange kept) so the
+   particles read as graphite on a pale sky. */
+.jarvis-root.jv-light .jarvis-atmos canvas,.jarvis-root.jv-light .jarvis-ring{filter:invert(1) hue-rotate(180deg)}
