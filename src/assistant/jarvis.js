@@ -968,7 +968,7 @@
     renderPersonal();el('jarvis-mode-select')?.focus();
   }
   const RAIL=[['overview','home','Dashboard',''],['chat','chat','Jarvis',''],['bookings','calendar','Bookings',''],['cleaning','broom','Cleanings','Opens the Cleaning page'],['tasks','tasks','Tasks','Opens the Tasks page'],['whatsapp','whatsapp','WhatsApp',''],['properties','property','Properties','Opens the Properties page'],['team','team','Team','Opens the Team page'],['reports','reports','Reports','Opens the Reports page'],['issues','issues','Issues','Opens the Issues page']];
-  const TOP=[['overview','Overview'],['bookings','Bookings'],['cleaning','Cleanings'],['tasks','Tasks'],['properties','Properties'],['reports','Reports']];
+  const TOP=[['overview','Overview'],['bookings','Bookings'],['cleaning','Cleanings'],['tasks','Tasks'],['properties','Properties'],['reports','Reports'],['team','Team',true],['issues','Issues',true]];
   const INSIGHTS=[['properties','property','Properties'],['bookings','calendar','Bookings'],['tasks','tasks','Tasks'],['cleanings','broom','Cleanings'],['reports','reports','Reports'],['whatsapp','whatsapp','WhatsApp']];
   const navButton=([name,icon,label,hint],rail)=>'<button type="button" class="'+(rail?'jarvis-rail-item':'jarvis-top-item')+'" data-jarvis-nav="'+name+'" data-j="nav-'+name+'"'+(hint?' title="'+hint+'"':'')+(name==='overview'?' aria-current="page"':'')+'>'+(rail?svg(icon,22):'')+'<span>'+label+'</span>'+(rail&&name==='whatsapp'?'<i class="jarvis-rail-dot" id="jarvis-rail-wa-dot" hidden></i>':'')+'</button>';
   const panelHead=(icon,id,title,extra='')=>'<header class="jp-head"><span class="jp-icon" aria-hidden="true">'+svg(icon,20)+'</span><h2 class="jarvis-kicker" id="'+id+'">'+title+'</h2>'+extra+'<button type="button" class="jp-collapse" data-j="panel-collapse">'+svg('back',14)+'<span>Overview</span></button></header>';
@@ -977,7 +977,7 @@
   const MARKUP=()=>'<div class="jarvis-atmos" id="jarvis-atmos" aria-hidden="true"><canvas id="jarvis-atmos-canvas"></canvas></div><div class="jarvis-shell">'
     +'<nav class="jarvis-rail" aria-label="Jarvis sections"><span class="jarvis-mark" aria-hidden="true"></span>'+RAIL.map(item=>navButton(item,true)).join('')+'<button type="button" class="jarvis-rail-item jarvis-rail-settings" data-j="settings" aria-label="Voice and connection settings">'+svg('gear',22)+'<span>Settings</span></button></nav>'
     +'<header class="jarvis-header"><div class="jarvis-brand"><span class="jarvis-wordmark">JARVIS</span><small>Seravillas assistant</small></div>'
-    +'<nav class="jarvis-nav" aria-label="Jarvis">'+TOP.map(([name,label])=>navButton([name,'',label,''],false)).join('')+'</nav>'
+    +'<nav class="jarvis-nav" aria-label="Jarvis">'+TOP.map(([name,label,compact])=>navButton([name,'',label,''],false).replace('class="jarvis-top-item"',compact?'class="jarvis-top-item is-compact"':'class="jarvis-top-item"')).join('')+'</nav>'
     +'<div class="jarvis-header-right"><button class="jarvis-connection" data-j="settings" aria-label="Connection and voice settings"><i id="jarvis-mode-dot"></i><span id="jarvis-mode-text">App tools</span></button>'
     +'<div class="jarvis-when"><small>'+BUSINESS.place+'</small><span id="jarvis-day-short"></span></div><time class="jarvis-clock" id="jarvis-clock"></time>'
     +'<button type="button" class="jarvis-icon jarvis-theme-toggle" data-j="theme" id="jarvis-theme-toggle" aria-label="Light mode" aria-pressed="false" title="Switch to light mode"><span class="jarvis-theme-sun">'+svg('sun',17)+'</span><span class="jarvis-theme-moon">'+svg('moon',17)+'</span></button>'
@@ -987,7 +987,7 @@
     +'<div class="jp-cal-body"><div class="jp-cal-date" aria-hidden="true"><small id="jarvis-cal-month"></small><b id="jarvis-cal-daynum"></b><small id="jarvis-cal-weekday"></small></div><div class="jp-scroll"><p class="jarvis-date" id="jarvis-today-date"></p><ol class="jarvis-rows jp-timeline" id="jarvis-today-list"></ol></div></div></section>'
     +'<section class="jp-panel jp-tasks" id="jarvis-tasks-section">'+panelHead('tasks','jarvis-tasks-title','Tasks',viewAll('nav-tasks','View all tasks (opens the Tasks page)'))+filters('task','task-filter','Task window',[['today','Today'],['week','This week'],['later','Later']])+'<ol class="jarvis-rows jp-scroll jp-task-list" id="jarvis-task-list"></ol></section>'
     +'<section class="jp-panel jp-cleanings" id="jarvis-cleanings-section">'+panelHead('broom','jarvis-cleanings-title','Cleanings',viewAll('nav-cleaning','View all cleanings (opens the Cleaning page)'))+'<ol class="jp-scroll jp-clean-list" id="jarvis-clean-list"></ol></section></aside>'
-    +'<section class="jarvis-page" id="jarvis-bookings-page" aria-label="Bookings" hidden></section><section class="jarvis-page" id="jarvis-cleanings-page" aria-label="Cleanings" hidden></section><section class="jarvis-page" id="jarvis-tasks-page" aria-label="Tasks" hidden></section><section class="jarvis-page" id="jarvis-properties-page" aria-label="Properties" hidden></section>'
+    +'<section class="jarvis-page" id="jarvis-bookings-page" aria-label="Bookings" hidden></section><section class="jarvis-page" id="jarvis-cleanings-page" aria-label="Cleanings" hidden></section><section class="jarvis-page" id="jarvis-tasks-page" aria-label="Tasks" hidden></section><section class="jarvis-page" id="jarvis-properties-page" aria-label="Properties" hidden></section><section class="jarvis-page" id="jarvis-team-page" aria-label="Team" hidden></section><section class="jarvis-page" id="jarvis-reports-page" aria-label="Reports" hidden></section><section class="jarvis-page" id="jarvis-issues-page" aria-label="Issues" hidden></section>'
     +'<main class="jarvis-presence" aria-label="Jarvis"><div class="jarvis-greeting"><small id="jarvis-greet">Good evening</small><h1>'+BUSINESS.owner+'</h1><p id="jarvis-longdate"></p></div>'
     +'<div class="jarvis-stage"><div class="jarvis-orbit"><svg class="jarvis-guides" viewBox="-100 -100 200 200" aria-hidden="true" focusable="false"><circle r="52.2"/><circle r="71.3" class="mid"/><circle r="84.3"/>'
     +[[-135,52.2],[-45,52.2],[40,52.2],[90,50.6],[138,52.2],[-137,84.3],[-43,84.3],[42,82]].map(([a,r])=>'<circle class="dot" r=".75" cx="'+(Math.cos(a*Math.PI/180)*r).toFixed(1)+'" cy="'+(Math.sin(a*Math.PI/180)*r).toFixed(1)+'"/>').join('')
@@ -1013,7 +1013,7 @@
   /* Working pages inside the Jarvis shell. Switching pages is presentation only: the voice session, drafts, reviews
      and renderers keep running; nothing is stopped, started or saved. */
   let page='overview',pageReply=false;
-  const PAGES={bookings:{id:'jarvis-bookings-page',nav:'bookings'},cleanings:{id:'jarvis-cleanings-page',nav:'cleaning'},tasks:{id:'jarvis-tasks-page',nav:'tasks'},properties:{id:'jarvis-properties-page',nav:'properties'}};
+  const PAGES={bookings:{id:'jarvis-bookings-page',nav:'bookings'},cleanings:{id:'jarvis-cleanings-page',nav:'cleaning'},tasks:{id:'jarvis-tasks-page',nav:'tasks'},properties:{id:'jarvis-properties-page',nav:'properties'},team:{id:'jarvis-team-page',nav:'team'},reports:{id:'jarvis-reports-page',nav:'reports'},issues:{id:'jarvis-issues-page',nav:'issues'}};
   function showPage(next){
     if(!root)return;const target=PAGES[next]?next:'overview',changed=target!==page;page=target;root.dataset.page=page;root.classList.toggle('is-workpage',page!=='overview');
     for(const [name,cfg] of Object.entries(PAGES)){const host=el(cfg.id);if(host)host.hidden=name!==page;}
@@ -1090,7 +1090,7 @@
   /* ── Contextual navigation from his own words: a small grammar (verb + view + optional "tab/page"), tolerant of
      fillers and misheard view names. Anything else — a question, a negation, a filter such as "bookings for next week" —
      goes to the conversation, where Hermes can still return a navigate decision. Read-only: no approval needed. ── */
-  const NAV_VIEWS={bookings:['booking','bookings','reservation','reservations','calendar','timeline','stays','availability','planning'],cleanings:['cleaning','cleanings','cleaners','housekeeping'],tasks:['task','tasks','todo','todos','to do','to dos','to do list','task list','jobs'],properties:['property','properties','villa','villas','houses'],overview:['dashboard','overview','home','home screen','main screen','main page','start']};
+  const NAV_VIEWS={bookings:['booking','bookings','reservation','reservations','calendar','timeline','stays','availability','planning'],cleanings:['cleaning','cleanings','cleaners','housekeeping'],tasks:['task','tasks','todo','todos','to do','to dos','to do list','task list','jobs'],properties:['property','properties','villa','villas','houses'],team:['team','staff'],reports:['report','reports','revenue'],issues:['issue','issues','problems'],overview:['dashboard','overview','home','home screen','main screen','main page','start']};
   const NAV_SUFFIX=/ (?:tab|tap|tabs|page|pages|view|screen|section|panel|calendar|list|schedule|plan)$/;
   const NAV_FILLER=/\b(?:um+|uh+|er+|erm|hey|ok|okay|so|just|quickly|now|please|for me|for us|thanks|thank you|jarvis)\b/g;
   function navWords(text){return String(text||'').toLowerCase().normalize('NFD').replace(/\p{M}/gu,'').replace(/[’']/g,'').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(NAV_FILLER,' ').replace(/\s+/g,' ').trim();}
@@ -1112,7 +1112,7 @@
   const NAV_LEAD=/^(?:(?:hi|hello|hey|ok|okay|so|right|alright|well|no|nope|yes|yeah|now|then|and|also|please|sorry|mm+|hmm+|hm+|ah+|oh)\s+)+/;
   const NAV_POLITE=/^(?:(?:can|could|would|will) you(?: please)?|(?:can|could|may) i(?: please)?|i (?:want|need|would like|d like)(?: you)? to|lets|let s|id like to)\s+/;
   const NAV_DROP=new Set(['me','my','us','our','the','a','up','to','into','over','for','now','tab','tap','tabs','page','pages','panel','panels','view','views','screen','section','list','schedule','plan','window','again','back','one']);
-  const NAV_CLOSE=/^(?:close|dismiss|hide|shut|exit|put away|get rid of|go back|back)(?: (?:it|that|this|that one|this one|(?:the )?(?:view|tab|page|panel|window|list|dialog|popup|pop up|form|records?|calendar|bookings?|cleanings?|tasks?|properties|property|villas?|whatsapp|dashboard)))?(?: (?:tab|page|view|panel|window))?$/;
+  const NAV_CLOSE=/^(?:close|dismiss|hide|shut|exit|put away|get rid of|go back|back)(?: (?:it|that|this|that one|this one|(?:the )?(?:view|tab|page|panel|window|list|dialog|popup|pop up|form|records?|calendar|bookings?|cleanings?|tasks?|properties|property|villas?|team|reports?|issues?|whatsapp|dashboard)))?(?: (?:tab|page|view|panel|window))?$/;
   const NAV_END=/^(?:(?:end|finish|stop|close) (?:the |this |our )?(?:conversation|session|chat|call)|thats all(?: for now)?|thats it for now|goodbye|good bye|bye(?: bye)?|see you(?: later)?|talk (?:to you )?later)$/;
   function navSentence(sentence){
     const w=((navWords(sentence)+' ').replace(NAV_LEAD,'').replace(NAV_POLITE,'')+' ').replace(NAV_LEAD,'').trim();
@@ -1123,7 +1123,7 @@
     const m=w.match(/^(?:open(?: up)?|show(?: me)?|go(?: back)? to|go into|take me(?: back)? to|bring up|pull up|switch(?: over)? to|jump to|navigate to|display|let me see|see|view|back to|return to|get me) (.+)$/)||w.match(/^(.+) (?:tab|tap|page|screen|section|panel)$/);
     if(!m)return null;
     let phrase=' '+m[1]+' ';
-    for(const [a,b] of [['to dos','todos'],['to do','todo'],['home screen','home'],['main screen','home'],['main page','home'],['task list','tasks']])phrase=phrase.split(' '+a+' ').join(' '+b+' ');
+    for(const [a,b] of [['to dos','todos'],['to do','todo'],['home screen','home'],['main screen','home'],['main page','home'],['task list','tasks'],['cleaning team','team'],['cleaners team','team']])phrase=phrase.split(' '+a+' ').join(' '+b+' ');
     let words=phrase.trim().split(' ').filter(t=>t&&!NAV_DROP.has(t));
     if(words.length>1)words=words.filter(t=>t!=='dashboard'&&t!=='overview');
     const views=[...new Set(words.map(navView))];
@@ -1168,18 +1168,21 @@
       else if(expanded){const name=PANEL_NAMES[expanded]||'the panel';expandPanel(expanded);message='Closed '+name+'.';}
       else if(page!=='overview'){showPage('overview');message='Back to the dashboard.';}
       else message='You’re already on the dashboard. I’m still here.';
-    }else if(['bookings','cleanings','overview','tasks','properties'].includes(destination)&&unsavedDialog())message=UNSAVED;
-    else if(['bookings','cleanings','overview','tasks','properties'].includes(destination)){
+    }else if(['bookings','cleanings','overview','tasks','properties','team','reports','issues'].includes(destination)&&unsavedDialog())message=UNSAVED;
+    else if(['bookings','cleanings','overview','tasks','properties','team','reports','issues'].includes(destination)){
       if(document.querySelector?.('#modal-root .modal')&&typeof closeModal==='function')closeModal();
       if(panel)closePanel();if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();
       if(expanded)expandPanel(expanded);showPage(destination);
-      message=destination==='bookings'?(page==='bookings'?'Here’s the Bookings calendar.':'The calendar could not open.'):destination==='cleanings'?(page==='cleanings'?'Here are the cleanings.':'Cleanings could not open.'):destination==='tasks'?(page==='tasks'?'Here are your tasks.':'Tasks could not open.'):destination==='properties'?(page==='properties'?'Here are your properties.':'Properties could not open.'):'Back to the dashboard.';
-    }else if(destination==='issues'){showPage('overview');showRecords({entity:destination,view:'list'});message='Here are the '+destination+'.';}
-    else if(destination==='reports'){goWorkspace('booking-report');return true;}
+      message=destination==='bookings'?(page==='bookings'?'Here’s the Bookings calendar.':'The calendar could not open.'):destination==='cleanings'?(page==='cleanings'?'Here are the cleanings.':'Cleanings could not open.'):destination==='tasks'?(page==='tasks'?'Here are your tasks.':'Tasks could not open.'):destination==='properties'?(page==='properties'?'Here are your properties.':'Properties could not open.'):destination==='team'?(page==='team'?'Here’s your team.':'Team could not open.'):destination==='reports'?(page==='reports'?'Here are your reports.':'Reports could not open.'):destination==='issues'?(page==='issues'?'Here are the issues.':'Issues could not open.'):'Back to the dashboard.';
+    }
     else return false;
     add('Jarvis',message,{keepTask:true});speak(message);live?.updateContext(liveContext());return true;
   }
-  function renderWorkPage(){renderBookingsPage();renderCleaningsPage();renderTasksPage();renderPropertiesPage();}
+  function renderWorkPage(){renderBookingsPage();renderCleaningsPage();renderTasksPage();renderPropertiesPage();
+    renderViewPage('team','jarvis-team-page',window.SV_TEAM_VIEW,'The team could not load. The rest of Jarvis still works.');
+    renderViewPage('reports','jarvis-reports-page',window.SV_REPORTS_VIEW,'The reports could not load. The rest of Jarvis still works.');
+    renderViewPage('issues','jarvis-issues-page',window.SV_ISSUES_VIEW,'The issues could not load. The rest of Jarvis still works.');}
+  function renderViewPage(name,id,view,failure){const host=el(id);if(!host||page!==name||!view)return;try{view.bind(host);view.render(host);}catch{host.textContent=failure;}}
   function renderPropertiesPage(){
     const host=el('jarvis-properties-page');if(!host||page!=='properties'||!window.SV_PROPERTIES_VIEW)return;
     try{SV_PROPERTIES_VIEW.bind(host);SV_PROPERTIES_VIEW.render(host);}catch{host.textContent='The properties could not load. The rest of Jarvis still works.';}
@@ -1215,9 +1218,9 @@
     if(action==='panel-collapse'){if(expanded)expandPanel(expanded);setNav('overview');return true;}
     if(action==='conv-all'||action==='nav-chat'){if(page!=='overview')showPage('overview');if(expanded!=='conversation')expandPanel('conversation');else if(action==='conv-all')expandPanel('conversation');setNav(expanded==='conversation'?'chat':'overview');if(action==='nav-chat')el('jarvis-input')?.focus();return true;}
     if(action==='nav-properties'){showPage('properties');return true;}
-    if(action==='nav-team'){goWorkspace('manage','cleaners');return true;}
-    if(action==='nav-reports'||action==='insight-reports'){goWorkspace('booking-report');return true;}
-    if(action==='nav-issues'){goWorkspace('manage','issues');return true;}
+    if(action==='nav-team'){showPage('team');return true;}
+    if(action==='nav-reports'||action==='insight-reports'){showPage('reports');return true;}
+    if(action==='nav-issues'){showPage('issues');return true;}
     if(action==='insight-properties'){showRecords({entity:'properties',view:'list'});return true;}
     if(action==='insight-bookings'){showRecords({entity:'bookings',view:'list',dateBy:'arrival',start:ref,end:addDays(ref,6)});setNav('bookings');return true;}
     if(action==='insight-cleanings'){showRecords({entity:'cleanings',view:'list',status:'active',start:ref,end:addDays(ref,6)});return true;}

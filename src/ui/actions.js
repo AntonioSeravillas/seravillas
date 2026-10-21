@@ -11,7 +11,8 @@ function addSess(){const propId=(document.getElementById('f-prop')||{}).value||'
 function addProp(name){const el=name===undefined?document.getElementById('prop-in'):null;const n=String(name===undefined?(el?.value||''):name).trim();if(!n)return;D.props.push({id:uid(),name:n,notes:'',photos:[]});if(el)el.value='';save();toast('Property added');render();}
 /* confirmed: the Jarvis page has already asked in its own confirmation step. */
 function delProp(id,confirmed){if(confirmed!==true&&!confirm('Remove this property and all its sessions, tasks and issues?'))return;D.props=D.props.filter(p=>p.id!==id);D.sessions=D.sessions.filter(s=>s.propId!==id);D.tasks=D.tasks.filter(t=>t.propId!==id);D.issues=D.issues.filter(i=>i.propId!==id);propHubId=null;save();render();}
-function delCleaner(id){if(!confirm('Remove this cleaner?'))return;D.cleaners=D.cleaners.filter(c=>c.id!==id);D.sessions.forEach(s=>s.cleanerIds=(s.cleanerIds||[]).filter(cid=>cid!==id));save();render();}
+/* confirmed: the Jarvis page has already asked in its own confirmation step. */
+function delCleaner(id,confirmed){if(confirmed!==true&&!confirm('Remove this cleaner?'))return;D.cleaners=D.cleaners.filter(c=>c.id!==id);D.sessions.forEach(s=>s.cleanerIds=(s.cleanerIds||[]).filter(cid=>cid!==id));save();render();}
 function delSess(id){if(!confirm('Delete this session?'))return;D.sessions=D.sessions.filter(s=>s.id!==id);save();closeModal();render();}
 
 /* ── NOTIFICATIONS ── */

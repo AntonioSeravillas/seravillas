@@ -319,7 +319,7 @@ test('live WhatsApp readings use the natural voice directly and only completed, 
     if(outcome==='interrupt')options.onInterruption();if(outcome==='new-turn')options.onMessage({source:'user',message:'Wait a moment',event_id:3});options.onModeChange({mode:'listening'});await flush();assert.equal(reads.length,outcome==='complete'?1:0);app.click('close');
   }
 });
-test('Jarvis navigation avoids workspace data-nav capture; Tasks opens its internal page and Reports keeps its workspace route, desktop and phone',async()=>{
+test('Jarvis navigation avoids workspace data-nav capture; Tasks and Reports open their internal pages, desktop and phone',async()=>{
   for(const desktop of [true,false]){
     const app=desktopRuntime({desktop}),visited=[],renders=[];app.context.workspaceNavigate=target=>visited.push(target);
     app.context.SV_TASKS_VIEW={bind(){},render(host){renders.push(host);}};app.run('openJarvis()');await flush();
@@ -327,7 +327,8 @@ test('Jarvis navigation avoids workspace data-nav capture; Tasks opens its inter
     app.click('nav-tasks');assert.deepEqual(visited,[]);assert.equal(app.root().removed,false,'Tasks stays inside Jarvis');
     assert.equal(app.root().dataset.page,'tasks');assert.equal(app.el('jarvis-tasks-page').hidden,false);assert.equal(app.el('jarvis-bookings-page').hidden,true);assert.equal(renders.length,1);
     app.click('nav-overview');assert.equal(app.root().dataset.page,'overview');assert.equal(app.el('jarvis-tasks-page').hidden,true);
-    app.click('nav-reports');assert.deepEqual(visited,['booking-report']);assert.equal(app.root().removed,true);assert.equal(app.background.hasAttribute('inert'),false);
+    app.click('nav-reports');assert.deepEqual(visited,[]);assert.equal(app.root().removed,false);assert.equal(app.root().dataset.page,'reports');assert.equal(app.el('jarvis-reports-page').hidden,false);
+    app.click('close');assert.equal(app.root().removed,true);assert.equal(app.background.hasAttribute('inert'),false);
   }
 });
 test('WhatsApp announcements wait for audio opt-in, finish before marking read, pause quiet recognition and stop on close',async()=>{
@@ -536,8 +537,12 @@ test('rail/top Bookings opens the themed Bookings page inside Jarvis: no page ch
   app.click('nav-overview');assert.equal(app.root().dataset.page,'overview');assert.equal(app.el('jarvis-bookings-page').hidden,true);assert.equal(app.context.svAfterRender===null,false);
   app.click('close');assert.equal(app.context.svAfterRender,null);
 });
-test('explicit AI page navigation opens only a known app destination and stops the microphone',async()=>{
-  const app=desktopRuntime({agent:true,understand:async()=>({kind:'navigate',destination:'reports'})}),visited=[];app.context.workspaceNavigate=d=>visited.push(d);app.run('openJarvis()');await flush();app.click('mic');app.hear('Take me to reports please');await flush();assert.deepEqual(visited,['booking-report']);assert.equal(app.root().removed,true);assert.equal(app.recs[0].aborted,true);
+test('explicit AI page navigation opens only a known app destination, inside Jarvis',async()=>{
+  /* Wording the app does not recognise itself reaches the model; its navigate decision uses the same internal page. */
+  const app=desktopRuntime({agent:true,understand:async()=>({kind:'navigate',destination:'reports'})}),visited=[];app.context.workspaceNavigate=d=>visited.push(d);app.run('openJarvis()');await flush();app.click('mic');app.hear('I would like to look at how the villas performed this year');await flush();
+  assert.deepEqual(visited,[]);assert.equal(app.root().removed,false);assert.equal(app.root().dataset.page,'reports');assert.equal(app.el('jarvis-reports-page').hidden,false);
+  const odd=desktopRuntime({agent:true,understand:async()=>({kind:'navigate',destination:'settings-export'})}),seen=[];odd.context.workspaceNavigate=d=>seen.push(d);odd.run('openJarvis()');await flush();odd.click('mic');odd.hear('Could you take me somewhere unusual');await flush();
+  assert.deepEqual(seen,[]);assert.equal(odd.root().dataset.page,'overview','an unknown destination opens nothing');assert.equal(odd.root().removed,false);
 });
 test('record attention connects to the verified results on the right and closes without stale animation',async()=>{
   const app=desktopRuntime({reduced:false,geometry:{left:60,top:200,width:300,height:40,right:360,bottom:240}});app.run(`D.bookings=[{id:'b',guestName:'Example Guest',checkIn:today(),checkOut:addDays(today(),3),totalPrice:20}];openJarvis()`);await flush();
@@ -1045,5 +1050,37 @@ test('Properties page: the tab and the live voice event path open it inside Jarv
   decisions.push({kind:'task',operation:{action:'create',text:'repaint the villa gate'}});await h.user('Add a task to repaint the villa gate');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
   for(const [words,expect] of [['Open properties','properties'],['Open tasks','tasks'],['Show me my villas','properties'],['Close it','overview']]){await h.user(words);assert.equal(page(),expect,words);assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review',words);h.app.finishSpeech();await flush();}
   assert.ok(live());assert.deepEqual(visited,[]);assert.equal(h.app.root().removed,false);assert.ok(renders.length>=1);
+  h.app.click('close');
+});
+
+test('Team, Reports and Issues pages: tabs and the live voice event path open them inside Jarvis; questions reach the record tool; close returns to Overview; a draft survives',async()=>{
+  for(const desktop of [true,false]){
+    const app=desktopRuntime({desktop}),visited=[],renders={team:0,reports:0,issues:0};app.context.workspaceNavigate=t=>visited.push(t);
+    for(const [name,key] of [['team','SV_TEAM_VIEW'],['reports','SV_REPORTS_VIEW'],['issues','SV_ISSUES_VIEW']])app.context[key]={bind(){},render(){renders[name]++;}};
+    app.run('openJarvis()');await flush();
+    for(const name of ['team','reports','issues']){
+      app.click('nav-'+name);assert.deepEqual(visited,[],name+' stays inside Jarvis');assert.equal(app.root().removed,false);assert.equal(app.root().dataset.page,name);
+      assert.equal(app.el('jarvis-'+name+'-page').hidden,false);assert.ok(renders[name]>=1);
+      for(const other of ['team','reports','issues','tasks','properties'].filter(p=>p!==name))assert.equal(app.el('jarvis-'+other+'-page').hidden,true);
+    }
+    app.click('nav-overview');assert.equal(app.root().dataset.page,'overview');app.click('insight-reports');assert.equal(app.root().dataset.page,'reports');assert.deepEqual(visited,[]);
+  }
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions}),visited=[];h.app.context.workspaceNavigate=d=>visited.push(d);
+  for(const key of ['SV_TEAM_VIEW','SV_REPORTS_VIEW','SV_ISSUES_VIEW'])h.app.context[key]={bind(){},render(){}};
+  const modal={open:false};const q=h.app.context.document.querySelector;h.app.context.document.querySelector=s=>s==='#modal-root .modal'?(modal.open?{querySelectorAll:()=>[]}:null):q(s);h.app.context.closeModal=()=>{modal.open=false;};
+  h.app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const page=()=>h.app.root().dataset.page,live=()=>h.app.phase()!=='paused'&&h.app.phase()!=='idle';
+  for(const [words,expect] of [['Open Team.','team'],['Show me the reports.','reports'],['Can you open Issues?','issues']]){
+    await h.user(words);assert.equal(page(),expect,words);assert.equal(h.vol.at(-1),0,'the agent stays silent for that turn');
+    assert.match(await o.clientTools.lookup_records({entity:'issues',view:'list'}),/paused|superseded/,'the agent cannot also turn it into a record list');h.app.finishSpeech();await flush();
+  }
+  // A filtered question goes to the record tool; the Issues page stays open.
+  await h.user('Which issues are urgent?');assert.equal(page(),'issues');assert.doesNotMatch(await o.clientTools.lookup_records({entity:'issues',view:'list',status:'high'}),/paused/);
+  o.onMessage({source:'ai',message:'One urgent issue.',event_id:970});o.onModeChange({mode:'speaking'});o.onModeChange({mode:'listening'});await flush();assert.equal(page(),'issues','the page stays open across replies');
+  modal.open=true;await h.user('Close it');assert.equal(modal.open,false);assert.equal(page(),'issues','a dialog closes before the page');h.app.finishSpeech();await flush();
+  await h.user('Close it');assert.equal(page(),'overview');assert.ok(live());h.app.finishSpeech();await flush();
+  decisions.push({kind:'task',operation:{action:'create',text:'call the boiler engineer'}});await h.user('Add a task to call the boiler engineer');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  for(const [words,expect] of [['Open reports','reports'],['Open team','team'],['Open issues','issues'],['Close it','overview']]){await h.user(words);assert.equal(page(),expect,words);assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review',words);h.app.finishSpeech();await flush();}
+  assert.ok(live());assert.deepEqual(visited,[]);assert.equal(h.app.root().removed,false);
   h.app.click('close');
 });

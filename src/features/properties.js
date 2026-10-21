@@ -309,6 +309,8 @@ function savePropNotes(id){const p=D.props.find(x=>x.id===id);if(!p)return;p.not
 
 /* ── CLEANER MODALS ── */
 function openAddCleanerModal(){
+  /* Inside Jarvis the same fields and save are presented in the Jarvis theme. */
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_TEAM_VIEW){showModal(SV_TEAM_VIEW.form('new'));setTimeout(()=>document.getElementById('nc-name')?.focus(),60);return;}
   showModal('<div class="modal-handle"></div><div class="modal-title">Add cleaner</div>'
     +'<div class="field"><label>Name</label><input type="text" id="nc-name" placeholder="e.g. Maria"></div>'
     +'<div class="field"><label>WhatsApp number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(with country code)</span></label><input type="tel" id="nc-phone" placeholder="e.g. +34 612 345 678"></div>'
@@ -323,6 +325,7 @@ function saveNewCleaner(){
 }
 function openEditCleaner(id){
   const c=D.cleaners.find(x=>x.id===id);if(!c)return;
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_TEAM_VIEW){showModal(SV_TEAM_VIEW.form('edit',c));setTimeout(()=>document.getElementById('ec-name')?.focus(),60);return;}
   showModal('<div class="modal-handle"></div><div class="modal-title">Edit cleaner</div>'
     +'<div class="field"><label>Name</label><input type="text" id="ec-name" value="'+esc(c.name)+'"></div>'
     +'<div class="field"><label>WhatsApp number <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(with country code)</span></label><input type="tel" id="ec-phone" value="'+esc(c.phone||'')+'" placeholder="e.g. +34 612 345 678"></div>'

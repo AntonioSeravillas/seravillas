@@ -439,6 +439,92 @@ body.jarvis-open #modal-root .modal:has(.jt-dialog):focus{outline:none}
   .jp-card-photo.jp-initials{aspect-ratio:3/1}
 }
 
+/* Team and Issues sit in the side rail; where the rail is hidden (below 1100 px) the top bar carries them too. */
+@media(min-width:1100px){.jarvis-top-item.is-compact{display:none}}
+/* ── Team and Issues pages: the Tasks/Properties header, rows and dialogs. A search field matches the select controls. ── */
+.jarvis-root .jm-avatar{display:grid;place-items:center;width:clamp(30px,1.9vw,40px);height:clamp(30px,1.9vw,40px);margin-left:4px;border:1px solid var(--jv-line-2);border-radius:50%;font-size:calc(var(--jb-small) + .5px);font-weight:600;letter-spacing:.06em;color:var(--jv-text-2)}
+.jm-work{margin:6px 0 16px}
+.jt-count.is-alert{color:var(--jv-accent-text)!important}
+.ji-row.is-resolved .jt-main b{color:var(--jv-text-3)}
+.ji-photos{align-items:center;margin:6px 0 16px}
+.jv-search{position:relative;display:inline-flex;align-items:center;gap:8px;height:var(--jv-ctl);padding:0 10px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);color:var(--jv-text-3);transition:border-color .2s}
+.jv-search:hover{border-color:var(--jv-line-3)}
+.jv-search:focus-within{border-color:var(--jv-accent-line);box-shadow:0 0 0 3px rgba(239,122,46,.12)}
+.jarvis-root .jv-search input{width:clamp(150px,11vw,260px);height:100%;min-height:0;margin:0;padding:0;border:0!important;background:transparent!important;box-shadow:none!important;outline:none;color:var(--jv-text);font-family:var(--jv-font);font-size:var(--jb-font);font-weight:400}
+.jarvis-root .jv-search input::placeholder{color:var(--jv-text-3)}
+.jarvis-root .jv-search input::-webkit-search-cancel-button{filter:grayscale(1)}
+
+/* ── Reports page: the existing report, read in the Jarvis theme. Its own variables are mapped to the theme here;
+   the figures, wording and order are unchanged. Orange marks the selected month and chart bar. ── */
+#jarvis-reports-page .revenue-page{--teal:var(--jv-accent);--teal-border:rgba(var(--jv-ink,255,255,255),.16);--amber-bg:var(--jv-accent-soft);--amber-text:var(--jv-text);--amber-border:var(--jv-accent-line);--accent-border:var(--jv-accent-line);--radius:var(--jv-radius-sm);
+  --rpt-hero-bg:transparent;--rpt-hero-text:var(--jv-text);--rpt-hero-muted:var(--jv-text-2);--rpt-hero-action:transparent;--rpt-hero-hover:rgba(var(--jv-ink,255,255,255),.04);
+  display:flex;flex-direction:column;gap:clamp(14px,1.1vw,24px);max-width:none;margin:0;padding:0 4px 16px 0;font-family:var(--jv-font);font-size:var(--jb-font);color:var(--jv-text)}
+#jarvis-reports-page .jr-body{border-top:0}
+#jarvis-reports-page button,#jarvis-reports-page select,#jarvis-reports-page input{font-family:var(--jv-font)}
+#jarvis-reports-page .sv-page-header{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0;padding:0}
+#jarvis-reports-page .sv-page-heading{display:flex;flex-direction:column;gap:6px}
+#jarvis-reports-page .sv-title{margin:0;font-size:clamp(10.5px,.6vw,14px);font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-reports-page .sv-subtitle{margin:0;font-size:clamp(24px,1.65vw,46px);font-weight:300;letter-spacing:0;line-height:1.2;color:var(--jv-n095,#f4f4f4)}
+#jarvis-reports-page select,#jarvis-reports-page input[type=text]{width:100%;height:var(--jv-ctl);min-height:var(--jv-ctl);padding:0 12px!important;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-size:var(--jb-font);font-weight:400;box-shadow:none;outline:none;color-scheme:var(--jv-scheme,dark)}
+#jarvis-reports-page select{appearance:auto;-webkit-appearance:auto;padding-right:8px!important}
+#jarvis-reports-page select option{background:var(--jv-n005,#111);color:var(--jv-n095,#eee)}
+#jarvis-reports-page select:hover,#jarvis-reports-page input[type=text]:hover{border-color:var(--jv-line-3)}
+#jarvis-reports-page select:focus-visible,#jarvis-reports-page input[type=text]:focus{border-color:var(--jv-accent-line);box-shadow:0 0 0 3px rgba(239,122,46,.12)}
+#jarvis-reports-page input::placeholder{color:var(--jv-text-3)}
+#jarvis-reports-page .rpt-year{gap:8px}
+#jarvis-reports-page .rpt-year select{width:96px;font-weight:400}
+#jarvis-reports-page .week-nav-btn{display:grid;place-items:center;width:var(--jv-ctl);height:var(--jv-ctl);padding:0;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-size:20px;line-height:1;cursor:pointer}
+#jarvis-reports-page .week-nav-btn:hover,#jarvis-reports-page .rpt-figures-btn:hover{border-color:var(--jv-line-3);background:rgba(var(--jv-ink,255,255,255),.04)}
+#jarvis-reports-page .field>label{display:block;margin-bottom:6px;font-size:var(--jb-small);font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-reports-page .rpt-filters .field{flex:0 1 clamp(180px,12vw,280px)}
+#jarvis-reports-page .rpt-filters .sv-btn{height:var(--jv-ctl);padding:0 14px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-size:var(--jb-font);font-weight:400;box-shadow:none}
+#jarvis-reports-page .rpt-notice{padding:11px 14px;border:0;border-left:2px solid var(--jv-accent);border-radius:0;background:var(--jv-accent-soft);color:var(--jv-text);font-size:var(--jb-font)}
+#jarvis-reports-page .rpt-revenue-hero{min-height:0;padding:clamp(18px,1.4vw,30px);border:1px solid var(--jv-line);border-radius:var(--jv-radius,10px)}
+#jarvis-reports-page .rpt-revenue-hero h2{font-size:var(--jb-small);font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-reports-page .rpt-revenue-hero h2 svg{color:var(--jv-accent)}
+#jarvis-reports-page .rpt-revenue-total{font-size:clamp(36px,3.4vw,72px);font-weight:200;letter-spacing:-.02em;color:var(--jv-n095,#f4f4f4)}
+#jarvis-reports-page .rpt-scope{font-size:var(--jb-font);color:var(--jv-text-2)}
+#jarvis-reports-page .rpt-revenue-basis{font-size:var(--jb-small);color:var(--jv-text-3)}
+#jarvis-reports-page .rpt-figures-btn{min-height:var(--jv-ctl);padding:0 14px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);font-size:var(--jb-font);font-weight:400}
+#jarvis-reports-page .rpt-metrics .wr-stat,#jarvis-reports-page .wr-card{border:1px solid var(--jv-line);border-radius:var(--jv-radius,10px);background:transparent;box-shadow:none}
+#jarvis-reports-page .wr-card{padding:clamp(16px,1.2vw,26px)}
+#jarvis-reports-page .rpt-stat .wr-stat-l{font-size:var(--jb-small);font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-reports-page .rpt-stat .wr-stat-n{font-size:clamp(24px,1.7vw,40px);font-weight:300;letter-spacing:0;color:var(--jv-n095,#f4f4f4)}
+#jarvis-reports-page .rpt-stat small,#jarvis-reports-page .rpt-note,#jarvis-reports-page .rpt-panel-heading>span,#jarvis-reports-page .rpt-result-count{font-size:var(--jb-small);color:var(--jv-text-3)}
+#jarvis-reports-page .rpt-note{color:var(--jv-text-2)}
+#jarvis-reports-page .rpt-panel-heading h2{font-size:calc(var(--jb-font) + 2.5px);font-weight:400;letter-spacing:0;color:var(--jv-text)}
+#jarvis-reports-page .sv-tabs{display:inline-flex;gap:6px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+#jarvis-reports-page .sv-tab{height:var(--jv-ctl);min-height:0;padding:0 14px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text-2);font-size:var(--jb-font);font-weight:400;box-shadow:none}
+#jarvis-reports-page .sv-tab.active{border-color:var(--jv-accent-line);background:var(--jv-accent-soft);color:var(--jv-text)}
+#jarvis-reports-page .rpt-chart-month{color:var(--jv-text-3)}
+#jarvis-reports-page .rpt-chart-month.selected{color:var(--jv-text);font-weight:500}
+#jarvis-reports-page .rpt-chart-value{color:var(--jv-text-2)}
+#jarvis-reports-page .rpt-month-row,#jarvis-reports-page .rpt-villa-row,#jarvis-reports-page .rpt-channel,#jarvis-reports-page .rpt-booking{color:var(--jv-text);font-weight:400;border-radius:var(--jv-radius-sm)}
+#jarvis-reports-page .rpt-booking{padding:16px 8px;border-bottom:1px solid var(--jv-line)}#jarvis-reports-page .rpt-channel{padding:14px 8px;border-bottom:1px solid var(--jv-line)}#jarvis-reports-page .rpt-villa-row{padding:16px 8px;border-bottom:1px solid var(--jv-line)}#jarvis-reports-page .rpt-month-row{padding:12px 8px}
+#jarvis-reports-page .rpt-month-row.selected{background:var(--jv-accent-soft);outline:1px solid var(--jv-accent-line)}
+#jarvis-reports-page .rpt-month-name,#jarvis-reports-page .rpt-month-money{font-weight:500}
+#jarvis-reports-page .rpt-villa-revenue{font-size:clamp(20px,1.4vw,32px);font-weight:300;letter-spacing:0}
+#jarvis-reports-page .rpt-villa-top strong,#jarvis-reports-page .rpt-channel strong,#jarvis-reports-page .rpt-booking-main strong,#jarvis-reports-page .rpt-booking-price strong{font-weight:500}
+#jarvis-reports-page .rpt-month-row:hover,#jarvis-reports-page .rpt-villa-row:hover,#jarvis-reports-page .rpt-channel:hover,#jarvis-reports-page .rpt-booking:hover{background:rgba(var(--jv-ink,255,255,255),.03)}
+#jarvis-reports-page button:focus-visible,#jarvis-reports-page summary:focus-visible{outline:none;box-shadow:var(--jv-focus)}
+#jarvis-reports-page .rpt-definitions summary{font-weight:500}
+#jarvis-reports-page .rpt-definitions dt{font-weight:500;color:var(--jv-text)}
+/* The report's own drilldown dialogs (More figures, a channel) keep their layout in the themed dialog. */
+body.jarvis-open #modal-root .rpt-more-grid strong{font-weight:400;color:var(--jv-n095,#f4f4f4)}
+body.jarvis-open #modal-root .rpt-more-grid span,body.jarvis-open #modal-root .rpt-more-note,body.jarvis-open #modal-root .rpt-note{color:var(--jv-text-2)}
+body.jarvis-open #modal-root .rpt-more-grid small{color:var(--jv-text-3)}
+body.jarvis-open #modal-root .wr-stat{border:1px solid var(--jv-line);background:transparent;border-radius:var(--jv-radius-sm)}
+body.jarvis-open #modal-root .wr-stat-n{font-weight:300;color:var(--jv-n095,#f4f4f4)}
+body.jarvis-open #modal-root .rpt-booking{background:transparent;color:var(--jv-text);border-color:var(--jv-line)}
+@media(max-width:767px){
+  .jb-head .jv-search,.jb-head .jv-search input{width:100%}
+  .jb-head .jv-search{flex:1 1 100%}
+  #jarvis-reports-page .rpt-revenue-hero{flex-direction:column;align-items:flex-start}
+  #jarvis-reports-page .rpt-metrics{grid-template-columns:1fr!important}
+  #jarvis-reports-page .rpt-booking-controls{grid-template-columns:1fr}
+  #jarvis-reports-page .rpt-filters .field{flex:1 1 140px}
+}
+
 /* ── Light mode (Jarvis only; saved per device). The neutral tones above read var(--jv-nSS / ink / paper / shade, <dark
    original>); these tokens exist only here, so dark mode and everything outside Jarvis keep their exact colours. Orange
    accents, layout and components are shared; accent text is darkened for contrast on light surfaces. ── */

@@ -251,6 +251,8 @@ function saveScratch(){const el=document.getElementById('scratch-area');if(el){D
 /* ── ISSUE MODALS ── */
 function openAddIssue(){openAddIssueFor('');}
 function openAddIssueFor(propId){
+  /* Inside Jarvis the same fields and save are presented in the Jarvis theme. */
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_ISSUES_VIEW){showModal(SV_ISSUES_VIEW.form('new',null,propId));setTimeout(()=>document.getElementById('iss-title')?.focus(),60);return;}
   const po='<option value="">No specific property</option>'+D.props.map(p=>'<option value="'+p.id+'"'+(propId===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('');
   const catOpts=Object.keys(ICC_CATS).map(k=>'<option value="'+k+'">'+ICC_CATS[k]+'</option>').join('');
   showModal('<div class="modal-handle"></div><div class="modal-title">Log an issue</div>'
@@ -280,6 +282,7 @@ function saveIssue(){
 function openIssue(id){
   const i=D.issues.find(x=>x.id===id);if(!i)return;
   window._iid=id;
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_ISSUES_VIEW){showModal(SV_ISSUES_VIEW.detail(i));return;}
   const p=D.props.find(x=>x.id===i.propId);
   const resolved=i.status==='resolved';
   const td2=today();
@@ -314,6 +317,7 @@ function openIssue(id){
 
 function openEditIssue(id){
   const i=D.issues.find(x=>x.id===id);if(!i)return;
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_ISSUES_VIEW){showModal(SV_ISSUES_VIEW.form('edit',i));setTimeout(()=>document.getElementById('ei-title')?.focus(),60);return;}
   const po='<option value="">No specific property</option>'+D.props.map(p=>'<option value="'+p.id+'"'+(i.propId===p.id?' selected':'')+'>'+esc(p.name)+'</option>').join('');
   const catOpts=Object.keys(ICC_CATS).map(k=>'<option value="'+k+'"'+(i.category===k?' selected':'')+'>'+ICC_CATS[k]+'</option>').join('');
   showModal('<div class="modal-handle"></div><div class="modal-title">Edit issue</div>'
@@ -342,14 +346,16 @@ function saveEditIssue(id){
 }
 
 function setIssueStatus(id,status){const i=D.issues.find(x=>x.id===id);if(!i)return;i.status=status;i.resolvedAt=status==='resolved'?today():'';save();openIssue(id);render();}
-function delIssue(id){if(!confirm('Delete this issue?'))return;D.issues=D.issues.filter(x=>x.id!==id);save();closeModal();render();}
+/* confirmed: the Jarvis dialog has already asked in its own confirmation step. */
+function delIssue(id,confirmed){if(confirmed!==true&&!confirm('Delete this issue?'))return;D.issues=D.issues.filter(x=>x.id!==id);save();closeModal();render();}
 function viewIssuePhoto(id,idx){
   const i=D.issues.find(x=>x.id===id);if(!i||!i.photos[idx])return;
   window._iid=id;window._iidx=idx;
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_ISSUES_VIEW){showModal(SV_ISSUES_VIEW.photoDialog(i,idx));return;}
   showModal('<div class="modal-handle"></div><img src="'+i.photos[idx]+'" style="width:100%;max-height:220px;object-fit:contain;border-radius:12px;margin-bottom:14px;background:var(--surface2)" alt="Issue photo">'
     +'<div style="display:flex;gap:8px"><button class="btn btn-danger" style="flex:1" onclick="removeIssuePhoto(window._iid,window._iidx)">Delete</button>'
     +'<button class="btn btn-ghost" style="flex:1" onclick="openIssue(window._iid)">Back</button></div>');
 }
 
-function removeIssuePhoto(id,idx){if(!confirm('Delete this photo?'))return;const i=D.issues.find(x=>x.id===id);if(i){i.photos.splice(idx,1);save();openIssue(id);}}
+function removeIssuePhoto(id,idx,confirmed){if(confirmed!==true&&!confirm('Delete this photo?'))return;const i=D.issues.find(x=>x.id===id);if(i){i.photos.splice(idx,1);save();openIssue(id);}}
 

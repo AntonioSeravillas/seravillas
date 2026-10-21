@@ -191,7 +191,7 @@ function renderReportBookingResults(summary){
 }
 function updateReportBookingList(value){
   if(typeof value==='string')reportBookingSearch=value;
-  const el=document.getElementById('report-booking-results');if(el)el.innerHTML=renderReportBookingResults(currentBookingReport());
+  const el=document.getElementById('jv-report-booking-results')||document.getElementById('report-booking-results');if(el)el.innerHTML=renderReportBookingResults(currentBookingReport());
 }
 function openReportChannel(key){
   const summary=currentBookingReport(),channel=summary.channels.find(c=>c.key===key);if(!channel)return;

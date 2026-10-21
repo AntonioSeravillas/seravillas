@@ -48,12 +48,13 @@ test('close dismisses the foreground dialog, panel or record before the underlyi
   a.run('navigationTurn("close");navigationTurn("close")');assert.equal(a.run('page'),'overview');assert.match(a.events.at(-2),/already on the dashboard/);
   a.run('navigationTurn("tasks")');assert.equal(a.run('page'),'tasks');a.modal.open=true;a.run('navigationWords("close it")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'tasks','a task dialog closes before the Tasks page');a.run('navigationWords("close tasks")');assert.equal(a.run('page'),'overview');assert.equal(a.elements['jarvis-tasks-page'].hidden,true);
 });
-test('ending the conversation is distinct from closing a view; other screens keep their existing routes',()=>{
+test('ending the conversation is distinct from closing a view; Issues and Reports open their internal pages',()=>{
   const a=app();
   a.run('navigationTurn("bookings")');a.run('navigationWords("end the conversation")');assert.ok(a.events.some(e=>/^paused: /.test(e)));assert.ok(!a.events.includes('closed jarvis'));
   a.run('navigationWords("close Jarvis")');assert.ok(a.events.includes('closed jarvis'));
-  a.run('navigationTurn("issues")');assert.ok(a.events.includes('records:issues'));
-  a.run('navigationTurn("reports")');assert.ok(a.events.includes('workspace:booking-report'),'Reports keeps its existing full-page route');
+  a.elements['jarvis-issues-page']={hidden:true};a.elements['jarvis-reports-page']={hidden:true};
+  a.run('navigationTurn("issues")');assert.equal(a.run('page'),'issues');assert.equal(a.elements['jarvis-issues-page'].hidden,false);assert.ok(!a.events.includes('records:issues'));
+  a.run('navigationTurn("reports")');assert.equal(a.run('page'),'reports');assert.equal(a.elements['jarvis-issues-page'].hidden,true);assert.ok(!a.events.some(e=>/^workspace:/.test(e)),'Reports no longer closes Jarvis');
 });
 test('real recognised owner speech (provider history, 19 Oct) reaches the internal views; filters and questions do not',()=>{
   const a=app();
@@ -93,4 +94,25 @@ test('a dialog with typed, unsaved text is not discarded by a spoken close or pa
   a.run('navigationWords("open bookings")');assert.equal(a.modal.open,true);assert.equal(a.run('page'),'properties','no page change behind an unsaved form');
   field.value=field.defaultValue;a.run('navigationWords("close it")');assert.equal(a.modal.open,false,'unchanged text closes normally');
   a.modal.open=true;a.modal.fields=[];a.run('navigationWords("open bookings")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'bookings','dialogs without typed text keep the existing behaviour');
+});
+test('Team, Reports and Issues: ordinary wording opens each full page; questions and filtered requests stay with the record tools',()=>{
+  const a=app();for(const id of ['jarvis-team-page','jarvis-reports-page','jarvis-issues-page'])a.elements[id]={hidden:true};
+  for(const [words,page] of [['open Team','team'],['Show me my cleaning team.','team'],['Can you open the team tab?','team'],['go to staff','team'],
+    ['show me the reports','reports'],['Open reports.','reports'],['Hi Jarvis, could you open the revenue page?','reports'],['um open the reprts','reports'],
+    ['open Issues','issues'],['Show me the issues.','issues'],['Okay, go to the problems tab.','issues'],['Open issue.','issues']]){
+    a.run('navigationTurn("overview")');assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),true,words);
+    assert.equal(a.run('page'),page,words);assert.equal(a.elements['jarvis-'+page+'-page'].hidden,false,words);
+    for(const other of ['team','reports','issues'].filter(p=>p!==page))assert.equal(a.elements['jarvis-'+other+'-page'].hidden,true,words+' / '+other);
+  }
+  assert.ok(!a.events.some(e=>/^(?:records|workspace):/.test(e)),'pages, not record lists or the workspace');
+  a.run('navigationTurn("overview")');
+  for(const words of ['How much revenue did we make in October?','Show me the revenue for Villa Mar','Which issues are urgent?','Show me the open issues at Casa Ejemplo','Who is on the team tomorrow?','Show me the reports for last month','Don’t open issues','Open the issue about the boiler'])
+    assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),false,words);
+  assert.equal(a.run('page'),'overview');
+  /* "Cleaners" keeps its existing meaning (Cleanings). */
+  a.run('navigationWords("open cleaners")');assert.equal(a.run('page'),'cleanings');
+  /* Close: a dialog first, then back to Overview; switching between pages keeps the shell. */
+  a.run('navigationTurn("issues")');a.modal.open=true;a.run('navigationWords("close it")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'issues');
+  a.run('navigationWords("open reports")');assert.equal(a.run('page'),'reports');a.run('navigationWords("close the reports")');assert.equal(a.run('page'),'overview');
+  a.run('navigationTurn("team")');a.run('navigationWords("close it")');assert.equal(a.run('page'),'overview');
 });
