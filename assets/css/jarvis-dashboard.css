@@ -422,3 +422,6 @@ button.jp-check:hover{border-color:var(--j-accent)!important;background:rgba(239
 .jarvis-theme-moon,.jarvis-root.jv-light .jarvis-theme-sun{display:none!important}
 .jarvis-root.jv-light .jarvis-theme-moon{display:grid!important}
 @media(min-width:1100px){.jarvis-root .jarvis-theme-toggle{width:clamp(34px,2vw,50px);height:clamp(34px,2vw,50px)}}
+/* WhatsApp review: the cleaning schedule's dates and any unsaved-plan note, above the exact message. */
+.jp-panel .jarvis-voice-review .jarvis-review-scope{margin:4px 0 8px;font-size:12px;line-height:1.45;color:var(--jv-text-3,#8e8e8e)}
+.jarvis-review-scope[hidden]{display:none}

@@ -586,14 +586,28 @@
     const card=el('jarvis-voice-review');if(!card)return;card.hidden=!review||review.stage!=='review';syncReview();
     if(card.hidden)return;el('jarvis-review-recipient').textContent=review.name+' · '+review.detail;el('jarvis-review-text').textContent=review.text;
     el('jarvis-review-english').textContent=review.english?'English meaning: '+review.english:'';el('jarvis-review-english').hidden=!review.english;
+    const scope=el('jarvis-review-scope');if(scope){const sc=review.schedule;scope.hidden=!sc;scope.textContent=sc?'Cleaning schedule · '+(sc.scope?sc.scope[0].toUpperCase()+sc.scope.slice(1)+', ':'')+sc.label+' · '+sc.count+' saved cleaning'+(sc.count===1?'':'s')+(sc.note?' · '+sc.note:''):'';}
     el('jarvis-review-note').textContent=review.understanding?'Checking your latest request. Review again before sending.':review.heard?'Say “Approve and send”, or approve below. Say “Read the message” to hear it in full.':'Approve below, or wait for Jarvis to name the recipient, then say “Approve and send”.';
   }
   /* Read-only message text for "send tomorrow's cleaning schedule": current cleaning records for that day, with each
      cleaner's real status. No records are created or changed. English, or Spanish when the draft is in Spanish. */
-  function scheduleMessage(date,language){
+  function scheduleMessage(date,language,{header=''}={}){
+    /* A week or date range ("2026-10-26/2026-11-01"): one "Day - House" line per saved cleaning. A proposed plan that is
+       not saved yet is never presented as the schedule: its cleanings are left out and the review says so. */
+    const range=String(date||'').match(/^(20\d{2}-\d{2}-\d{2})\/(20\d{2}-\d{2}-\d{2})$/);
+    if(range){
+      const out=window.SV_JARVIS_RECORDS?.scheduleRangeText?.({props:D.props,sessions:D.sessions},range[1],range[2],{language,header,reference:today()});
+      if(!out)return '';
+      const plan=operations?.view?.(),unsaved=(plan?.items||[]).filter(i=>i.action==='create'&&i.date>=range[1]&&i.date<=range[2]).length;
+      scheduleScope={start:range[1],end:range[2]};
+      return {...out,note:unsaved?unsaved+' planned cleaning'+(unsaved===1?' is':'s are')+' not saved yet, so '+(unsaved===1?'it is':'they are')+' not included.':''};
+    }
     const day=date==='today'?today():date==='tomorrow'?addDays(today(),1):date;
     return window.SV_JARVIS_RECORDS?.scheduleText?.({props:D.props,cleaners:D.cleaners,sessions:D.sessions},day,language)||'';
   }
+  /* The cleaning schedule last shown or planned in this conversation, so "send that schedule" keeps its dates. */
+  let scheduleScope=null;
+  function noteScheduleScope(start,end){if(/^20\d{2}-\d{2}-\d{2}$/.test(start||'')&&/^20\d{2}-\d{2}-\d{2}$/.test(end||'')&&end>=start)scheduleScope={start,end};}
   function ensureWhatsAppConversation(){
     if(!waConversation&&window.SV_JARVIS_WHATSAPP_VOICE)waConversation=SV_JARVIS_WHATSAPP_VOICE.create({fetchImpl:jarvisFetch,getToken:()=>requestToken,onChange:renderVoiceReview,compose:scheduleMessage});return waConversation;
   }
@@ -644,7 +658,8 @@
   function presentOperation(result,{quiet=false}={}){
     const engine=ensureOperations();if(!engine||!root)return;
     if(result.kind==='plan'){
-      closeRecords();renderPlan(result.plan);engine.presented(result.plan.version);add('Jarvis · cleaning plan',result.text);focusPanel('cleanings');
+      closeRecords();renderPlan(result.plan);engine.presented(result.plan.version);
+      {const dates=(result.plan.items||[]).map(i=>i.date).filter(Boolean).sort();if(dates.length){const monday=addDays(dates[0],-((new Date(dates[0]+'T12:00:00Z').getUTCDay()+6)%7));noteScheduleScope(monday,dates.at(-1)<=addDays(monday,6)?addDays(monday,6):dates.at(-1));}}add('Jarvis · cleaning plan',result.text);focusPanel('cleanings');
       const version=result.plan.version;if(quiet){replyDone();return;}speak(result.spoken||result.text,false,()=>{engine.heard(version);renderPlan(engine.view());});return;
     }
     renderPlan(engine.view());add('Jarvis',result.text);
@@ -691,6 +706,7 @@
   function recordsTurn(query,{silent=false}={}){
     const engine=ensureRecords();if(!engine){add('Jarvis','Please refresh Jarvis to load the app record tools.');replyDone();return;}
     waConversation?.clearPending();clearFocus();const result=engine.run(query);renderRecords(result);
+    if(result?.entity==='cleanings'&&result.query)noteScheduleScope(result.query.start,result.query.end||result.query.start);
     if(result.rows?.length){const panel=ENTITY_PANEL[result.entity];focus={id:++focusSeq,data:{kind:'records',panel},state:'active',hold:null};el('jarvis-records')?.classList.add('is-attention');if(panel)el(PANELS[panel][0])?.classList.add('is-attention');root?.classList.add('has-focus');linkStart();}
     if(!silent){add('Jarvis · app records',result.text);const cut=result.rows?.length>1&&!result.choices?result.text.indexOf(' Option 1:'):-1;speak(cut>0?result.text.slice(0,cut)+' They’re on screen.':result.text);}return result;
   }
@@ -736,7 +752,9 @@
       const d=data.decision;if(!d||typeof d!=='object')throw Error('Jarvis could not interpret that reliably. Please try again.');
       if(d.kind==='whatsapp'){
         closeRecords();
-        if(!await whatsappTurn(text,id,false,d.intent))throw Error('The WhatsApp voice tools are unavailable. Please reopen Jarvis.');
+        /* The same contract as the live tool: dates resolved by the app, a spoken week kept whole, "that schedule" kept. */
+        let intent=d.intent;if(window.SV_JARVIS_LIVE?.validateTool){try{intent=SV_JARVIS_LIVE.validateTool('whatsapp_request',{...d.intent},{today:today(),ownerText,scheduleScope});}catch(e){add('Jarvis',e.message);speak(e.message);return outcome;}}
+        if(!await whatsappTurn(text,id,false,intent))throw Error('The WhatsApp voice tools are unavailable. Please reopen Jarvis.');
       }else if(d.kind==='records'){
         recordsTurn(d.query);
       }else if(d.kind==='operation'){
@@ -836,7 +854,7 @@
   }
   async function liveTool(name,args,{current}){
     if(!root||document.hidden||!current())return {error:'The conversation is paused.'};
-    let value;try{value=SV_JARVIS_LIVE.validateTool(name,args,{today:today(),ownerText:liveOwnerText});}catch{return {error:'Use the documented structured fields and valid dates. Today is '+today()+'. Resolve relative dates and retry the tool; do not invent a result.'};}
+    let value;try{value=SV_JARVIS_LIVE.validateTool(name,args,{today:today(),ownerText:liveOwnerText,scheduleScope});}catch(e){return {error:(e?.message||'Invalid request.')+' Use the documented structured fields. Today is '+today()+'. Retry the tool; do not invent a result.'};}
     if(name==='lookup_records'){
       const result=recordsTurn(value,{silent:true});if(!result)return {error:'App records are unavailable.'};
       const label={arrival:'Arrival',departure:'Departure',guests:'Guests',crew:value.entity==='bookings'?'Linked cleaning':'Team',status:'Status',due:'Due',priority:'Priority'}[value.field];
@@ -983,7 +1001,7 @@
     +'<button class="jarvis-keep" id="jarvis-keep" data-j="keep" role="menuitemcheckbox" aria-pressed="true"><i aria-hidden="true"></i><span>Keep listening</span></button><button class="jarvis-play" data-j="replay" role="menuitem">'+svg('speaker',16)+'<span>Play reply</span></button>'
     +'<button id="jarvis-message-audio" data-j="message-audio" role="menuitem">Enable message audio</button><button data-j="chat" role="menuitem">'+svg('keyboard',16)+'<span>Type a message</span></button><button data-j="settings" role="menuitem">'+svg('settings',16)+'<span>Voice settings</span></button></div></div></div></main>'
     +'<aside class="jarvis-side jarvis-col" id="jarvis-side" aria-label="Conversation, WhatsApp and issues"><section class="jp-panel jarvis-conversation" id="jarvis-chat-body">'+panelHead('chat','jarvis-conversation-title','Conversation','<button type="button" class="jp-link jp-new" data-j="new" aria-label="New conversation">New</button>'+viewAll('conv-all','View the whole conversation'))
-    +'<div class="jarvis-transcript" id="jarvis-transcript"></div><section class="jarvis-voice-review" id="jarvis-voice-review" aria-label="WhatsApp message review" hidden><small>WhatsApp draft</small><p id="jarvis-review-recipient"></p><p class="jarvis-review-message" id="jarvis-review-text"></p><p id="jarvis-review-english" hidden></p><p id="jarvis-review-note"></p><div><button type="button" data-j="wa-voice-approve">Approve and send</button><button type="button" data-j="wa-voice-repeat">Read again</button><button type="button" data-j="wa-voice-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan" id="jarvis-plan" aria-label="Cleaning plan review" hidden><small>Cleaning plan · not saved yet</small><p id="jarvis-plan-label"></p><ol class="jarvis-plan-items" id="jarvis-plan-items"></ol><p id="jarvis-plan-note"></p><div><button type="button" id="jarvis-plan-confirm" data-j="plan-confirm">Confirm</button><button type="button" data-j="plan-repeat">Read again</button><button type="button" data-j="plan-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan jarvis-task-review" id="jarvis-task-review" aria-label="Task review" hidden><small id="jarvis-task-kind">Task · not saved yet</small><dl class="jarvis-task-fields" id="jarvis-task-fields"></dl><p id="jarvis-task-note"></p><div><button type="button" id="jarvis-task-confirm" data-j="task-confirm">Confirm</button><button type="button" data-j="task-repeat">Read again</button><button type="button" data-j="task-cancel">Cancel</button></div></section></section>'
+    +'<div class="jarvis-transcript" id="jarvis-transcript"></div><section class="jarvis-voice-review" id="jarvis-voice-review" aria-label="WhatsApp message review" hidden><small>WhatsApp draft</small><p id="jarvis-review-recipient"></p><p class="jarvis-review-scope" id="jarvis-review-scope" hidden></p><p class="jarvis-review-message" id="jarvis-review-text"></p><p id="jarvis-review-english" hidden></p><p id="jarvis-review-note"></p><div><button type="button" data-j="wa-voice-approve">Approve and send</button><button type="button" data-j="wa-voice-repeat">Read again</button><button type="button" data-j="wa-voice-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan" id="jarvis-plan" aria-label="Cleaning plan review" hidden><small>Cleaning plan · not saved yet</small><p id="jarvis-plan-label"></p><ol class="jarvis-plan-items" id="jarvis-plan-items"></ol><p id="jarvis-plan-note"></p><div><button type="button" id="jarvis-plan-confirm" data-j="plan-confirm">Confirm</button><button type="button" data-j="plan-repeat">Read again</button><button type="button" data-j="plan-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan jarvis-task-review" id="jarvis-task-review" aria-label="Task review" hidden><small id="jarvis-task-kind">Task · not saved yet</small><dl class="jarvis-task-fields" id="jarvis-task-fields"></dl><p id="jarvis-task-note"></p><div><button type="button" id="jarvis-task-confirm" data-j="task-confirm">Confirm</button><button type="button" data-j="task-repeat">Read again</button><button type="button" data-j="task-cancel">Cancel</button></div></section></section>'
     +'<section class="jp-panel jarvis-context" id="jarvis-context" aria-label="WhatsApp" hidden><h2 class="jarvis-kicker">Message review</h2><div id="jarvis-wa-host"></div></section>'
     +'<section class="jp-panel jarvis-records" id="jarvis-records" aria-label="App record results" hidden><div class="jarvis-record-head"><h2 class="jarvis-kicker" id="jarvis-record-title">App records</h2><button data-j="records-close" aria-label="Close record results">Close</button></div><p id="jarvis-record-scope"></p><div id="jarvis-record-list"></div><div class="jarvis-record-actions"><button id="jarvis-record-more" data-j="records-more" hidden>Show more</button><button id="jarvis-record-workspace" data-j="records-workspace">Open full page</button></div></section>'
     +'<section class="jp-panel jp-wa" id="jarvis-wa-section">'+panelHead('whatsapp','jarvis-wa-title','WhatsApp',viewAll('nav-whatsapp','Open the WhatsApp inbox'))+filters('wa','wa-filter','Chat filter',[['all','All'],['unread','Unread'],['group','Groups'],['direct','Direct']])+'<ol class="jp-scroll jp-wa-list" id="jarvis-wa-list"></ol><div class="jarvis-inbox-status"><button type="button" id="jarvis-whatsapp-status" data-j="nav-whatsapp">WhatsApp · checking</button><span>Jarvis inbox only · phone read status is not synced</span></div></section>'

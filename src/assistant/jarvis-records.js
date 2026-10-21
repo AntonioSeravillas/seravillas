@@ -177,5 +177,24 @@
     const line=s=>'• '+(s.time||(es?'hora por confirmar':'time to be confirmed'))+' – '+clean((props.find(p=>p.id===s.propId)||{}).name||'?',80)+': '+team(s)+(s.status==='done'?(es?' (hecha)':' (done)'):'');
     return ((es?'Limpiezas del '+label+':':'Cleaning schedule for '+label+':')+'\n'+rows.map(line).join('\n')).slice(0,2000);
   }
-  return Object.freeze({create,sanitizeQuery,period,rangeLabel,scheduleText,PERIODS});
+  /* A week (or any short date range) as the owner's group message: one line per saved, non-cancelled cleaning,
+     "Monday 26 October - Villa Mar", in date then time order. Exact duplicates (same villa, day and time) appear once.
+     Read-only: no crew, guests or prices. `header` replaces the first line (a changed greeting); `scope` names the range
+     in it (next week / this week / the dates). Returns {text,count,start,end,label,empty}. */
+  function scheduleRangeText(d,start,end,{language='en',header='',reference=''}={}){
+    if(!date(start)||!date(end)||end<start||Date.parse(end)-Date.parse(start)>31*86400000)return null;
+    const es=language==='es',props=d.props||[],monday=date(reference)?shift(reference,-((new Date(reference+'T12:00:00Z').getUTCDay()+6)%7)):'';
+    const scope=monday&&start===shift(monday,7)&&end===shift(monday,13)?(es?'la próxima semana':'next week'):monday&&start===monday&&end===shift(monday,6)?(es?'esta semana':'this week'):'';
+    const dayLabel=v=>{const x=new Date(v+'T12:00:00Z');return es?DIAS[x.getUTCDay()].replace(/^./,c=>c.toUpperCase())+' '+x.getUTCDate()+' de '+MESES[x.getUTCMonth()]:DAYS[x.getUTCDay()]+' '+x.getUTCDate()+' '+MONTHS[x.getUTCMonth()];};
+    const label=start===end?dayLabel(start):dayLabel(start)+(es?' al ':' to ')+dayLabel(end);
+    const seen=new Set(),rows=(d.sessions||[]).filter(s=>s&&date(s.date)&&s.date>=start&&s.date<=end&&s.status!=='cancelled')
+      .sort((a,b)=>a.date.localeCompare(b.date)||String(a.time||'99:99').localeCompare(String(b.time||'99:99')))
+      .filter(s=>{const k=s.date+'|'+s.propId+'|'+(s.time||'');if(seen.has(k))return false;seen.add(k);return true;});
+    const words=scope||(es?'del '+label:label);
+    if(!rows.length)return {text:'',count:0,start,end,label,scope,empty:true};
+    const first=clean(header,200).trim()||(es?'Buenos días chicas, os envío el horario de limpiezas '+(scope?'para '+scope:words)+':':'Good day ladies, sending you cleaning schedule for '+words+':');
+    const lines=rows.map(s=>dayLabel(s.date)+' - '+clean((props.find(p=>p.id===s.propId)||{}).name||'?',80));
+    return {text:(first+'\n\n'+lines.join('\n')).slice(0,2000),count:rows.length,start,end,label,scope,empty:false};
+  }
+  return Object.freeze({create,sanitizeQuery,period,rangeLabel,scheduleText,scheduleRangeText,PERIODS});
 });

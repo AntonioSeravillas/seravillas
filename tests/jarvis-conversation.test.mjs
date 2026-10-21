@@ -59,3 +59,9 @@ test('navigation and structured tasks carry bounded current UI and draft context
   const c=conversationContext({schema:1,ui:{page:'bookings',records:true},taskDraft:{type:'create',stage:'review',awaitingApproval:true,text:'Inspect pool',property:'Villa Mar',dueDate:'2026-10-23',priority:'high',secret:'PRIVATE',approvalToken:'PRIVATE'}},[]);
   assert.equal(c.ui.page,'bookings');assert.deepEqual([c.taskDraft.text,c.taskDraft.property,c.taskDraft.stage,c.taskDraft.awaitingApproval],['Inspect pool','Villa Mar','review',true]);assert.ok(!JSON.stringify(c).includes('PRIVATE'));
 });
+test('WhatsApp schedule drafts accept a day, this/next week or a date range; nothing broader',()=>{
+  const w=s=>parseDecision(JSON.stringify({kind:'whatsapp',intent:{kind:'write',name:'Sample Cleaning Team',group:true,text:'',schedule:s}}));
+  for(const s of ['tomorrow','2026-10-26','next week','next_week','this week','2026-10-26/2026-11-01'])assert.equal(w(s).intent.schedule,s,s);
+  for(const s of ['next month','2026-10-26 to anything','everything'])assert.throws(()=>w(s),s);
+  assert.equal(parseDecision(JSON.stringify({kind:'whatsapp',intent:{kind:'edit',text:'',schedule:'2026-10-26/2026-10-28'}})).intent.schedule,'2026-10-26/2026-10-28');
+});

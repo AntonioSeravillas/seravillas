@@ -3,7 +3,24 @@
    microphone stays open: Antonio can talk over the app, his speech stops the app's playback (barge-in) and his words
    are processed normally. A turn the app handles itself keeps the agent's reply to that turn silent. */
 (function(){
-  function validateTool(name,args,{today,ownerText=''}={}){
+  /* Cleaning-schedule span for a WhatsApp draft: a day, "this/next week" (Monday–Sunday, app date) or a date range of at
+     most 31 days ("2026-10-26/2026-11-01"). His own words decide a week: "next week" is the whole week even when the model
+     sent one day of it, and "that schedule" keeps the schedule shown or planned in this conversation. '' when invalid. */
+  function resolveSchedule(value,{today,weekWord='',scope=null}={}){
+    const iso=/^20\d{2}-\d{2}-\d{2}$/,ok=d=>iso.test(d)&&new Date(d+'T12:00:00Z').toISOString().slice(0,10)===d;
+    const s=typeof value==='string'?value.trim().toLowerCase().replace(/\s+/g,' '):'';
+    const shift=n=>new Date(Date.parse(today+'T12:00:00Z')+n*864e5).toISOString().slice(0,10);
+    const week=w=>{const p=window.SV_JARVIS_RECORDS?.period?.(w,today);return p?p.start+'/'+p.end:'';};
+    const m=s.match(/^(20\d{2}-\d{2}-\d{2})\s*(?:\/|\.\.|to|–|-(?=\s*20))\s*(20\d{2}-\d{2}-\d{2})$/);
+    if(m)return ok(m[1])&&ok(m[2])&&m[2]>=m[1]&&Date.parse(m[2])-Date.parse(m[1])<=31*864e5?m[1]+'/'+m[2]:'';
+    const named={'this week':'this_week',this_week:'this_week','next week':'next_week',next_week:'next_week'}[s];
+    if(named&&iso.test(today||''))return week(named);
+    const rel={today:0,tomorrow:1,'day after tomorrow':2}[s],single=rel!==undefined&&iso.test(today||'')?shift(rel):ok(s)?s:'';
+    if(weekWord&&iso.test(today||'')&&(!s||single)){const w=week(weekWord),[a,b]=w.split('/');if(w&&(!single||single>=a&&single<=b))return w;}
+    if(scope&&(!s||single&&single>=scope.start&&single<=scope.end))return scope.start+'/'+scope.end;
+    return single;
+  }
+  function validateTool(name,args,{today,ownerText='',scheduleScope=null}={}){
     const parse=(key,max)=>{if(!args||Object.keys(args).length!==1||typeof args[key]!=='string'||!args[key].trim()||args[key].length>max)throw Error('Invalid tool arguments.');return JSON.parse(args[key]);};
     if(name==='lookup_records'){
       const q=args&&Object.keys(args).length===1&&args.query!==undefined?typeof args.query==='object'?args.query:parse('query',2000):{...args};
@@ -24,10 +41,15 @@
     if(name!=='whatsapp_request')throw Error('Unsupported tool.');
     let i=args&&Object.keys(args).length===1&&args.intent!==undefined?typeof args.intent==='object'?args.intent:parse('intent',5000):{...args};if(!i||typeof i!=='object'||Array.isArray(i)||!['write','read','recent','unread','history','awaiting','search','body','edit','choose','review','cancel'].includes(i.kind))throw Error('That WhatsApp action is not allowed.');
     if(Object.keys(i).some(k=>!['kind','name','chat','group','text','option','limit','offset','direction','query','english','language','days','terms','schedule'].includes(k)))throw Error('Unexpected WhatsApp arguments.');
-    if(i.schedule!==undefined){
-      const s=typeof i.schedule==='string'?i.schedule.trim().toLowerCase():'',day={today:0,tomorrow:1,'day after tomorrow':2}[s];
-      if(day!==undefined&&/^20\d{2}-\d{2}-\d{2}$/.test(today||''))i.schedule=new Date(Date.parse(today+'T12:00:00Z')+day*86400000).toISOString().slice(0,10);
-      if(!['write','body','edit'].includes(i.kind)||!/^20\d{2}-\d{2}-\d{2}$/.test(i.schedule))throw Error('A schedule draft needs a date.');
+    /* A group name sent as the chat key is his chat name. */
+    if(i.chat!==undefined&&!/^[a-f0-9]{20}$/.test(i.chat)&&typeof i.chat==='string'&&i.chat.trim()&&!(typeof i.name==='string'&&i.name.trim())){i.name=i.chat.trim().slice(0,80);delete i.chat;}
+    const said=String(ownerText||'').toLowerCase().replace(/[’']/g,'');
+    const weekWord=/\bnext weeks?\b/.test(said)?'next_week':/\bthis weeks?\b/.test(said)?'this_week':'';
+    const thatSchedule=/\bschedule\b/.test(said)&&/\b(?:that|this|the|it|just|same|made|prepared|planned)\b/.test(said);
+    const scheduleAsked=['write','body','edit'].includes(i.kind)&&!String(i.text||'').trim()&&/\b(?:schedule|cleaning plan)\b/.test(said);
+    if(i.schedule!==undefined||scheduleAsked){
+      i.schedule=resolveSchedule(i.schedule,{today,weekWord,scope:thatSchedule?scheduleScope:null});
+      if(!['write','body','edit'].includes(i.kind)||!i.schedule)throw Error('A schedule draft needs a day, this week, next week or a date range (YYYY-MM-DD/YYYY-MM-DD).');
       if(i.text===undefined)i.text='';
     }
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(ownerText);
@@ -112,5 +134,5 @@
       /* A short app note derived from the owner's own recognised words (never from message content). */
       note(text){if(typeof text==='string'&&text.trim())session?.sendContextualUpdate(text.slice(0,600));},get ready(){return !!session;},get active(){return !!session||starting;},get suspended(){return suspended;},get appSpeaking(){return appSpeaking;},get inputMuted(){return inputMuted;}};
   }
-  window.SV_JARVIS_LIVE=Object.freeze({create,validateTool});
+  window.SV_JARVIS_LIVE=Object.freeze({create,validateTool,resolveSchedule});
 })();

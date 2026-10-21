@@ -88,3 +88,16 @@ test('read-only query contract rejects mutation tools, invalid enums and oversiz
   assert.deepEqual(sanitizeQuery({entity:'bookings',guest:'Sample Guest',secret:'SECRET',code:'RUN',approve:true}),{entity:'bookings',view:'list',guest:'Sample Guest'});
   const f=fixture(),before=JSON.stringify(f.data);f.run({entity:'properties',view:'details'});f.data.issues=[{id:'issue',title:'Leaking tap',propId:'mar',status:'open',priority:'high'}];const state=JSON.stringify(f.data);assert.equal(f.run({entity:'issues',search:'tap'}).total,1);assert.equal(JSON.stringify(f.data),state);assert.ok(before);
 });
+test('weekly schedule text: every saved cleaning in range, ordered, cancelled/duplicate/outside left out, no crew or guests; empty and invalid ranges',()=>{
+  const {scheduleRangeText}=require('../src/assistant/jarvis-records.js');
+  const d={props:[{id:'m',name:'Villa Mar'},{id:'c',name:'Casa Ejemplo'}],sessions:[
+    {propId:'c',date:'2026-10-28',time:'11:00',status:'scheduled',guestName:'Sample Guest',cleanerIds:['x']},{propId:'m',date:'2026-10-26',time:'10:00',status:'scheduled'},
+    {propId:'m',date:'2026-10-26',time:'10:00',status:'scheduled'},{propId:'m',date:'2026-10-27',status:'cancelled'},{propId:'c',date:'2026-11-02',status:'scheduled'},{propId:'m',date:'2026-10-27',status:'done'}]};
+  const r=scheduleRangeText(d,'2026-10-26','2026-11-01',{reference:'2026-10-21'});
+  assert.equal(r.text,'Good day ladies, sending you cleaning schedule for next week:\n\nMonday 26 October - Villa Mar\nTuesday 27 October - Villa Mar\nWednesday 28 October - Casa Ejemplo');
+  assert.equal(r.count,3);assert.equal(r.scope,'next week');
+  assert.match(scheduleRangeText(d,'2026-10-19','2026-10-25',{reference:'2026-10-21'}).scope,/^this week$/);assert.equal(scheduleRangeText(d,'2026-10-19','2026-10-25',{reference:'2026-10-21'}).empty,true);
+  assert.match(scheduleRangeText(d,'2026-10-26','2026-10-28',{reference:'2026-10-21',header:'Good morning ladies'}).text,/^Good morning ladies\n\nMonday 26 October/);
+  assert.equal(scheduleRangeText(d,'2026-10-28','2026-10-26'),null);assert.equal(scheduleRangeText(d,'2026-10-01','2026-12-01'),null);
+  assert.match(scheduleRangeText(d,'2026-10-26','2026-11-01',{reference:'2026-10-21',language:'es'}).text,/^Buenos días chicas, os envío el horario de limpiezas para la próxima semana:\n\nLunes 26 de octubre - Villa Mar/);
+});

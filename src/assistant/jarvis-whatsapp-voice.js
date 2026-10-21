@@ -128,12 +128,23 @@
   }
   function match(spoken,chats,{group=false}={}){
     const all=(chats||[]).filter(c=>c&&c.name);
-    if(!group)return resolve(spoken,all);
+    if(!group){const r=resolve(spoken,all);return r.exact.length||r.candidates.length?r:loose(spoken,all,false);}
     const groups=resolve(spoken,all.filter(c=>c.kind==='group'));
     if(groups.exact.length||groups.candidates.length)return groups;
     /* Asked for a group that does not exist: offer what does match, but never select it without confirmation. */
     const any=resolve(spoken,all),found=any.exact.length?any.exact:any.candidates;
-    return {exact:[],candidates:found.slice(0,4),clear:found.length===1,groupMissing:found.length>0};
+    if(found.length)return {exact:[],candidates:found.slice(0,4),clear:found.length===1,groupMissing:true};
+    return loose(spoken,all,true);
+  }
+  /* A description rather than a name ("my cleaning ladies group"): chats sharing a distinctive word with what was said
+     (role words like ladies/team/group ignored). Offered as a question only, never selected by itself. */
+  const ROLE=new Set(['group','grupo','chat','team','equipo','lady','girl','women','woman','staff','crew','people','gang','whatsapp','my','our','the']);
+  function loose(spoken,pool,group){
+    const key=words(spoken).filter(w=>w.length>=4&&!ROLE.has(w)),stem=w=>w.slice(0,5);
+    if(!key.length)return {exact:[],candidates:[]};
+    const hits=pool.filter(c=>words(c.name).some(n=>n.length>=4&&key.some(k=>stem(n)===stem(k))));
+    const ranked=group?[...hits.filter(c=>c.kind==='group'),...hits.filter(c=>c.kind!=='group')]:hits;
+    return {exact:[],candidates:ranked.slice(0,4),clear:ranked.length===1,loose:ranked.length>0};
   }
   const kindLabel=c=>c.kind==='group'?'the WhatsApp group':'a direct chat'+(/number ending/.test(c.detail||'')?' ('+String(c.detail).replace(/^Direct chat · /,'')+')':'');
   const YES=/^(?:(?:yes|yeah|yep|yup|correct|right|exactly|sure|ok|okay|si|sí|that one|that s (?:it|right|the one|correct)|thats (?:it|right|the one)|that is (?:it|right|the one|correct)|please|it is|it s)\s*)+$/;
@@ -149,6 +160,8 @@
     const named=match(t.replace(/^(?:yes|yeah|no|the)\s+/,'').replace(/\b(?:one|ones|please)\b/g,' ').trim(),list);const hit=named.exact?.length===1?named.exact[0]:named.candidates?.length===1?named.candidates[0]:null;
     return hit?{chat:hit}:null;
   }
+  /* "It's called Seravillas Cleaning Team." → "Seravillas Cleaning Team". */
+  function spokenName(text){return tidy(text).replace(/^(?:(?:um+|uh+|er+|well|so|no|yes|oh)[,\s]+)*/i,'').replace(/^(?:(?:it|that|the group|the chat|the name|its name)\s*(?:['’]s|is|s)?\s+)?(?:(?:called|named)\s+)?/i,'').replace(/^(?:the\s+)?(?:group|chat)\s+(?:called\s+|named\s+)?/i,'').trim();}
   function create({fetchImpl,getToken=()=>'',now=()=>Date.now(),onChange=()=>{},compose=null}={}){
     let token='',pending=null,lastRecipient=null,lastRead=null,epoch=0,request=null,busy=false;
     /* Spoken relative time from WhatsApp seconds; the same phrase is passed to the models so they never compute it. */
@@ -182,7 +195,7 @@
         results:data.results.map(r=>({name:r.name,chat:r.chat,kind:r.kind,from:r.from,sender:r.sender||'',text:r.text||'',media:r.media||'',at:r.at,date:dated(r.at),ago:ago(r.at),answered:r.answered===true,matched:r.matched||[],truncated:r.truncated===true,
           context:(r.context||[]).map(c=>({position:c.position,name:c.name,kind:c.kind,from:c.from,sender:c.sender||'',text:c.text||'',media:c.media||'',at:c.at,ago:ago(c.at)}))}))}};
     }
-    const snapshot=()=>pending?.stage==='review'?{stage:'review',name:pending.review.recipient.name,detail:pending.review.recipient.detail,text:pending.review.text,english:pending.english||'',language:pending.language||'',heard:pending.heard===true,understanding:pending.understanding===true}:pending?{stage:pending.stage,name:pending.name||''}:null;
+    const snapshot=()=>pending?.stage==='review'?{stage:'review',name:pending.review.recipient.name,detail:pending.review.recipient.detail,text:pending.review.text,english:pending.english||'',language:pending.language||'',heard:pending.heard===true,understanding:pending.understanding===true,schedule:pending.schedule?{label:pending.schedule.label,scope:pending.schedule.scope,count:pending.schedule.count,note:pending.schedule.note}:null}:pending?{stage:pending.stage,name:pending.name||''}:null;
     const changed=()=>onChange(snapshot());
     const reset=()=>{pending=null;changed();};
     async function api(action,{body,...params}={},signal){
@@ -199,19 +212,20 @@
     /* The full text is always available for the screen; speech is the concise result unless Antonio asks to hear it. */
     /* Keep the message's own ending so a question is read as a question. */
     const sentence=t=>{const v=String(t).trim();return /[.!?]$/.test(v)?v:v+'.';};
-    const fullText=p=>'Message to '+p.review.recipient.name+', '+p.review.recipient.detail+'. '+sentence(p.review.text)+(p.english?' In English: '+sentence(p.english):'');
+    const fullText=p=>'Message to '+p.review.recipient.name+', '+p.review.recipient.detail+'. '+sentence(p.review.text)+(p.english?' In English: '+sentence(p.english):'')+(p.schedule?.note?' '+p.schedule.note:'');
     function describe(full=false){
       if(!pending||pending.stage!=='review')return reply('There is no message ready to approve. Say “Write a message to Bex.”');
       const p=pending;p.heard=false;p.understanding=false;const said=p.said=(p.said||0)+1;changed();
       const name=p.review.recipient.name,language=String(p.language||'').slice(0,2).toLowerCase();
-      const brief=language&&language!=='en'&&p.english?'Translated to '+(LANGUAGES[language]||'the requested language')+' for '+name+'. Ready for review.':p.revised?'Draft updated for '+name+'.':'Draft ready for '+name+'.';
+      const sched=p.schedule?' Cleaning schedule for '+(p.schedule.scope||p.schedule.label)+', '+p.schedule.count+' cleaning'+(p.schedule.count===1?'':'s')+'.'+(p.schedule.note?' '+p.schedule.note:''):'';
+      const brief=(language&&language!=='en'&&p.english?'Translated to '+(LANGUAGES[language]||'the requested language')+' for '+name+'. Ready for review.':p.revised?'Draft updated for '+name+'.':'Draft ready for '+name+'.')+sched;
       /* Only the latest spoken summary of this exact review can arm voice approval. */
       return {...reply(full?fullText(p):brief,()=>{if(pending===p&&p.said===said&&now()<p.review.expiresAt){p.heard=true;changed();}}),full:fullText(p)};
     }
     async function review(chat,text,signal,translation={}){
       const r=await api('review',{body:{chat:chat.key,version:chat.version,text,checkedPhone:false}},signal);
       const revised=pending?.stage==='review'&&pending.key===chat.key;
-      pending={stage:'review',name:chat.name,key:chat.key,version:chat.version,review:r,heard:false,revised,english:String(translation.english||'').slice(0,2000),language:String(translation.language||'').slice(0,12)};changed();return describe();
+      pending={stage:'review',name:chat.name,key:chat.key,version:chat.version,review:r,heard:false,revised,english:String(translation.english||'').slice(0,2000),language:String(translation.language||'').slice(0,12),schedule:translation.schedule&&typeof translation.schedule==='object'?translation.schedule:null};changed();return describe();
     }
     /* The original request (body, schedule, language) stays in pending.intent while the recipient is clarified. */
     async function find(intent,data){
@@ -233,15 +247,28 @@
       out.group=first.group===true||next.group===true;if(next.name&&!next.chat)delete out.chat;return out;
     }
     /* The message body for "send tomorrow's schedule": composed by the app from current cleaning records (read-only). */
-    function scheduleText(intent){
+    function scheduleText(intent,header=''){
       if(typeof compose!=='function')return reply('I can’t read the cleaning schedule here. Please dictate the message instead.');
-      const text=compose(intent.schedule,intent.language||'en');
-      return typeof text==='string'&&text.trim()&&text.length<=2000?text:reply('I couldn’t prepare that schedule from the records. Please dictate the message instead.');
+      const out=compose(intent.schedule,intent.language||'en',{header});
+      if(out&&typeof out==='object'){
+        if(out.empty)return reply('There are no saved cleanings for '+(out.scope||out.label)+', so I haven’t prepared a message.'+(out.note?' '+out.note:''));
+        if(!out.text)return reply('I couldn’t prepare that schedule from the records. Please dictate the message instead.');
+        return {text:out.text,schedule:{schedule:intent.schedule,label:out.label,scope:out.scope||'',count:out.count,note:out.note||'',header,language:intent.language||''}};
+      }
+      return typeof out==='string'&&out.trim()&&out.length<=2000?out:reply('I couldn’t prepare that schedule from the records. Please dictate the message instead.');
+    }
+    const bodyOf=b=>typeof b==='string'?b:b.text;
+    /* A new scope keeps a changed greeting; the scope words inside it follow the new range. */
+    function keepHeader(old,next){
+      if(!old?.header)return '';
+      const was=old.scope||old.label,now_=next.scope||next.label;
+      return was&&now_&&old.header.includes(was)?old.header.replace(was,now_):old.header;
     }
     async function selected(intent,chat,signal){
       lastRecipient={key:chat.key,name:chat.name,kind:chat.kind,detail:chat.detail};
       if(intent.kind==='write'){
-        if(intent.schedule){const body=scheduleText(intent);if(body.handled)return body;return review(chat,body,signal,{...intent,english:intent.language&&intent.language!=='en'?scheduleText({...intent,language:'en'}):''});}
+        if(intent.schedule){const body=scheduleText(intent);if(body.handled)return body;const en=intent.language&&intent.language!=='en'?scheduleText({...intent,language:'en'}):'';
+          return review(chat,bodyOf(body),signal,{...intent,english:en&&!en.handled?bodyOf(en):'',schedule:body.schedule||null});}
         if(!intent.text){pending={stage:'body',name:chat.name,key:chat.key,language:intent.language||''};changed();return reply('What should I say to '+chat.name+'?');}
         return review(chat,intent.text,signal,intent);
       }
@@ -293,11 +320,17 @@
         }else if(intent?.kind==='ambiguousApproval'&&!['confirm','choose','name'].includes(pending?.stage))result=reply(pending?.stage==='review'?'That wasn’t the approval phrase. It’s shown on screen, or tap the button.':'There is no reviewed message to send.');
         else if(intent?.kind==='body'||intent?.kind==='edit'||!intent&&pending?.stage==='body'){
           if(!pending||!(intent?.kind==='edit'?pending.stage==='review':pending.stage==='body'))return reply('Who should I write to, and what would you like to say?');
-          let body=String(intent?.text??text).replace(/^(?:say|saying)\s+/i,'').trim();
-          if(intent?.schedule){const s=scheduleText({...intent,language:intent.language||pending.language});if(s.handled)return s;body=s;}
+          let body=String(intent?.text??text).replace(/^(?:say|saying)\s+/i,'').trim(),schedule=null;
+          if(intent?.schedule){
+            const lang=intent.language||pending.language,probe=scheduleText({...intent,language:lang});if(probe.handled)return probe;
+            const header=keepHeader(pending.schedule,probe.schedule||{}),s=header?scheduleText({...intent,language:lang},header):probe;if(s.handled)return s;body=bodyOf(s);schedule=s.schedule||null;
+          }else if(intent?.kind==='edit'&&pending.schedule&&pending.review){
+            const rest=t=>String(t).split('\n').slice(1).join('\n').trim(),first=String(body).split('\n')[0].trim();
+            if(rest(body)&&rest(body)===rest(pending.review.text)&&first)schedule={...pending.schedule,header:first};
+          }
           if(!body||body.length>2000)return reply('Keep the message between one and 2000 characters. What should I say?');
           const data=await api('inbox',{chat:pending.key,view:'voice'},signal);if(!current())return null;
-          if(!data.chat){reset();return reply('That chat is no longer available. Nothing was sent.');}result=await review(data.chat,body,signal,{...intent,language:intent?.language||pending.language});
+          if(!data.chat){reset();return reply('That chat is no longer available. Nothing was sent.');}result=await review(data.chat,body,signal,{...intent,language:intent?.language||pending.language,schedule});
         }else if(['confirm','choose','name'].includes(pending?.stage)&&!(intent&&['write','read','history'].includes(intent.kind))){
           const p=pending,a=intent?.kind==='choose'?{option:intent.option}:answer(text,p.choices);
           let chat=null;
@@ -308,7 +341,7 @@
           else if(a?.no){pending={stage:'name',intent:p.intent};changed();result=reply('Which chat should I use? Say its name as you see it in WhatsApp.');}
           else if(p.stage==='name'&&!intent&&String(text).trim()){
             reset();const data=await api('inbox',{view:'voice'},signal);if(!current())return null;
-            const found=await find({...p.intent,name:tidy(text).replace(/^(?:it(?:'s| is)|the group|group)\s+/i,'')},data);if(!current())return null;result=found.handled?found:await selected(p.intent,found,signal);
+            const found=await find({...p.intent,name:spokenName(text)},data);if(!current())return null;result=found.handled?found:await selected(p.intent,found,signal);
           }else result=reply(p.stage==='confirm'?'Please say yes, no, or the chat name — or “Cancel.”':p.stage==='choose'?'Please say the option number or the chat name, or “Cancel.”':'Which chat should I use? Say its name, or “Cancel.”');
         }else if(intent?.kind==='choose'){return reply('There is no contact choice pending. Who would you like to contact?');}
         else if(!intent){reset();return {handled:false};}
@@ -351,11 +384,16 @@
     }
     const contact=c=>c?{key:c.key,name:c.name,kind:c.kind,detail:c.detail}:null;
     return {handle,describe,snapshot,get busy(){return busy;},hasPending:()=>!!pending,
-      context:()=>({stage:pending?.stage||null,recipient:pending?contact(pending.stage==='choose'?null:{...lastRecipient,key:pending.key,name:pending.name}):null,lastRecipient:contact(lastRecipient),draft:pending?.stage==='review'?pending.review.text:'',english:pending?.english||'',language:pending?.language||'',lastRead,requestedName:pending?.intent?.name||'',choices:['choose','confirm'].includes(pending?.stage)?pending.choices.map(contact):[],
+      context:()=>({stage:pending?.stage||null,recipient:pending?contact(pending.stage==='choose'?null:{...lastRecipient,key:pending.key,name:pending.name}):null,lastRecipient:contact(lastRecipient),draft:pending?.stage==='review'?pending.review.text:'',draftSchedule:pending?.stage==='review'&&pending.schedule?{schedule:pending.schedule.schedule,label:pending.schedule.label,count:pending.schedule.count,unsavedNote:pending.schedule.note}:null,english:pending?.english||'',language:pending?.language||'',lastRead,requestedName:pending?.intent?.name||'',choices:['choose','confirm'].includes(pending?.stage)?pending.choices.map(contact):[],
         /* While a recipient is being clarified the original request is kept; the model only needs to supply the chat. */
         heldRequest:['confirm','choose','name'].includes(pending?.stage)?{kind:pending.intent.kind,hasText:!!pending.intent.text,schedule:pending.intent.schedule||'',language:pending.intent.language||''}:null}),
       /* Antonio's own short answer to a recipient question (yes / no / option / a listed name) is handled by the app. */
-      answers(text){return ['confirm','choose'].includes(pending?.stage)&&!!answer(text,pending.choices);},
+      answers(text){
+        if(['confirm','choose'].includes(pending?.stage))return !!answer(text,pending.choices);
+        /* Stage name: a short answer that is not a new WhatsApp request, question or approval is the chat name. */
+        if(pending?.stage==='name'){const t=spokenName(text);return !!t&&t.split(/\s+/).length<=8&&!/\?\s*$/.test(String(text))&&!parse(text)&&!/^(?:who|what|when|where|why|how|is|are|do|does|did|can|could|would|should|will|open|show|close|cancel|stop|read|tell|add|make|change|send|write|approve)\b/i.test(t);}
+        return false;
+      },
       suspendApproval(){if(pending?.stage==='review'){pending.heard=false;pending.understanding=true;changed();}},
       finishUnderstanding(){if(pending?.stage==='review'){pending.understanding=false;changed();}},
       observe(data){if(pending?.stage==='review'){const c=(data.chats||[]).find(c=>c.key===pending.key);if(c&&c.version!==pending.version){reset();return true;}}return false;},

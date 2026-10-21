@@ -912,3 +912,110 @@ test('light/dark toggle: dark by default, switches instantly without touching vo
   h.app.run('openJarvis()');await flush();assert.ok(bodyClasses.has('jarvis-light'));assert.equal(h.app.el('jarvis-theme-toggle').attrs['aria-pressed'],'true');assert.equal(h.app.run('SV_JARVIS.preview.theme()'),'light');
   h.app.click('theme');assert.ok(!bodyClasses.has('jarvis-light'));assert.equal(h.app.el('jarvis-theme-toggle').attrs['aria-pressed'],'false');assert.equal(h.app.run("SV_STORAGE.getItem('sv_jarvis_theme')"),'dark');h.app.click('close');
 });
+
+/* ── Weekly cleaning schedule → WhatsApp group draft (FICTIONAL records and chats; WhatsApp is a stand-in; no real send). ── */
+function scheduleRuntime({decisions=[]}={}){
+  let options;const reviews=[],sends=[],mic=[],vol=[];
+  const chats=[{key:'a'.repeat(20),name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1},{key:'b'.repeat(20),name:'Sample Cleaning Team',kind:'group',detail:'WhatsApp group · 5 members',version:3},{key:'c'.repeat(20),name:'Family',kind:'group',detail:'WhatsApp group · 4 members',version:1}];
+  const liveSdk={Conversation:{startSession:async o=>{options=o;return {endSession:async()=>{},setMicMuted:v=>mic.push(v),setVolume:v=>vol.push(v.volume),getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){},sendUserMessage(){}};}}};
+  const app=desktopRuntime({agent:true,desktop:true,liveSdk,understand:async()=>decisions.shift()||{kind:'reply',text:'Okay.'},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
+    if(url.endsWith('/status'))return {available:true,requestToken:'FICTIONAL_SESSION'};
+    if(url.includes('/inbox')){const key=(url.match(/[?&]chat=([a-f0-9]{20})/)||[])[1];return {connection:{state:'open'},chats,chat:key?chats.find(c=>c.key===key):undefined,unreadCount:0};}
+    const body=JSON.parse(init.body);const chat=chats.find(c=>c.key===body.chat);
+    if(url.endsWith('/review')){reviews.push({chat:chat.name,text:body.text});return {reviewToken:'R'.repeat(24),version:chat.version,text:body.text,recipient:chat,expiresAt:Date.now()+300000};}
+    if(url.endsWith('/send')){sends.push(body);return {status:'sent'};}throw Error('Unexpected call');}})});
+  let id=500;const user=async text=>{options.onMessage({source:'user',message:text,event_id:++id});await flush();await flush();};
+  const lastLine=()=>texts(app.el('jarvis-transcript')).at(-1);
+  return {app,reviews,sends,mic,vol,user,lastLine,options:()=>options};
+}
+/* Next Monday–Sunday from the app date, ten saved cleanings (more than one page of results), a cancelled one, an exact
+   duplicate, one outside the week, crew and guests that must not appear. */
+const WEEK="var __mon=(()=>{const t=today(),d=new Date(t+'T12:00:00Z').getUTCDay();return addDays(t,7-((d+6)%7));})();"
+  +"D.props=[{id:'m',name:'Villa Mar'},{id:'c',name:'Casa Ejemplo'},{id:'f',name:'Finca Prueba'}];D.cleaners=[{id:'k1',name:'Sample Cleaner A'}];D.bookings=[];"
+  +"D.sessions=[0,0,1,1,2,3,4,5,6,6].map((d,i)=>({id:'s'+i,propId:['m','c','f'][i%3],date:addDays(__mon,d),time:i%2?'11:00':'10:00',status:'scheduled',cleanerIds:['k1'],guestName:'Fictional Guest'}))"
+  +".concat([{id:'x1',propId:'m',date:addDays(__mon,2),time:'12:00',status:'cancelled'},{id:'dup',propId:'m',date:addDays(__mon,0),time:'10:00',status:'scheduled'},{id:'out',propId:'c',date:addDays(__mon,7),time:'10:00',status:'scheduled'}]);";
+function expectedWeek(app){return app.run(`(()=>{const L=d=>{const x=new Date(d+'T12:00:00Z');return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][x.getUTCDay()]+' '+x.getUTCDate()+' '+['January','February','March','April','May','June','July','August','September','October','November','December'][x.getUTCMonth()];};
+  return 'Good day ladies, sending you cleaning schedule for next week:\\n\\n'+[[0,'Villa Mar'],[0,'Casa Ejemplo'],[1,'Finca Prueba'],[1,'Villa Mar'],[2,'Casa Ejemplo'],[3,'Finca Prueba'],[4,'Villa Mar'],[5,'Casa Ejemplo'],[6,'Finca Prueba'],[6,'Villa Mar']].map(([d,h])=>L(addDays(__mon,d))+' - '+h).join('\\n');})()`);}
+test('weekly schedule, two turns: the agent’s single day becomes the spoken week, a loose group name is one question, the full week is drafted, nothing is sent',async()=>{
+  const h=scheduleRuntime();h.app.run(TASK_STORE+WEEK+"openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const before=h.app.run('JSON.stringify(D)');
+  await h.user('Prepare the cleaning schedule for next week.');
+  await o.clientTools.lookup_records({entity:'cleanings',view:'list',period:'next_week'});await flush();h.app.finishSpeech();await flush();
+  // The real failure: the agent sent only Monday and the description "cleaning ladies".
+  await h.user('Send that schedule to my cleaning ladies group.');
+  await o.clientTools.whatsapp_request({kind:'write',name:'cleaning ladies',group:true,text:'',schedule:h.app.run('__mon')});await flush();
+  assert.match(h.lastLine(),/Do you mean Sample Cleaning Team, the WhatsApp group\?/);assert.equal(h.reviews.length,0,'nothing drafted before the recipient is confirmed');
+  h.app.finishSpeech();await flush();await h.user('Yes');
+  assert.equal(h.reviews.length,1);assert.equal(h.reviews[0].chat,'Sample Cleaning Team');
+  assert.equal(h.reviews[0].text,expectedWeek(h.app),'every saved cleaning of the week, in order, no cancelled/duplicate/outside entries');
+  assert.doesNotMatch(h.reviews[0].text,/Fictional Guest|Sample Cleaner|10:00|\[/,'no guests, crew, times or placeholders');
+  assert.match(h.app.el('jarvis-review-scope').textContent,/Next week, Monday \d+ \w+ to Sunday \d+ \w+ · 10 saved cleanings/);
+  assert.match(h.lastLine(),/^Draft ready for Sample Cleaning Team\. Cleaning schedule for next week, 10 cleanings\./);
+  assert.equal(h.sends.length,0);assert.equal(h.app.run('JSON.stringify(D)'),before,'preparing a message never changes cleaning records');
+  // "Yes" is not approval; an interrupted review cannot approve; the literal phrase after a heard review sends once.
+  await h.user('Yes');assert.equal(h.sends.length,0);
+  o.onVadScore({vadScore:.9});o.onVadScore({vadScore:.9});h.app.finishSpeech();await flush();
+  await h.user('Approve and send');assert.equal(h.sends.length,0,'an unheard review cannot be approved');h.app.finishSpeech();await flush();
+  await h.user('Approve and send');assert.equal(h.sends.length,1);assert.equal(h.sends[0].text,expectedWeek(h.app));
+  await h.user('Approve and send');assert.equal(h.sends.length,1,'never sent twice');
+  h.app.click('close');
+});
+test('weekly schedule, one turn; “It’s called …” answers the name question; a group name sent as the chat key still works',async()=>{
+  const h=scheduleRuntime();h.app.run(TASK_STORE+WEEK+"openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  await h.user('Prepare a message to the cleaning ladies with next week’s cleaning schedule.');
+  await o.clientTools.whatsapp_request({kind:'write',name:'cleaning crew people',group:true,text:'',schedule:'next week'});await flush();
+  assert.match(h.lastLine(),/Do you mean Sample Cleaning Team/);h.app.finishSpeech();await flush();
+  await h.user('No');assert.match(h.lastLine(),/Which chat should I use\?/);h.app.finishSpeech();await flush();
+  const volBefore=h.vol.length;await h.user('It’s called Sample Cleaning Team.');
+  assert.equal(h.reviews.length,1,'the answer is handled by the app and the held weekly request continues');assert.equal(h.reviews[0].chat,'Sample Cleaning Team');assert.equal(h.reviews[0].text,expectedWeek(h.app));
+  assert.equal(h.vol.at(-1),0,'the agent stays silent for that answer');
+  await h.user('Cancel it');h.app.finishSpeech();await flush();assert.equal(h.app.el('jarvis-voice-review').hidden,true);
+  // The real misuse: the group name in the chat-key field is treated as the name, not a date error.
+  await h.user('Put next week’s schedule in Sample Cleaning Team.');
+  const r=JSON.parse(await o.clientTools.whatsapp_request({kind:'write',chat:'Sample Cleaning Team',group:true,text:'',schedule:'2026-10-26'}));await flush();
+  assert.ok(!r.error,JSON.stringify(r));assert.equal(h.reviews.length,2);assert.equal(h.reviews[1].text,expectedWeek(h.app),'the spoken week wins over the single day');
+  assert.equal(h.sends.length,0);h.app.click('close');
+});
+test('schedule draft corrections: narrower days keep the recipient and greeting; a greeting edit keeps the schedule; corrections need a fresh review',async()=>{
+  const h=scheduleRuntime();h.app.run(TASK_STORE+WEEK+"openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  await h.user('Send next week’s cleaning schedule to Sample Cleaning Team.');
+  await o.clientTools.whatsapp_request({kind:'write',name:'Sample Cleaning Team',group:true,text:'',schedule:'next week'});await flush();h.app.finishSpeech();await flush();
+  const full=h.reviews.at(-1).text,mon=h.app.run('__mon');
+  await h.user('Change the greeting to Good morning ladies.');
+  const greet=full.replace(/^Good day ladies/,'Good morning ladies');
+  await o.clientTools.whatsapp_request({kind:'edit',text:greet});await flush();
+  assert.equal(h.reviews.at(-1).text,greet);assert.equal(h.reviews.at(-1).chat,'Sample Cleaning Team');assert.match(h.lastLine(),/^Draft updated for Sample Cleaning Team\./);
+  await h.user('Approve and send');assert.equal(h.sends.length,0,'a correction invalidates earlier approval until reviewed again');h.app.finishSpeech();await flush();
+  await h.user('Only include Monday to Wednesday.');
+  await o.clientTools.whatsapp_request({kind:'edit',text:'',schedule:mon+'/'+h.app.run(`addDays(__mon,2)`)});await flush();
+  const narrow=h.reviews.at(-1).text;
+  assert.match(narrow,/^Good morning ladies, sending you cleaning schedule for Monday \d+ \w+ to Wednesday \d+ \w+:/,'greeting kept, scope words follow the new dates');
+  assert.equal(narrow.split('\n').filter(l=>/ - /.test(l)).length,5);assert.doesNotMatch(narrow,/Thursday|Friday|Saturday|Sunday/);
+  assert.equal(h.reviews.at(-1).chat,'Sample Cleaning Team');
+  await h.user('Read it back');await o.clientTools.whatsapp_request({kind:'review'});await flush();assert.match(h.lastLine(),/^Message to Sample Cleaning Team, WhatsApp group · 5 members\. Good morning ladies/);h.app.finishSpeech();await flush();
+  await h.user('Approve and send');assert.equal(h.sends.length,1);assert.equal(h.sends[0].text,narrow);
+  h.app.click('close');
+});
+test('schedule edge cases: an empty week drafts nothing; one day keeps the existing daily format; an unsaved plan is named and left out',async()=>{
+  const h=scheduleRuntime({decisions:[{kind:'operation',operation:{action:'plan_checkout_cleanings',scope:'dates',period:'next_week'}}]});
+  h.app.run(TASK_STORE+WEEK+"D.sessions=D.sessions.filter(s=>s.id==='out'||s.date===addDays(today(),1));openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  await h.user('Send next week’s schedule to Sample Cleaning Team.');
+  await o.clientTools.whatsapp_request({kind:'write',name:'Sample Cleaning Team',group:true,text:'',schedule:'next week'});await flush();
+  assert.equal(h.reviews.length,0);assert.match(h.lastLine(),/There are no saved cleanings for next week, so I haven’t prepared a message\./);h.app.finishSpeech();await flush();
+  // Existing single-day behaviour is unchanged (times and team, daily heading).
+  h.app.run("D.sessions.push({id:'t1',propId:'m',date:addDays(today(),1),time:'09:30',status:'scheduled',cleanerIds:['k1']})");
+  await h.user('Send tomorrow’s schedule to Sample Cleaning Team.');
+  await o.clientTools.whatsapp_request({kind:'write',name:'Sample Cleaning Team',group:true,text:'',schedule:'tomorrow'});await flush();
+  assert.match(h.reviews.at(-1).text,/^Cleaning schedule for \w+ \d+ \w+:\n• 09:30 – Villa Mar: Sample Cleaner A$/);h.app.finishSpeech();await flush();
+  await h.user('Cancel it');h.app.finishSpeech();await flush();
+  // A proposed (unsaved) checkout plan for next week: the draft says it is not included, and nothing is saved.
+  h.app.run("D.bookings=[{id:'b1',propId:'f',guestName:'Fictional Guest',checkIn:addDays(__mon,-3),checkOut:addDays(__mon,3),status:'confirmed',linkedCleaningId:''}];D.sessions.push({id:'s9',propId:'m',date:addDays(__mon,1),time:'10:00',status:'scheduled',cleanerIds:[]})");
+  await h.user('Plan the checkout cleanings for next week');await o.clientTools.ask_hermes({request:'plan'});await flush();h.app.finishSpeech();await flush();
+  const sessions=h.app.run('D.sessions.length');
+  await h.user('Send that schedule to Sample Cleaning Team.');
+  await o.clientTools.whatsapp_request({kind:'write',name:'Sample Cleaning Team',group:true,text:''});await flush();
+  assert.match(h.reviews.at(-1).text,/ - Villa Mar$/);assert.doesNotMatch(h.reviews.at(-1).text,/Finca Prueba/,'the unsaved planned cleaning is not presented as scheduled');
+  assert.match(h.app.el('jarvis-review-scope').textContent,/1 planned cleaning is not saved yet, so it is not included\./);
+  assert.equal(h.app.run('D.sessions.length'),sessions,'drafting never saves the plan');assert.equal(h.sends.length,0);
+  h.app.click('close');
+});
