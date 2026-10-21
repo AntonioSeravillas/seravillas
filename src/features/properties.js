@@ -223,9 +223,12 @@ function handlePhoto(e){
 }
 function viewPhoto(pid,idx){
   const p=D.props.find(x=>x.id===pid);if(!p||!p.photos[idx])return;
+  /* Inside Jarvis the same actions are presented in the Jarvis theme. */
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_PROPERTIES_VIEW){showModal(SV_PROPERTIES_VIEW.photoDialog(p,idx));return;}
   showModal('<div class="modal-handle"></div><img src="'+p.photos[idx]+'" style="width:100%;border-radius:12px;margin-bottom:14px" alt="Property photo"><div style="display:flex;gap:8px"><button class="btn btn-danger" style="flex:1" onclick="removePhoto(\''+pid+'\','+idx+')">Delete photo</button><button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Close</button></div>');
 }
-function removePhoto(pid,idx){if(!confirm('Delete this photo?'))return;const p=D.props.find(x=>x.id===pid);if(p){p.photos.splice(idx,1);save();closeModal();render();}}
+/* confirmed: the Jarvis dialog has already asked in its own confirmation step. */
+function removePhoto(pid,idx,confirmed){if(confirmed!==true&&!confirm('Delete this photo?'))return;const p=D.props.find(x=>x.id===pid);if(p){p.photos.splice(idx,1);save();closeModal();render();}}
 
 /* ── PHOTOS (issue) ── */
 function handleIssuePhoto(e){
@@ -297,6 +300,7 @@ function setStatus(id,status){const s=D.sessions.find(x=>x.id===id);if(!s)return
 /* ── PROP NOTES ── */
 function openPropNotes(id){
   const p=D.props.find(x=>x.id===id);if(!p)return;
+  if(document.body&&document.body.classList&&typeof document.body.classList.contains==='function'&&document.body.classList.contains('jarvis-open')&&window.SV_PROPERTIES_VIEW){showModal(SV_PROPERTIES_VIEW.notesDialog(p));setTimeout(()=>document.getElementById('p-notes')?.focus(),60);return;}
   showModal('<div class="modal-handle"></div><div class="modal-title">'+esc(p.name)+' — notes</div>'
     +'<div class="field"><textarea id="p-notes" placeholder="Entry code: 1234&#10;Replace towels&#10;Check fridge..." style="height:170px">'+esc(p.notes||'')+'</textarea></div>'
     +'<div style="display:flex;gap:8px"><button class="btn btn-teal" style="flex:1" onclick="savePropNotes(\''+id+'\')">Save</button><button class="btn btn-ghost" style="flex:1" onclick="closeModal()">Cancel</button></div>');

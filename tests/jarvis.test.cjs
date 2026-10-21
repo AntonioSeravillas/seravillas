@@ -1019,3 +1019,31 @@ test('schedule edge cases: an empty week drafts nothing; one day keeps the exist
   assert.equal(h.app.run('D.sessions.length'),sessions,'drafting never saves the plan');assert.equal(h.sends.length,0);
   h.app.click('close');
 });
+
+test('Properties page: the tab and the live voice event path open it inside Jarvis, it survives replies, property questions reach the record tool, close returns to Overview, drafts survive',async()=>{
+  for(const desktop of [true,false]){
+    const app=desktopRuntime({desktop}),visited=[],renders=[];app.context.workspaceNavigate=t=>visited.push(t);let resets=0;
+    app.context.SV_PROPERTIES_VIEW={bind(){},render(host){renders.push(host);},reset(){resets++;}};app.run('openJarvis()');await flush();
+    app.click('nav-properties');assert.deepEqual(visited,[],'no longer leaves Jarvis for the workspace screen');assert.equal(app.root().removed,false);
+    assert.equal(app.root().dataset.page,'properties');assert.equal(app.el('jarvis-properties-page').hidden,false);assert.equal(app.el('jarvis-tasks-page').hidden,true);assert.equal(renders.length,1);assert.equal(resets,1,'opens at the list');
+    app.click('nav-overview');assert.equal(app.el('jarvis-properties-page').hidden,true);
+  }
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions}),visited=[];h.app.context.workspaceNavigate=d=>visited.push(d);
+  const renders=[];h.app.context.SV_PROPERTIES_VIEW={bind(){},render(host){renders.push(host);},reset(){}};
+  const modal={open:false};const q=h.app.context.document.querySelector;h.app.context.document.querySelector=s=>s==='#modal-root .modal'?(modal.open?{querySelectorAll:()=>[]}:null):q(s);h.app.context.closeModal=()=>{modal.open=false;};
+  h.app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const page=()=>h.app.root().dataset.page,live=()=>h.app.phase()!=='paused'&&h.app.phase()!=='idle';
+  await h.user('Show me my villas.');assert.equal(page(),'properties');assert.equal(h.app.el('jarvis-properties-page').hidden,false);assert.equal(h.vol.at(-1),0,'the agent stays silent for that turn');
+  assert.match(await o.clientTools.lookup_records({entity:'properties',view:'list'}),/paused|superseded/,'the agent cannot also turn it into a record list');assert.equal(page(),'properties');h.app.finishSpeech();await flush();
+  // A factual property question goes to the record tool; the page stays open.
+  await h.user('Which villas are free tomorrow?');assert.equal(page(),'properties');const r=await o.clientTools.lookup_records({entity:'properties',view:'availability',start:h.app.run('addDays(today(),1)'),end:h.app.run('addDays(today(),2)')});assert.doesNotMatch(r,/paused/);
+  o.onMessage({source:'ai',message:'Both villas are free.',event_id:960});o.onModeChange({mode:'speaking'});o.onModeChange({mode:'listening'});await flush();assert.equal(page(),'properties','the page stays open across replies');
+  await h.user('Open properties');h.app.finishSpeech();await flush();modal.open=true;
+  await h.user('Close it');assert.equal(modal.open,false);assert.equal(page(),'properties','a dialog closes before the page');h.app.finishSpeech();await flush();
+  await h.user('Close it');assert.equal(page(),'overview');assert.ok(live(),'the conversation keeps running');h.app.finishSpeech();await flush();
+  // A pending task draft survives switching to Properties and back.
+  decisions.push({kind:'task',operation:{action:'create',text:'repaint the villa gate'}});await h.user('Add a task to repaint the villa gate');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  for(const [words,expect] of [['Open properties','properties'],['Open tasks','tasks'],['Show me my villas','properties'],['Close it','overview']]){await h.user(words);assert.equal(page(),expect,words);assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review',words);h.app.finishSpeech();await flush();}
+  assert.ok(live());assert.deepEqual(visited,[]);assert.equal(h.app.root().removed,false);assert.ok(renders.length>=1);
+  h.app.click('close');
+});

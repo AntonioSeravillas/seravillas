@@ -69,3 +69,28 @@ test('real recognised owner speech (provider history, 19 Oct) reaches the intern
   assert.equal(a.run('page'),'overview');
   a.run('navigationWords("Close the conversation")');assert.ok(a.events.some(e=>/^paused: /.test(e)),'closing the conversation ends it, distinct from closing a view');
 });
+test('Properties: natural wording opens the full internal page; property questions and named villas stay with the record tools',()=>{
+  const a=app();a.elements['jarvis-properties-page']={hidden:true};
+  for(const words of ['open properties','Show me my villas.','Hi, Jarvis. Can you open the properties tab?','go to the villas page','Open property.','um open the propertis','Could you bring up my villas please?']){
+    a.run('navigationTurn("overview")');assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),true,words);
+    assert.equal(a.run('page'),'properties',words);assert.equal(a.elements['jarvis-properties-page'].hidden,false,words);assert.equal(a.elements['jarvis-tasks-page'].hidden,true,words);
+  }
+  assert.match(a.events.filter(e=>typeof e==='string').at(-2)||'',/Here are your properties/);assert.ok(!a.events.some(e=>/^records:properties|^workspace:properties/.test(e)),'not a record list or the workspace screen');
+  a.run('navigationTurn("overview")');
+  for(const words of ['Which villas are free tomorrow?','Show me Villa Mar','Show me the villas with open issues','How many properties do I have?','Open the villa notes for Casa Ejemplo','Don’t open properties'])assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),false,words);
+  assert.equal(a.run('page'),'overview');
+  /* Close: a dialog first, then the page back to Overview. */
+  a.run('navigationTurn("properties")');a.modal.open=true;a.run('navigationWords("close it")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'properties','the dialog closed, the page stayed');
+  a.run('navigationWords("close it")');assert.equal(a.run('page'),'overview');assert.equal(a.elements['jarvis-properties-page'].hidden,true);
+  a.run('navigationTurn("properties")');a.run('navigationWords("close properties")');assert.equal(a.run('page'),'overview');
+});
+test('a dialog with typed, unsaved text is not discarded by a spoken close or page change',()=>{
+  const a=app();a.elements['jarvis-properties-page']={hidden:true};
+  const field={value:'Entry code changed',defaultValue:'Entry code: fictional'};
+  a.run('document.querySelector=s=>s==="#modal-root .modal"&&modal.open?{querySelectorAll:()=>modal.fields||[]}:null');
+  a.run('navigationTurn("properties")');a.modal.open=true;a.modal.fields=[field];
+  a.run('navigationWords("close it")');assert.equal(a.modal.open,true);assert.equal(a.run('page'),'properties');assert.match(a.events.filter(e=>typeof e==='string').at(-2),/unsaved changes/);
+  a.run('navigationWords("open bookings")');assert.equal(a.modal.open,true);assert.equal(a.run('page'),'properties','no page change behind an unsaved form');
+  field.value=field.defaultValue;a.run('navigationWords("close it")');assert.equal(a.modal.open,false,'unchanged text closes normally');
+  a.modal.open=true;a.modal.fields=[];a.run('navigationWords("open bookings")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'bookings','dialogs without typed text keep the existing behaviour');
+});

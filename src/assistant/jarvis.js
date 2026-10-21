@@ -987,7 +987,7 @@
     +'<div class="jp-cal-body"><div class="jp-cal-date" aria-hidden="true"><small id="jarvis-cal-month"></small><b id="jarvis-cal-daynum"></b><small id="jarvis-cal-weekday"></small></div><div class="jp-scroll"><p class="jarvis-date" id="jarvis-today-date"></p><ol class="jarvis-rows jp-timeline" id="jarvis-today-list"></ol></div></div></section>'
     +'<section class="jp-panel jp-tasks" id="jarvis-tasks-section">'+panelHead('tasks','jarvis-tasks-title','Tasks',viewAll('nav-tasks','View all tasks (opens the Tasks page)'))+filters('task','task-filter','Task window',[['today','Today'],['week','This week'],['later','Later']])+'<ol class="jarvis-rows jp-scroll jp-task-list" id="jarvis-task-list"></ol></section>'
     +'<section class="jp-panel jp-cleanings" id="jarvis-cleanings-section">'+panelHead('broom','jarvis-cleanings-title','Cleanings',viewAll('nav-cleaning','View all cleanings (opens the Cleaning page)'))+'<ol class="jp-scroll jp-clean-list" id="jarvis-clean-list"></ol></section></aside>'
-    +'<section class="jarvis-page" id="jarvis-bookings-page" aria-label="Bookings" hidden></section><section class="jarvis-page" id="jarvis-cleanings-page" aria-label="Cleanings" hidden></section><section class="jarvis-page" id="jarvis-tasks-page" aria-label="Tasks" hidden></section>'
+    +'<section class="jarvis-page" id="jarvis-bookings-page" aria-label="Bookings" hidden></section><section class="jarvis-page" id="jarvis-cleanings-page" aria-label="Cleanings" hidden></section><section class="jarvis-page" id="jarvis-tasks-page" aria-label="Tasks" hidden></section><section class="jarvis-page" id="jarvis-properties-page" aria-label="Properties" hidden></section>'
     +'<main class="jarvis-presence" aria-label="Jarvis"><div class="jarvis-greeting"><small id="jarvis-greet">Good evening</small><h1>'+BUSINESS.owner+'</h1><p id="jarvis-longdate"></p></div>'
     +'<div class="jarvis-stage"><div class="jarvis-orbit"><svg class="jarvis-guides" viewBox="-100 -100 200 200" aria-hidden="true" focusable="false"><circle r="52.2"/><circle r="71.3" class="mid"/><circle r="84.3"/>'
     +[[-135,52.2],[-45,52.2],[40,52.2],[90,50.6],[138,52.2],[-137,84.3],[-43,84.3],[42,82]].map(([a,r])=>'<circle class="dot" r=".75" cx="'+(Math.cos(a*Math.PI/180)*r).toFixed(1)+'" cy="'+(Math.sin(a*Math.PI/180)*r).toFixed(1)+'"/>').join('')
@@ -1013,10 +1013,12 @@
   /* Working pages inside the Jarvis shell. Switching pages is presentation only: the voice session, drafts, reviews
      and renderers keep running; nothing is stopped, started or saved. */
   let page='overview',pageReply=false;
-  const PAGES={bookings:{id:'jarvis-bookings-page',nav:'bookings'},cleanings:{id:'jarvis-cleanings-page',nav:'cleaning'},tasks:{id:'jarvis-tasks-page',nav:'tasks'}};
+  const PAGES={bookings:{id:'jarvis-bookings-page',nav:'bookings'},cleanings:{id:'jarvis-cleanings-page',nav:'cleaning'},tasks:{id:'jarvis-tasks-page',nav:'tasks'},properties:{id:'jarvis-properties-page',nav:'properties'}};
   function showPage(next){
     if(!root)return;const target=PAGES[next]?next:'overview',changed=target!==page;page=target;root.dataset.page=page;root.classList.toggle('is-workpage',page!=='overview');
     for(const [name,cfg] of Object.entries(PAGES)){const host=el(cfg.id);if(host)host.hidden=name!==page;}
+    /* Opening Properties starts at the list; re-renders after a save keep the villa that is open. */
+    if(changed&&page==='properties')window.SV_PROPERTIES_VIEW?.reset?.();
     if(page!=='overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeRecords();clearFocus();if(expanded)expandPanel(expanded);renderWorkPage();}
     else renderDashboard();
     if(changed)pageReply=false;setNav(PAGES[page]?.nav||'overview');syncLastReply();atmosphereRelayout?.();
@@ -1088,7 +1090,7 @@
   /* ── Contextual navigation from his own words: a small grammar (verb + view + optional "tab/page"), tolerant of
      fillers and misheard view names. Anything else — a question, a negation, a filter such as "bookings for next week" —
      goes to the conversation, where Hermes can still return a navigate decision. Read-only: no approval needed. ── */
-  const NAV_VIEWS={bookings:['booking','bookings','reservation','reservations','calendar','timeline','stays','availability','planning'],cleanings:['cleaning','cleanings','cleaners','housekeeping'],tasks:['task','tasks','todo','todos','to do','to dos','to do list','task list','jobs'],overview:['dashboard','overview','home','home screen','main screen','main page','start']};
+  const NAV_VIEWS={bookings:['booking','bookings','reservation','reservations','calendar','timeline','stays','availability','planning'],cleanings:['cleaning','cleanings','cleaners','housekeeping'],tasks:['task','tasks','todo','todos','to do','to dos','to do list','task list','jobs'],properties:['property','properties','villa','villas','houses'],overview:['dashboard','overview','home','home screen','main screen','main page','start']};
   const NAV_SUFFIX=/ (?:tab|tap|tabs|page|pages|view|screen|section|panel|calendar|list|schedule|plan)$/;
   const NAV_FILLER=/\b(?:um+|uh+|er+|erm|hey|ok|okay|so|just|quickly|now|please|for me|for us|thanks|thank you|jarvis)\b/g;
   function navWords(text){return String(text||'').toLowerCase().normalize('NFD').replace(/\p{M}/gu,'').replace(/[’']/g,'').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(NAV_FILLER,' ').replace(/\s+/g,' ').trim();}
@@ -1110,7 +1112,7 @@
   const NAV_LEAD=/^(?:(?:hi|hello|hey|ok|okay|so|right|alright|well|no|nope|yes|yeah|now|then|and|also|please|sorry|mm+|hmm+|hm+|ah+|oh)\s+)+/;
   const NAV_POLITE=/^(?:(?:can|could|would|will) you(?: please)?|(?:can|could|may) i(?: please)?|i (?:want|need|would like|d like)(?: you)? to|lets|let s|id like to)\s+/;
   const NAV_DROP=new Set(['me','my','us','our','the','a','up','to','into','over','for','now','tab','tap','tabs','page','pages','panel','panels','view','views','screen','section','list','schedule','plan','window','again','back','one']);
-  const NAV_CLOSE=/^(?:close|dismiss|hide|shut|exit|put away|get rid of|go back|back)(?: (?:it|that|this|that one|this one|(?:the )?(?:view|tab|page|panel|window|list|dialog|popup|pop up|form|records?|calendar|bookings?|cleanings?|tasks?|whatsapp|dashboard)))?(?: (?:tab|page|view|panel|window))?$/;
+  const NAV_CLOSE=/^(?:close|dismiss|hide|shut|exit|put away|get rid of|go back|back)(?: (?:it|that|this|that one|this one|(?:the )?(?:view|tab|page|panel|window|list|dialog|popup|pop up|form|records?|calendar|bookings?|cleanings?|tasks?|properties|property|villas?|whatsapp|dashboard)))?(?: (?:tab|page|view|panel|window))?$/;
   const NAV_END=/^(?:(?:end|finish|stop|close) (?:the |this |our )?(?:conversation|session|chat|call)|thats all(?: for now)?|thats it for now|goodbye|good bye|bye(?: bye)?|see you(?: later)?|talk (?:to you )?later)$/;
   function navSentence(sentence){
     const w=((navWords(sentence)+' ').replace(NAV_LEAD,'').replace(NAV_POLITE,'')+' ').replace(NAV_LEAD,'').trim();
@@ -1145,6 +1147,8 @@
     if(!navigationTurn(nav.view))return false;
     return nav.rest&&!['end','exit'].includes(nav.view)?{rest:nav.rest}:true;
   }
+  const UNSAVED='That form has unsaved changes. Save it, or tap Cancel to discard them.';
+  function unsavedDialog(){const m=document.querySelector?.('#modal-root .modal');return !!m&&[...(m.querySelectorAll?.('[data-jv-guard]')||[])].some(x=>x.value!==x.defaultValue);}
   const PANEL_NAMES={calendar:'the calendar',tasks:'Tasks',cleanings:'Cleanings',conversation:'Conversation',whatsapp:'WhatsApp',issues:'Issues'};
   function navigationTurn(destination){
     if(!root)return false;
@@ -1153,7 +1157,8 @@
     if(destination==='end'){add('Jarvis','Okay, I’ll stop listening. Tap the microphone when you need me.');pauseVoice('Conversation ended. Tap the microphone to talk again.');return true;}
     if(destination==='close'){
       /* The foreground item first: a dialog, a Jarvis panel, WhatsApp, records, an expanded panel, then the page. */
-      if(document.querySelector?.('#modal-root .modal')&&typeof closeModal==='function'){closeModal();message='Closed it.';}
+      if(unsavedDialog())message=UNSAVED;
+      else if(document.querySelector?.('#modal-root .modal')&&typeof closeModal==='function'){closeModal();message='Closed it.';}
       else if(panel){closePanel();message='Closed the panel.';}
       /* On a working page "close" means the page: back to Overview, clearing any side result it showed. */
       else if(page!=='overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();showPage('overview');message='Back to the dashboard.';}
@@ -1163,17 +1168,22 @@
       else if(expanded){const name=PANEL_NAMES[expanded]||'the panel';expandPanel(expanded);message='Closed '+name+'.';}
       else if(page!=='overview'){showPage('overview');message='Back to the dashboard.';}
       else message='You’re already on the dashboard. I’m still here.';
-    }else if(['bookings','cleanings','overview','tasks'].includes(destination)){
+    }else if(['bookings','cleanings','overview','tasks','properties'].includes(destination)&&unsavedDialog())message=UNSAVED;
+    else if(['bookings','cleanings','overview','tasks','properties'].includes(destination)){
       if(document.querySelector?.('#modal-root .modal')&&typeof closeModal==='function')closeModal();
       if(panel)closePanel();if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();
       if(expanded)expandPanel(expanded);showPage(destination);
-      message=destination==='bookings'?(page==='bookings'?'Here’s the Bookings calendar.':'The calendar could not open.'):destination==='cleanings'?(page==='cleanings'?'Here are the cleanings.':'Cleanings could not open.'):destination==='tasks'?(page==='tasks'?'Here are your tasks.':'Tasks could not open.'):'Back to the dashboard.';
-    }else if(['properties','issues'].includes(destination)){showPage('overview');showRecords({entity:destination,view:'list'});message='Here are the '+destination+'.';}
+      message=destination==='bookings'?(page==='bookings'?'Here’s the Bookings calendar.':'The calendar could not open.'):destination==='cleanings'?(page==='cleanings'?'Here are the cleanings.':'Cleanings could not open.'):destination==='tasks'?(page==='tasks'?'Here are your tasks.':'Tasks could not open.'):destination==='properties'?(page==='properties'?'Here are your properties.':'Properties could not open.'):'Back to the dashboard.';
+    }else if(destination==='issues'){showPage('overview');showRecords({entity:destination,view:'list'});message='Here are the '+destination+'.';}
     else if(destination==='reports'){goWorkspace('booking-report');return true;}
     else return false;
     add('Jarvis',message,{keepTask:true});speak(message);live?.updateContext(liveContext());return true;
   }
-  function renderWorkPage(){renderBookingsPage();renderCleaningsPage();renderTasksPage();}
+  function renderWorkPage(){renderBookingsPage();renderCleaningsPage();renderTasksPage();renderPropertiesPage();}
+  function renderPropertiesPage(){
+    const host=el('jarvis-properties-page');if(!host||page!=='properties'||!window.SV_PROPERTIES_VIEW)return;
+    try{SV_PROPERTIES_VIEW.bind(host);SV_PROPERTIES_VIEW.render(host);}catch{host.textContent='The properties could not load. The rest of Jarvis still works.';}
+  }
   function renderTasksPage(){
     const host=el('jarvis-tasks-page');if(!host||page!=='tasks'||!window.SV_TASKS_VIEW)return;
     try{SV_TASKS_VIEW.bind(host);SV_TASKS_VIEW.render(host);}catch{host.textContent='The task list could not load. The rest of Jarvis still works.';}
@@ -1204,7 +1214,7 @@
     if(action==='cal-add'){stop();closeJarvis();if(typeof openWorkspaceCreate==='function')openWorkspaceCreate();return true;}
     if(action==='panel-collapse'){if(expanded)expandPanel(expanded);setNav('overview');return true;}
     if(action==='conv-all'||action==='nav-chat'){if(page!=='overview')showPage('overview');if(expanded!=='conversation')expandPanel('conversation');else if(action==='conv-all')expandPanel('conversation');setNav(expanded==='conversation'?'chat':'overview');if(action==='nav-chat')el('jarvis-input')?.focus();return true;}
-    if(action==='nav-properties'){goWorkspace('properties');return true;}
+    if(action==='nav-properties'){showPage('properties');return true;}
     if(action==='nav-team'){goWorkspace('manage','cleaners');return true;}
     if(action==='nav-reports'||action==='insight-reports'){goWorkspace('booking-report');return true;}
     if(action==='nav-issues'){goWorkspace('manage','issues');return true;}
