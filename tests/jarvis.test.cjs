@@ -129,7 +129,7 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   sandbox.SV_JARVIS_WHATSAPP={parseCommand:t=>/whatsapp/i.test(t)?{kind:'open',name:'Bex',group:false}:null,open(o){wa.open.push(o);waOpen=o;return true;},close(){wa.close++;const o=waOpen;waOpen=null;o?.onClose?.();},isOpen:()=>!!waOpen,isEmbedded:()=>!!waOpen};
   const context=vm.createContext(sandbox);const run=s=>vm.runInContext(s,context);
   run('function propName(id){return D.props.find(p=>p.id===id)?.name||"General";}');
-  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-operations.js','src/assistant/jarvis-tasks.js','src/assistant/jarvis-dashboard.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
+  for(const file of ['src/utils/dates.js','src/ui/voice.js','src/assistant/jarvis-data.js','src/assistant/jarvis-records.js','src/assistant/jarvis-operations.js','src/assistant/jarvis-tasks.js','src/assistant/jarvis-dashboard.js','src/assistant/jarvis-briefing.js','src/assistant/jarvis-voice.js','src/assistant/jarvis-audio.js','src/assistant/jarvis-live.js',...(whatsappFetch?['src/assistant/jarvis-whatsapp-voice.js']:[]),'src/assistant/jarvis.js']){if(liveSdk&&file==='src/assistant/jarvis.js'){const factory=sandbox.SV_JARVIS_LIVE.create;sandbox.SV_JARVIS_LIVE={...sandbox.SV_JARVIS_LIVE,create:opts=>factory({...opts,load:async()=>liveSdk,capture:async()=>({getTracks:()=>[{stop(){}}]})})};}run(fs.readFileSync(path.join(root_,file),'utf8'));}
   const app={run,context,recs,utterances,primes,spoken,audioEvents,audios,pcmSources,speechRequests,wa,timers,background,winListeners,rafs,
     root:()=>root,el:id=>root?root.querySelector('#'+id):els.get('#'+id),phase:()=>run('SV_JARVIS.getPhase()'),
     click(j,extra={}){inGesture=true;try{root.listeners.click({target:{closest:()=>({dataset:{j,...extra}})}});}finally{inGesture=false;}},
@@ -399,7 +399,8 @@ test('desktop: one tap gives a voice turn; the microphone stays off through ever
   const app=desktopRuntime();app.run('openJarvis()');await flush();
   assert.equal(app.recs.length,0);assert.equal(app.phase(),'idle');assert.equal(app.el('jarvis-keep').attrs['aria-pressed'],'true');
   app.click('mic');assert.equal(app.recs.length,1);assert.equal(app.phase(),'listening');
-  app.hear('How is today looking?');await flush();
+  /* An ordinary question ("How is today looking?" now asks for the briefing, which has its own tests). */
+  app.hear('Is the pool heater working?');await flush();
   assert.equal(app.utterances.length,1);assert.equal(app.recs.length,1);
   const [u0]=app.utterances;u0.onstart();assert.equal(app.phase(),'speaking');u0.onend();assert.equal(app.utterances.length,2);
   u0.onend();u0.onerror?.();assert.equal(app.utterances.length,2);assert.equal(app.phase(),'speaking');app.runDelay(450);assert.equal(app.recs.length,1);
@@ -1113,4 +1114,47 @@ test('WhatsApp and Settings pages: tabs and live voice open them inside Jarvis w
   assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review','the task draft survives');
   h.app.click('close-panel');assert.equal(h.app.root().dataset.page,'tasks');assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review');
   h.app.click('close');
+});
+
+/* ── Morning briefing through the real live and typed paths (FICTIONAL records; nothing written or sent). ── */
+const BRIEF_RECORDS="D.props=[{id:'mar',name:'Villa Mar'},{id:'casa',name:'Casa Ejemplo'}];D.cleaners=[{id:'c1',name:'Sample Cleaner A'}];"
+  +"D.bookings=[{id:'b1',propId:'mar',checkIn:today(),checkOut:addDays(today(),3),status:'confirmed',checkInTime:'15:30'},{id:'b2',propId:'casa',checkIn:today(),checkOut:addDays(today(),2),status:'confirmed'}];"
+  +"D.sessions=[{id:'s1',propId:'casa',date:today(),time:'10:00',status:'scheduled',crew:{main:[{cleanerId:'c1',status:'offered'}]}}];"
+  +"D.tasks=[{id:'t1',text:'Fix the gate',dueDate:addDays(today(),-2),done:false},{id:'t2',text:'Undated job',dueDate:'',done:false}];"
+  +"D.issues=[{id:'i1',title:'Broken boiler',propId:'mar',status:'open',priority:'high'},{id:'i2',title:'Loose tile',propId:'casa',status:'open',priority:'high'}];";
+test('morning briefing by live voice: app-built from the records, agent silent, read-only; follow-ups recheck; a changed record marks it out of date',async()=>{
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions});
+  h.app.run(TASK_STORE+BRIEF_RECORDS+"openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  const records=()=>h.app.run('JSON.stringify(D)'),before=records(),saves=h.app.run('__saves'),card=()=>h.app.el('jarvis-briefing');
+  await h.user('Good morning Jarvis, give me my briefing');
+  assert.equal(card().hidden,false,'the card is shown');assert.equal(h.vol.at(-1),0,'the agent stays silent for that turn');
+  assert.match(await o.clientTools.lookup_records({entity:'tasks',view:'count'}),/paused|superseded/,'the agent cannot act on the briefing turn');
+  const said=h.app.texts(h.app.el('jarvis-transcript')).join(' ');
+  assert.match(said,/Good morning, Antonio\. Here’s your briefing for /);assert.match(said,/1 cleaning still needs confirmed staff: Casa Ejemplo today at 10:00\./);assert.match(said,/One task is overdue: Fix the gate\./);assert.match(said,/2 high-priority issues: Broken boiler at Villa Mar and Loose tile at Casa Ejemplo\./);
+  assert.match(card().innerHTML,/Offered · 0 of 1 confirmed · 1 offered/);assert.match(card().innerHTML,/No time recorded · Casa Ejemplo/);assert.doesNotMatch(card().innerHTML,/Undated job/,'a task without a deadline is not overdue');
+  assert.equal(records(),before,'nothing changed');assert.equal(h.app.run('__saves'),saves,'nothing saved');
+  h.app.finishSpeech();await flush();
+  // Follow-ups use the existing validated record queries over the full record set.
+  await h.user('Which cleanings need staff?');assert.match(h.app.texts(h.app.el('jarvis-transcript')).join(' '),/Casa Ejemplo/);assert.equal(h.app.el('jarvis-records').hidden,false);h.app.finishSpeech();await flush();
+  await h.user('What time is the first arrival?');assert.match(h.app.texts(h.app.el('jarvis-transcript')).at(-1),/The first recorded arrival today is Villa Mar at 15:30\. 1 more has no time recorded\./);h.app.finishSpeech();await flush();
+  // "Open that issue": two shown, so one short question; the answer opens the current record.
+  await h.user('Open that issue');assert.match(h.app.texts(h.app.el('jarvis-transcript')).at(-1),/^Which issue: Broken boiler at Villa Mar or Loose tile at Casa Ejemplo\?$/);h.app.finishSpeech();await flush();
+  await h.user('The boiler one');assert.match(h.app.el('jarvis-record-title').textContent+' '+h.app.texts(h.app.el('jarvis-transcript')).at(-1),/Broken boiler/);h.app.finishSpeech();await flush();
+  // A saved change elsewhere marks the shown briefing out of date; it is not silently recomputed.
+  h.app.run("D.issues[1].status='resolved';svAfterRender()");assert.match(card().innerHTML,/Records have changed since it was checked\./);assert.match(card().innerHTML,/Loose tile/,'not silently recomputed');
+  await h.user('Refresh my briefing');assert.doesNotMatch(card().innerHTML,/Records have changed|Loose tile/);assert.match(h.app.texts(h.app.el('jarvis-transcript')).at(-1),/One high-priority issue: Broken boiler at Villa Mar\./);
+  h.app.finishSpeech();await flush();
+  h.app.click('briefing-close');assert.equal(card().hidden,true);
+  await h.user('Open that issue');assert.notEqual(h.vol.at(-1),0,'without a shown briefing the words go to the agent as before');
+  h.app.click('close');
+});
+test('morning briefing by typing: same card and summary, works on a working page; plain greetings and filtered questions are not briefings',async()=>{
+  for(const desktop of [true,false]){
+    const app=desktopRuntime({desktop});app.run(TASK_STORE+BRIEF_RECORDS+'openJarvis()');await flush();
+    app.click('nav-tasks');await app.run(`SV_JARVIS.send('What needs my attention today?')`);
+    assert.equal(app.el('jarvis-briefing').hidden,false);assert.equal(app.root().dataset.page,'tasks','the page stays');assert.ok(app.root().classList.contains('review-open'),'the conversation column shows the card');
+    assert.match(app.el('jarvis-briefing').innerHTML,/Needs attention/);assert.match(app.texts(app.el('jarvis-transcript')).join(' '),/Here’s your briefing for /);
+    app.click('briefing-refresh');assert.match(app.texts(app.el('jarvis-transcript')).at(-1),/Briefing refreshed\./);
+    app.click('close');
+  }
 });

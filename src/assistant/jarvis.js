@@ -433,7 +433,7 @@
     el('jarvis-side')?.classList.toggle('has-expanded',['conversation','whatsapp','issues'].includes(expanded));
   }
   /* A pending WhatsApp or cleaning-plan review keeps the conversation panel open and in front until it is resolved. */
-  function syncReview(){if(!root)return;root.classList.toggle('review-open',el('jarvis-voice-review')?.hidden===false||el('jarvis-plan')?.hidden===false||el('jarvis-task-review')?.hidden===false);}
+  function syncReview(){if(!root)return;root.classList.toggle('review-open',el('jarvis-voice-review')?.hidden===false||el('jarvis-plan')?.hidden===false||el('jarvis-task-review')?.hidden===false||el('jarvis-briefing')?.hidden===false);}
   /* Decorative space background (desktop WebGL2). A separate module; nothing in Jarvis depends on it. */
   /* The ring and the globe read the same phase and motion. The DEV preview alone can substitute clearly labelled
      simulated values for graphics testing; the app's real phase, audio and conversation are never changed by it. */
@@ -790,6 +790,7 @@
     if(window.SV_JARVIS_VOICE?.isStopPhrase(text)){voice?.pause('Paused. Tap the microphone to talk again.');add('Jarvis','Paused. Tap the microphone when you want to talk again.');if(!voice?.active)setPhase('paused');return;}
     const nav=navigationWords(text);if(nav===true)return;if(nav?.rest)text=nav.rest;
     if(taskWords(text,fromVoice?'voice':'typed'))return;
+    if(briefingWords(text))return;
     const personal=personalIntent(text);if(personal){await personalTurn(text,personal,id);return;}memoryPending=null;
     // Always recognise owner approval locally. The AI cannot propose or grant approval.
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
@@ -829,7 +830,7 @@
   function elFromPage(id){return document.getElementById(id);}
 
   /* ── Voice: the controller decides when to listen; this only adapts the browser recognizer and level meter. ── */
-  function liveContext(){const p=window.SV_JARVIS_PERSONAL?.get();return {personalMemory:p?{schema:1,version:p.version,preferredAddress:p.preferredAddress,aliases:p.aliases.slice(0,8),totalAliases:p.aliases.length}:null,ui:{page,records:!!recordsView,panel:panel||null,expanded:expanded||null},taskDraft:tasks?.context()||null,today:today(),timezone:'Europe/Madrid',properties:SV_JARVIS_DATA.context().properties||[],records:ensureRecords()?.context(),coverage:ensureRecords()?.coverage(),whatsapp:ensureWhatsAppConversation()?.context?.()||{},operations:ensureOperations()?.context()||null,recentConversation:lines.slice(-6).map(l=>({role:l.role,text:l.text.slice(0,600)}))};}
+  function liveContext(){const p=window.SV_JARVIS_PERSONAL?.get();return {personalMemory:p?{schema:1,version:p.version,preferredAddress:p.preferredAddress,aliases:p.aliases.slice(0,8),totalAliases:p.aliases.length}:null,ui:{page,records:!!recordsView,panel:panel||null,expanded:expanded||null},taskDraft:tasks?.context()||null,briefing:briefing&&!el('jarvis-briefing')?.hidden?{date:briefing.b.date,checkedAt:briefing.b.checkedAt,stale:!!briefingStale(),shown:briefing.items.slice(0,24).map(({entity,id,label})=>({entity,id,label}))}:null,today:today(),timezone:'Europe/Madrid',properties:SV_JARVIS_DATA.context().properties||[],records:ensureRecords()?.context(),coverage:ensureRecords()?.coverage(),whatsapp:ensureWhatsAppConversation()?.context?.()||{},operations:ensureOperations()?.context()||null,recentConversation:lines.slice(-6).map(l=>({role:l.role,text:l.text.slice(0,600)}))};}
   function liveUser(text){
     if(!root||document.hidden)return true;
     if(echoOfApp(text))return 'ignore';
@@ -840,6 +841,7 @@
     const nav=navigationWords(text);if(nav===true)return true;
     if(nav?.rest){text=nav.rest;liveOwnerText=text;live?.note('The app has just opened the requested view itself. Do not open, look up or announce any app view; answer only his other words: '+JSON.stringify(text.slice(0,300)));}
     if(taskWords(text,liveChannel))return true;
+    if(briefingWords(text))return true;
     const personal=personalIntent(text);if(personal){setPhase('thinking');void personalTurn(text,personal);return true;}memoryPending=null;
     const literal=window.SV_JARVIS_WHATSAPP_VOICE?.parse(text);
     if(['approve','cancel','review'].includes(literal?.kind)||['ambiguousApproval','readDraft'].includes(literal?.kind)&&waConversation?.snapshot()?.stage==='review'){void whatsappTurn(text,generation);return true;}
@@ -1013,7 +1015,7 @@
     +'<button class="jarvis-keep" id="jarvis-keep" data-j="keep" role="menuitemcheckbox" aria-pressed="true"><i aria-hidden="true"></i><span>Keep listening</span></button><button class="jarvis-play" data-j="replay" role="menuitem">'+svg('speaker',16)+'<span>Play reply</span></button>'
     +'<button id="jarvis-message-audio" data-j="message-audio" role="menuitem">Enable message audio</button><button data-j="chat" role="menuitem">'+svg('keyboard',16)+'<span>Type a message</span></button><button data-j="settings" role="menuitem">'+svg('settings',16)+'<span>Voice settings</span></button></div></div></div></main>'
     +'<aside class="jarvis-side jarvis-col" id="jarvis-side" aria-label="Conversation, WhatsApp and issues"><section class="jp-panel jarvis-conversation" id="jarvis-chat-body">'+panelHead('chat','jarvis-conversation-title','Conversation','<button type="button" class="jp-link jp-new" data-j="new" aria-label="New conversation">New</button>'+viewAll('conv-all','View the whole conversation'))
-    +'<div class="jarvis-transcript" id="jarvis-transcript"></div><section class="jarvis-voice-review" id="jarvis-voice-review" aria-label="WhatsApp message review" hidden><small>WhatsApp draft</small><p id="jarvis-review-recipient"></p><p class="jarvis-review-scope" id="jarvis-review-scope" hidden></p><p class="jarvis-review-message" id="jarvis-review-text"></p><p id="jarvis-review-english" hidden></p><p id="jarvis-review-note"></p><div><button type="button" data-j="wa-voice-approve">Approve and send</button><button type="button" data-j="wa-voice-repeat">Read again</button><button type="button" data-j="wa-voice-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan" id="jarvis-plan" aria-label="Cleaning plan review" hidden><small>Cleaning plan · not saved yet</small><p id="jarvis-plan-label"></p><ol class="jarvis-plan-items" id="jarvis-plan-items"></ol><p id="jarvis-plan-note"></p><div><button type="button" id="jarvis-plan-confirm" data-j="plan-confirm">Confirm</button><button type="button" data-j="plan-repeat">Read again</button><button type="button" data-j="plan-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan jarvis-task-review" id="jarvis-task-review" aria-label="Task review" hidden><small id="jarvis-task-kind">Task · not saved yet</small><dl class="jarvis-task-fields" id="jarvis-task-fields"></dl><p id="jarvis-task-note"></p><div><button type="button" id="jarvis-task-confirm" data-j="task-confirm">Confirm</button><button type="button" data-j="task-repeat">Read again</button><button type="button" data-j="task-cancel">Cancel</button></div></section></section>'
+    +'<div class="jarvis-transcript" id="jarvis-transcript"></div><section class="jarvis-voice-review" id="jarvis-voice-review" aria-label="WhatsApp message review" hidden><small>WhatsApp draft</small><p id="jarvis-review-recipient"></p><p class="jarvis-review-scope" id="jarvis-review-scope" hidden></p><p class="jarvis-review-message" id="jarvis-review-text"></p><p id="jarvis-review-english" hidden></p><p id="jarvis-review-note"></p><div><button type="button" data-j="wa-voice-approve">Approve and send</button><button type="button" data-j="wa-voice-repeat">Read again</button><button type="button" data-j="wa-voice-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan" id="jarvis-plan" aria-label="Cleaning plan review" hidden><small>Cleaning plan · not saved yet</small><p id="jarvis-plan-label"></p><ol class="jarvis-plan-items" id="jarvis-plan-items"></ol><p id="jarvis-plan-note"></p><div><button type="button" id="jarvis-plan-confirm" data-j="plan-confirm">Confirm</button><button type="button" data-j="plan-repeat">Read again</button><button type="button" data-j="plan-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-plan jarvis-task-review" id="jarvis-task-review" aria-label="Task review" hidden><small id="jarvis-task-kind">Task · not saved yet</small><dl class="jarvis-task-fields" id="jarvis-task-fields"></dl><p id="jarvis-task-note"></p><div><button type="button" id="jarvis-task-confirm" data-j="task-confirm">Confirm</button><button type="button" data-j="task-repeat">Read again</button><button type="button" data-j="task-cancel">Cancel</button></div></section><section class="jarvis-voice-review jarvis-briefing" id="jarvis-briefing" aria-label="Briefing" hidden></section></section>'
     +'<section class="jp-panel jarvis-context" id="jarvis-context" aria-label="WhatsApp" hidden><h2 class="jarvis-kicker">Message review</h2><div id="jarvis-wa-host"></div></section>'
     +'<section class="jp-panel jarvis-records" id="jarvis-records" aria-label="App record results" hidden><div class="jarvis-record-head"><h2 class="jarvis-kicker" id="jarvis-record-title">App records</h2><button data-j="records-close" aria-label="Close record results">Close</button></div><p id="jarvis-record-scope"></p><div id="jarvis-record-list"></div><div class="jarvis-record-actions"><button id="jarvis-record-more" data-j="records-more" hidden>Show more</button><button id="jarvis-record-workspace" data-j="records-workspace">Open full page</button></div></section>'
     +'<section class="jp-panel jp-wa" id="jarvis-wa-section">'+panelHead('whatsapp','jarvis-wa-title','WhatsApp',viewAll('nav-whatsapp','Open the WhatsApp inbox'))+filters('wa','wa-filter','Chat filter',[['all','All'],['unread','Unread'],['group','Groups'],['direct','Direct']])+'<ol class="jp-scroll jp-wa-list" id="jarvis-wa-list"></ol><div class="jarvis-inbox-status"><button type="button" id="jarvis-whatsapp-status" data-j="nav-whatsapp">WhatsApp · checking</button><span>Jarvis inbox only · phone read status is not synced</span></div></section>'
@@ -1039,6 +1041,69 @@
     if(page!=='overview'){if(page!=='whatsapp')closeWhatsAppView();closeRecords();clearFocus();if(expanded)expandPanel(expanded);renderWorkPage();}
     else renderDashboard();
     if(changed)pageReply=false;setNav(PAGES[page]?.nav||'overview');syncLastReply();atmosphereRelayout?.();
+  }
+  /* ── Morning briefing (on request only). SV_JARVIS_BRIEFING builds it from the full app records for the app's
+     business day; nothing is written, scheduled or sent. A shown briefing is marked out of date when the day changes,
+     the records change or an hour passes; only a new request or Refresh rechecks. Follow-ups recheck current records. ── */
+  let briefing=null,briefingChoice=null;
+  function briefingSync(){let last=0;try{last=Number(SV_STORAGE.getItem(DB+'_lastSync'))||0;}catch{}return {status:typeof syncStatus==='string'?syncStatus:'',lastSync:last,dev:typeof DEV_MODE!=='undefined'&&!!DEV_MODE};}
+  function buildBriefing(){
+    const B=window.SV_JARVIS_BRIEFING;if(!B||!DASH())return null;
+    try{const b=B.build(D,today(),{required:crewNeeded,sync:briefingSync()});return {b,items:B.items(b),fp:B.fingerprint(D)};}catch{return null;}
+  }
+  function briefingStale(){
+    if(!briefing)return '';
+    if(briefing.b.date!==today())return 'This briefing was for '+briefing.b.dateLabel+'.';
+    if(SV_JARVIS_BRIEFING.fingerprint(D)!==briefing.fp)return 'Records have changed since it was checked.';
+    if(Date.now()-Date.parse(briefing.b.checkedAt)>3600e3)return 'It was checked more than an hour ago.';
+    return '';
+  }
+  function renderBriefing(){const card=el('jarvis-briefing');if(!card)return;card.hidden=!briefing;if(briefing)card.innerHTML=SV_JARVIS_BRIEFING.html(briefing.b,{stale:briefingStale(),timeZone:BUSINESS.timeZone});syncReview();}
+  function briefingTurn(greet=false,{quiet=false}={}){
+    const next=buildBriefing();
+    if(!next){const msg='I couldn’t prepare the briefing. Please refresh Jarvis and ask again.';add('Jarvis',msg,{keepTask:true});quiet?replyDone():speak(msg);return;}
+    briefing=next;briefingChoice=null;renderBriefing();focusPanel('conversation');
+    setTimeout(()=>{try{const c=el('jarvis-briefing');if(!root||c?.hidden)return;const r=c.getBoundingClientRect(),h=window.innerHeight||0;if(r.height&&(r.top>h||r.bottom<0))c.scrollIntoView?.({block:'start'});}catch{}},80);
+    const text=SV_JARVIS_BRIEFING.speech(briefing.b,{owner:BUSINESS.owner,greet});
+    live?.updateContext(liveContext());
+    if(quiet){add('Jarvis · briefing','Briefing refreshed.',{keepTask:true});replyDone();return;}
+    add('Jarvis · briefing',text,{keepTask:true});speak(text);
+  }
+  const orList=list=>list.length<2?list.join(''):list.slice(0,-1).join(', ')+' or '+list[list.length-1];
+  function briefingSay(msg){add('Jarvis',msg,{keepTask:true});speak(msg);}
+  function openBriefingItem(item){briefingChoice=null;setPhase('thinking');recordsTurn({entity:item.entity,view:'details',recordId:item.id,status:'all'});}
+  /* true when the owner's words were a briefing request or a follow-up about the shown briefing. */
+  function briefingWords(text){
+    const B=window.SV_JARVIS_BRIEFING;if(!B||!root)return false;
+    const want=B.intent(text);if(want){setPhase('thinking');briefingTurn(want.greet);return true;}
+    if(!briefing||el('jarvis-briefing')?.hidden)return false;
+    if(briefingChoice){const options=briefingChoice.options;briefingChoice=null;const pick=B.choose(options,text);if(pick){openBriefingItem(pick);return true;}}
+    const ask=B.followUp(text);if(!ask)return false;
+    const ref=today();
+    /* The same validated record queries as a typed question, over the full record set (and the briefing's staff window). */
+    if(ask.kind==='staff'){setPhase('thinking');recordsTurn({entity:'cleanings',view:'list',status:'needs_team',start:ref,end:DASH().plus(ref,6)});return true;}
+    if(ask.kind==='overdue'){setPhase('thinking');recordsTurn({entity:'tasks',view:'list',status:'overdue'});return true;}
+    const fresh=buildBriefing();if(!fresh){briefingSay('I couldn’t recheck the records just now. Please ask again.');return true;}
+    if(ask.kind==='first-arrival'){
+      const a=fresh.b.arrivals;
+      if(!a){briefingSay('I couldn’t check bookings, so I can’t say.');return true;}
+      if(!a.length){briefingSay('No arrivals are recorded for today.');return true;}
+      const timed=a.filter(x=>x.time),untimed=a.length-timed.length;
+      briefingSay(timed.length?'The first recorded arrival today is '+timed[0].property+' at '+timed[0].time+'.'+(untimed?' '+untimed+' more '+(untimed===1?'has':'have')+' no time recorded.':'')
+        :(a.length===1?'One arrival today, at '+a[0].property+'. No arrival time is recorded.':a.length+' arrivals today: '+orList(a.map(x=>x.property)).replace(/ or ([^,]*)$/,' and $1')+'. No arrival times are recorded.'));
+      return true;
+    }
+    if(ask.kind==='open'){
+      /* Only records the shown briefing displayed, and only those still current. */
+      const current=new Set(B.items(fresh.b).map(i=>i.entity+':'+i.id));
+      const shown=briefing.items.filter(i=>i.entity===ask.entity&&(ask.what==='arrival'||ask.what==='departure'?i.kind===ask.what:true));
+      const options=shown.filter(i=>current.has(i.entity+':'+i.id));
+      if(!options.length){briefingSay(shown.length?'That '+ask.what+' is no longer in today’s records. Ask me for a fresh briefing.':'There’s no '+ask.what+' in the briefing to open.');return true;}
+      if(options.length===1){openBriefingItem(options[0]);return true;}
+      briefingChoice={options:options.slice(0,8)};
+      briefingSay('Which '+ask.what+': '+orList(options.slice(0,3).map(o=>o.label))+(options.length>3?', or another one on the card':'')+'?');return true;
+    }
+    return false;
   }
   /* ── Natural tasks. SV_JARVIS_TASKS owns the draft, its version and approval; here it is shown in the conversation,
      read back by the app and saved through the app's own save(). Only Antonio's own words (checked locally) or the
@@ -1262,7 +1327,7 @@
     root=document.createElement('div');root.className='jarvis-root';root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Jarvis assistant');root.innerHTML=MARKUP();
     document.body.appendChild(root);background?.setAttribute('inert','');restoreSession();document.body.classList?.add('jarvis-open');root.dataset.page=page='overview';root.classList.remove('is-workpage');pageReply=false;
     /* Saves elsewhere call the app's render(); keep the dashboard and the Bookings page current with them. */
-    window.svAfterRender=()=>{if(!root)return;renderDashboard();renderWorkPage();};
+    window.svAfterRender=()=>{if(!root)return;renderDashboard();renderWorkPage();if(briefing)renderBriefing();};
     root.addEventListener('click',e=>{
       const action=e.target.closest('[data-j]')?.dataset.j;
       if(action==='close'){closeJarvis();return;}
@@ -1280,6 +1345,8 @@
       if(action==='memory-remove-alias'){const alias=e.target.closest('[data-j]').dataset.alias;void personalTurn('Forget the nickname '+alias,{action:'forget_alias',alias});return;}
       if(action==='message-audio'){prepareAudio();prepareSpeech();settings.messageAnnouncements=true;el('jarvis-message-alerts').checked=true;flushAnnouncements();}
       if(action==='wa-voice-approve'||action==='wa-voice-repeat'||action==='wa-voice-cancel'){prepareAudio();prepareSpeech();void send(action==='wa-voice-approve'?'Approve and send':action==='wa-voice-repeat'?'Read the draft again':'Cancel',{screenApproval:action==='wa-voice-approve'});return;}
+      if(action==='briefing-refresh'){briefingTurn(false,{quiet:true});return;}
+      if(action==='briefing-close'){briefing=null;briefingChoice=null;renderBriefing();return;}
       if(['task-confirm','task-cancel','task-repeat'].includes(action)){prepareAudio();prepareSpeech();taskClick(action);return;}
       if(['plan-confirm','plan-cancel','plan-repeat','plan-leave'].includes(action)){prepareAudio();prepareSpeech();planClick(action,e.target.closest('[data-j]'));return;}
       if(action==='check')void checkConnection();
@@ -1295,7 +1362,7 @@
       if(action==='nav-overview'){if(window.SV_JARVIS_WHATSAPP?.isEmbedded?.())SV_JARVIS_WHATSAPP.close();closeContext();closeRecords();clearFocus();if(expanded)expandPanel(expanded);showPage('overview');return;}
       if(action==='nav-cleaning'){showPage('cleanings');return;}
       if(action==='nav-tasks'){showPage('tasks');return;}
-      if(action==='new'){tasks?.reset();renderTaskCard();waConversation?.cancel();records?.reset();operations?.reset();renderPlan(null);recordsView=null;closeRecords();stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
+      if(action==='new'){briefing=null;briefingChoice=null;renderBriefing();tasks?.reset();renderTaskCard();waConversation?.cancel();records?.reset();operations?.reset();renderPlan(null);recordsView=null;closeRecords();stop();lines=[];lastReply='';sessionId=newId();try{SV_STORAGE.setItem('sv_jarvis_session',sessionId);}catch{}renderTranscript();}
     });
     root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();if(el('jarvis-more-menu')?.hidden===false){closeMenu(true);return;}if(panel)closePanel();else if(expanded)expandPanel(expanded);else closeJarvis();}if(e.key==='Tab'){const scope=root;const items=[...scope.querySelectorAll('button,input,select,textarea,summary')].filter(n=>!n.disabled&&n.getClientRects().length);const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
     /* Typing a message ends voice listening so the microphone never records in the background. */

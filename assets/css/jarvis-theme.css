@@ -180,7 +180,7 @@ body.jarvis-open .toast{border:1px solid var(--jv-line-2);border-radius:var(--jv
   .jarvis-root.is-workpage.review-open .jarvis-side,.jarvis-root.is-workpage.has-context .jarvis-side{display:flex}
   /* The stacked side column has no fixed height here, so the conversation (and its review card) takes its natural height
      instead of the desktop flex share, which collapsed it and clipped the card. */
-  .jarvis-root.is-workpage.review-open #jarvis-chat-body{flex:none!important;height:auto;overflow:visible}
+  .jarvis-root.review-open #jarvis-chat-body{flex:none!important;height:auto;overflow:visible}
   /* The notes are not pinned here, so the latest reply stays in flow beside the ask bar instead of floating over the
      page content (it was anchored to the scrolling overlay and covered rows). */
   .jarvis-root.is-workpage .jarvis-last-reply{position:static;margin:0 0 12px}
@@ -626,6 +626,29 @@ body.jarvis-open #modal-root .rpt-booking{background:transparent;color:var(--jv-
 #jarvis-settings-page #jarvis-personal-list p{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;font-size:var(--jb-font);color:var(--jv-text)}
 #jarvis-settings-page #jarvis-personal-list .jarvis-privacy{display:block}
 @media(max-width:767px){#jarvis-settings-page .js-grid{grid-template-columns:1fr}}
+
+/* ── Morning briefing card (conversation panel). Neutral, not an approval card: orange marks only what needs attention.
+   Rows open the existing record view. ── */
+.jp-panel .jarvis-voice-review.jarvis-briefing{border-color:var(--jv-line-2);border-left:2px solid var(--jv-line-3);background:rgba(var(--jv-ink,255,255,255),.02);max-height:none}
+.jarvis-root.is-workpage .jp-panel .jarvis-voice-review.jarvis-briefing{background:rgba(var(--jv-paper,15,12,10),.96)}
+.jarvis-briefing .jarvis-brief-head small{color:var(--jv-text-2);font-size:10px;letter-spacing:.2em;text-transform:uppercase}
+.jp-panel .jarvis-briefing .jarvis-brief-head p{margin:3px 0 8px;font-size:12px;color:var(--jv-text-3)}
+.jp-panel .jarvis-briefing .jarvis-brief-stale{margin:0 0 8px;padding:6px 10px;border-left:2px solid var(--jv-accent);background:var(--jv-accent-soft);font-size:12px;line-height:1.45;color:var(--jv-text)}
+.jarvis-brief-section{margin:10px 0 0}
+.jarvis-brief-section h3{margin:0 0 4px;font-family:var(--jv-font);font-size:10.5px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--jv-text-3)}
+.jarvis-brief-section.is-attention h3{color:var(--jv-accent-text)}
+.jarvis-brief-section ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--jv-line)}
+.jarvis-brief-section li{border-bottom:1px solid var(--jv-line)}
+.jp-panel .jarvis-briefing button.jarvis-brief-row,.jp-panel .jarvis-briefing button.jarvis-brief-row:first-child{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:40px;padding:6px 8px;border:0;border-left:2px solid transparent;border-radius:0;background:transparent;color:var(--jv-text);font-family:var(--jv-font);font-size:13px;font-weight:400;text-align:left;cursor:pointer}
+.jp-panel .jarvis-briefing .jarvis-brief-row:hover{background:rgba(var(--jv-ink,255,255,255),.04)}
+.jp-panel .jarvis-briefing .jarvis-brief-row:focus-visible{outline:none;box-shadow:var(--jv-focus)}
+.jp-panel .jarvis-briefing button.jarvis-brief-row.is-alert,.jp-panel .jarvis-briefing button.jarvis-brief-row.is-alert:first-child{border-left-color:var(--jv-accent)}
+.jarvis-brief-row span{line-height:1.4;overflow-wrap:anywhere}
+.jarvis-briefing .jarvis-brief-row small{color:var(--jv-text-3);font-size:11.5px;letter-spacing:0;text-transform:none;line-height:1.4}
+.jarvis-brief-more,.jarvis-brief-none{padding:6px 8px;font-size:12px;color:var(--jv-text-3)}
+.jp-panel .jarvis-briefing .jarvis-brief-clear{margin:8px 0 0;font-size:13px;color:var(--jv-text-2)}
+.jp-panel .jarvis-briefing .jarvis-brief-note{margin:8px 0 0;font-size:11.5px;line-height:1.5;color:var(--jv-text-3)}
+.jp-panel .jarvis-briefing>div:last-child button:first-child{color:var(--jv-text);font-weight:500}
 
 /* ── Light mode (Jarvis only; saved per device). The neutral tones above read var(--jv-nSS / ink / paper / shade, <dark
    original>); these tokens exist only here, so dark mode and everything outside Jarvis keep their exact colours. Orange
