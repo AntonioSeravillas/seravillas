@@ -116,3 +116,27 @@ test('Team, Reports and Issues: ordinary wording opens each full page; questions
   a.run('navigationWords("open reports")');assert.equal(a.run('page'),'reports');a.run('navigationWords("close the reports")');assert.equal(a.run('page'),'overview');
   a.run('navigationTurn("team")');a.run('navigationWords("close it")');assert.equal(a.run('page'),'overview');
 });
+test('WhatsApp and Settings: "open WhatsApp" / "open Settings" use their openers; reading, writing and memory requests are not navigation',()=>{
+  const a=app();for(const id of ['jarvis-whatsapp-page','jarvis-settings-page'])a.elements[id]={hidden:true};
+  /* The real openers live elsewhere in jarvis.js; here they record the call and show the page as they do. */
+  a.run('function openWhatsApp(intent){events.push("open whatsapp:"+JSON.stringify(intent));showPage("whatsapp");}function openPanel(kind){events.push("open settings");panel=kind;showPage("settings");}');
+  for(const [words,page] of [['Open WhatsApp.','whatsapp'],['Can you open my WhatsApp inbox?','whatsapp'],['show me whats app','whatsapp'],['Open the inbox','whatsapp'],['Open settings.','settings'],['Jarvis, go to the settings page','settings']]){
+    a.run('panel=null;navigationTurn("overview")');assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),true,words);assert.equal(a.run('page'),page,words);assert.equal(a.elements['jarvis-'+page+'-page'].hidden,false,words);
+  }
+  assert.ok(a.events.includes('open whatsapp:null'),'opening the inbox carries no message or chat');
+  a.run('panel=null;navigationTurn("overview")');const before=a.events.length;
+  for(const words of ['Read my unread WhatsApp messages','Write a WhatsApp message to Sample Guest saying hello','Any new messages on WhatsApp?','Open the WhatsApp chat with Sample Guest','Show my saved preferences','Don’t open settings'])
+    assert.equal(a.run('navigationWords('+JSON.stringify(words)+')'),false,words);
+  assert.equal(a.run('page'),'overview');assert.equal(a.events.length,before,'nothing opened');
+});
+test('closing WhatsApp or Settings returns to the page they were opened from; a dialog closes first',()=>{
+  const a=app();for(const id of ['jarvis-whatsapp-page','jarvis-settings-page'])a.elements[id]={hidden:true};
+  a.run('let __wa=false;var SV_JARVIS_WHATSAPP={isEmbedded:()=>__wa,close(){__wa=false;events.push("wa closed");}};window.SV_JARVIS_WHATSAPP=SV_JARVIS_WHATSAPP;');
+  a.run('function openWhatsApp(){if(page!=="whatsapp")waReturn=returnPage(page);showPage("whatsapp");__wa=true;}function openPanel(kind){if(page!=="settings")settingsReturn=returnPage(page);panel=kind;showPage("settings");}');
+  a.run('navigationTurn("tasks")');a.run('navigationWords("open whatsapp")');assert.equal(a.run('page'),'whatsapp');
+  a.modal.open=true;a.run('navigationWords("close it")');assert.equal(a.modal.open,false);assert.equal(a.run('page'),'whatsapp','a dialog closes first');
+  a.run('navigationWords("close it")');assert.equal(a.run('page'),'tasks','back to the page WhatsApp was opened from');assert.ok(a.events.includes('wa closed'));
+  a.run('navigationTurn("reports")');a.run('navigationWords("open settings")');assert.equal(a.run('page'),'settings');assert.equal(a.run('settingsReturn'),'reports','Settings remembers where it was opened from');a.run('navigationWords("close it")');assert.equal(a.run('panel'),null,'close dismisses Settings first');assert.match(a.events.filter(e=>typeof e==="string").at(-2),/Closed Settings/);a.run('showPage("reports")');
+  /* Switching straight from WhatsApp to another page closes the inbox (its typed reply is kept by the inbox itself). */
+  a.run('navigationWords("open whatsapp")');a.run('navigationWords("open bookings")');assert.equal(a.run('page'),'bookings');assert.equal(a.run('__wa'),false);
+});

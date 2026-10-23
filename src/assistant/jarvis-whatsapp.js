@@ -159,33 +159,40 @@
   function listView(st,chats){
     const rows=(chats||[]).filter(c=>c.kind===st.tab);
     return '<div class="wa-tabs" role="tablist"><button role="tab" aria-selected="'+(st.tab==='direct')+'" data-wa="tab" data-tab="direct">Direct</button><button role="tab" aria-selected="'+(st.tab==='group')+'" data-wa="tab" data-tab="group">Groups</button></div>'
-      +'<ul class="wa-list">'+(rows.length?rows.map(c=>'<li><button class="wa-chat'+(c.key===st.selected?' on':'')+'" data-wa="select" data-key="'+e(c.key)+'"><b>'+e(c.name)+'</b><small>'+e(c.detail)+'</small><span>'+e(c.preview)+'</span>'+(c.unreadCount?'<em>'+e(c.unreadCount)+' unread in Jarvis</em>':'')+(c.draftStatus==='ready'?'<em>Draft ready</em>':'')+(c.sendStatus==='uncertain'?'<em class="bad">Check phone</em>':'')+'</button></li>').join(''):'<li class="wa-empty">No '+(st.tab==='group'?'group':'direct')+' messages yet.</li>')+'</ul>';
+      +'<ul class="wa-list" data-wa-scroll="list">'+(rows.length?rows.map(c=>'<li><button class="wa-chat'+(c.key===st.selected?' on':'')+'" data-wa="select" data-key="'+e(c.key)+'"><b>'+e(c.name)+'</b><small>'+e(c.detail)+'</small><span>'+e(c.preview)+'</span>'+(c.unreadCount?'<em>'+e(c.unreadCount)+' unread in Jarvis</em>':'')+(c.draftStatus==='ready'?'<em>Draft ready</em>':'')+(c.sendStatus==='uncertain'?'<em class="bad">Check phone</em>':'')+'</button></li>').join(''):'<li class="wa-empty">No '+(st.tab==='group'?'group':'direct')+' messages yet.</li>')+'</ul>';
+  }
+  /* The message's own time (seconds), in the app's English date style. */
+  function when(at){
+    if(!Number.isFinite(at)||at<=0)return '';
+    const d=new Date(at*1000),now=new Date(),time=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    return d.toDateString()===now.toDateString()?time:d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' · '+time;
   }
   function messageView(m,kind){
-    const who=m.from==='owner'?(m.viaJarvis?'You · via Jarvis':'You'):kind==='group'?(m.sender||'Group member'):'Contact';
-    return '<div class="wa-msg'+(m.from==='owner'?' me':'')+'"><small>'+e(who)+'</small>'+(m.text?'<p>'+e(m.text)+'</p>':'')+(m.media?'<p class="wa-media">'+e(m.media.label||'Attachment (not downloaded)')+'</p>':'')+'</div>';
+    const who=m.from==='owner'?(m.viaJarvis?'You · via Jarvis':'You'):kind==='group'?(m.sender||'Group member'):'Contact',at=when(m.at);
+    return '<div class="wa-msg'+(m.from==='owner'?' me':'')+'"><small>'+e(who)+(at?'<time>'+e(at)+'</time>':'')+'</small>'+(m.text?'<p>'+e(m.text)+'</p>':'')+(m.media?'<p class="wa-media">'+e(m.media.label||'Attachment (not downloaded)')+'</p>':'')+'</div>';
   }
   function chatView(st,chat){
     if(!chat)return '<p class="wa-empty">Choose a chat.</p>';
-    let h='<div class="wa-chat-head"><b>'+e(chat.name)+'</b><small>'+e(chat.detail)+'</small>'+(st.embedded&&!st.listOpen?'<button class="wa-text" data-wa="change-chat">Change chat</button>':'')+'</div>';
+    let h='<div class="wa-chat-head">'+(st.page?'<button class="wa-text wa-back-list" data-wa="change-chat">‹ Chats</button>':'')+'<b>'+e(chat.name)+'</b><small>'+e(chat.detail)+'</small>'+(st.embedded&&!st.page&&!st.listOpen?'<button class="wa-text" data-wa="change-chat">Change chat</button>':'')+'</div>';
     if(st.notice)h+='<div class="wa-banner warn" role="alert">'+e(st.notice)+'</div>';
     if(st.outcome)h+='<div class="wa-banner '+(st.outcome.status==='sent'||st.outcome.status==='sample'?'ok':'warn')+'" role="status">'+e(st.outcome.text)+'</div>';
     const send=chat.lastSend;
     if(send&&send.status==='uncertain')h+='<div class="wa-banner warn" role="alert"><b>Not sure the last reply was sent.</b><span>'+e(send.error||'Check WhatsApp on the phone before sending again.')+'</span></div>';
-    const messages=chat.messages||[],thread='<div class="wa-thread" aria-label="Conversation">'+messages.map(m=>messageView(m,chat.kind)).join('')+'</div>';
-    /* Embedded: the target and reply come first; earlier messages are an optional disclosure below. */
-    const history=st.embedded?(messages.length?'<details class="wa-history"><summary>Previous messages ('+messages.length+')</summary>'+thread+'</details>':''):'';
-    if(!st.embedded)h+=thread;
+    const messages=chat.messages||[],column=st.embedded&&!st.page,thread='<div class="wa-thread" aria-label="Conversation" data-wa-scroll="thread">'+(messages.length?messages.map(m=>messageView(m,chat.kind)).join(''):(st.page?'<p class="wa-empty">No messages in this chat yet.</p>':''))+'</div>';
+    /* Column: the target and reply come first; earlier messages are an optional disclosure below. */
+    const history=column?(messages.length?'<details class="wa-history"><summary>Previous messages ('+messages.length+')</summary>'+thread+'</details>':''):'';
+    if(!column)h+=thread;
     if(st.review&&st.review.key===chat.key){
-      return h+'<section class="wa-review" aria-label="Review reply">'+(st.embedded?'':'<h3>Review reply</h3>')+'<dl><dt>Send to</dt><dd><b>'+e(st.review.recipient.name)+'</b> · '+e(st.review.recipient.detail)+'</dd><dt>Reply</dt><dd><pre>'+e(st.review.text)+'</pre></dd></dl>'
+      return h+'<section class="wa-review" aria-label="Review reply">'+(column?'':'<h3>Review reply</h3>')+'<dl><dt>Send to</dt><dd><b>'+e(st.review.recipient.name)+'</b> · '+e(st.review.recipient.detail)+'</dd><dt>Reply</dt><dd><pre>'+e(st.review.text)+'</pre></dd></dl>'
         +'<p class="wa-note">'+(st.mode==='sample'?'Sample only — nothing will be sent.':'This exact text will be sent to this '+(st.review.recipient.kind==='group'?'group':'contact')+'.')+'</p>'
-        +(st.embedded?'<p class="wa-note">Awaiting your approval</p><div class="wa-actions wa-text-actions"><button class="wa-text" data-wa="back" aria-label="Edit this reply">Edit</button><button class="wa-text accent" data-wa="approve" aria-label="Approve and send this exact reply">Approve and send →</button></div></section>'
-          :'<div class="wa-actions"><button class="wa-btn" data-wa="approve">Approve and send</button><button class="wa-btn ghost" data-wa="back">Back</button></div></section>')+history;
+        +(column?'<p class="wa-note">Awaiting your approval</p><div class="wa-actions wa-text-actions"><button class="wa-text" data-wa="back" aria-label="Edit this reply">Edit</button><button class="wa-text accent" data-wa="approve" aria-label="Approve and send this exact reply">Approve and send →</button></div></section>'
+          :'<div class="wa-actions"><button class="wa-btn" data-wa="approve">Approve and send</button><button class="wa-btn ghost" data-wa="back">'+(st.page?'Edit reply':'Back')+'</button></div></section>')+history;
     }
     const draft=chat.draft,label=draft&&draft.source==='sample'?'Sample draft':draft&&draft.source==='model'?'AI draft — check before sending':'Your reply';
-    h+='<section class="wa-draft"><label for="wa-editor">'+e(draft&&draft.status==='generating'?'Writing a draft…':label)+'</label>'
+    h+='<section class="wa-draft'+(st.editor.key===chat.key&&st.editor.dirty&&st.editor.text.trim()?' is-unsent':'')+'"><label for="wa-editor">'+e(draft&&draft.status==='generating'?'Writing a draft…':label)+'</label>'
       +(draft&&draft.status==='failed'?'<p class="wa-note bad">'+e(draft.error||'No draft this time.')+'</p>':'')
       +(draft&&draft.status==='stale'?'<p class="wa-note">The earlier draft was cleared because the conversation changed.</p>':'')
+      +(st.page&&st.editor.key===chat.key&&st.editor.dirty&&st.editor.text.trim()?'<p class="wa-note wa-unsent">Unsent · not reviewed yet</p>':'')
       +'<textarea id="wa-editor" data-key="'+e(chat.key)+'" maxlength="2000" rows="5">'+e(st.editor.key===chat.key?st.editor.text:'')+'</textarea>'
       +(send&&send.status==='uncertain'&&!send.acknowledged?'<label class="wa-check"><input type="checkbox" id="wa-checked"> I checked the phone and the reply was not sent.</label>':'')
       +'<div class="wa-actions"><button class="wa-btn" data-wa="review">Review reply</button><button class="wa-btn ghost" data-wa="discard">Discard</button>'+(st.mode==='live'&&!viaRelay()&&st.data&&st.data.consent&&st.data.consent.model?'<button class="wa-btn ghost" data-wa="generate">Draft again</button>':'')+(st.mode==='sample'?'<button class="wa-btn ghost" data-wa="sample-incoming">Add sample message</button>':'')+'</div></section>';
@@ -208,8 +215,26 @@
     h+='<details class="wa-setup wa-inbox-settings"><summary>Inbox settings</summary>'+(isLive?(st.data?connectionView(st.data.connection)+consentView(st.data.consent):'')+'<button class="wa-link" data-wa="sample">Show sample inbox</button>':'<button class="wa-link" data-wa="live">Back to live inbox</button>')+'</details>';
     return h+'</div>';
   }
+  /* Page (a full Jarvis page): heading, connection line, the chat list beside the selected chat, then Inbox settings.
+     Same controls, routes and approvals as the other layouts. */
+  function pageView(st,data,chat){
+    const isLive=st.mode==='live',it=st.intent,choosing=!!(it&&(it.stage==='find'||it.stage==='choose'));
+    const unread=isLive&&st.data?Number(st.data.unreadCount)||0:0;
+    let h='<div class="wa-panel wa-page'+(chat&&!choosing?' has-chat':'')+(st.listOpen||choosing?' list-open':'')+'"><header class="jb-head wa-page-head"><div class="jb-heading"><small class="jv-label">WhatsApp</small><div class="jb-title"><h2 id="wa-title" tabindex="-1">'+(isLive?(unread?e(unread)+' unread in Jarvis':'Inbox'):'Sample inbox')+'</h2></div></div>'
+      +'<div class="jb-tools"><button class="jv-btn" id="wa-close" data-wa="close" aria-label="Close WhatsApp">Close</button></div></header>';
+    if(!isLive)h+='<div class="wa-banner sample" role="status"><b>Sample inbox</b><span>Fictional messages. Nothing is sent and no AI is used.</span></div>';
+    else if(st.offline)h+='<div class="wa-banner warn" role="status"><b>Not connected</b><span>'+e(st.offline)+'</span></div>';
+    else if(!st.data)h+='<div class="wa-banner" role="status">Loading…</div>';
+    else h+=connectionView(st.data.connection,true)+'<p class="wa-note">Read aloud from the Jarvis conversation. Phone read status and older history are not synced.</p>';
+    if(st.error)h+='<div class="wa-banner warn" role="alert">'+e(st.error)+'</div>';
+    h+=intentView(it);
+    if(data&&(!isLive||!st.offline))h+='<div class="wa-body"><nav class="wa-side" aria-label="Chats">'+listView(st,isLive?data.chats:data.chats.map(summaryOf))+'</nav><main class="wa-main">'+(choosing?'<p class="wa-empty">Choose a chat.</p>':chatView(st,chat))+'</main></div>';
+    h+='<details class="wa-setup wa-inbox-settings"><summary>Inbox settings</summary>'+(isLive?(st.data?connectionView(st.data.connection)+consentView(st.data.consent):'')+'<button class="wa-link" data-wa="sample">Show sample inbox</button>':'<button class="wa-link" data-wa="live">Back to live inbox</button>')+'</details>';
+    return h+'</div>';
+  }
   function view(st){
     const isLive=st.mode==='live',data=isLive?st.data:st.sample,chat=isLive?(st.data&&st.data.chat&&st.data.chat.key===st.selected?st.data.chat:null):(st.selected?sampleChat(st,st.selected):null);
+    if(st.page)return pageView(st,data,chat);
     if(st.embedded)return embeddedView(st,data,chat);
     let h='<div class="wa-panel" role="dialog" aria-modal="true" aria-labelledby="wa-title"><header class="wa-head"><h2 id="wa-title" tabindex="-1">WhatsApp inbox</h2><button class="wa-btn ghost" id="wa-close" data-wa="close" aria-label="Close WhatsApp inbox">Close</button></header>';
     if(isLive){
@@ -223,7 +248,14 @@
     if(data&&(!isLive||!st.offline))h+='<div class="wa-body"><nav class="wa-side" aria-label="Chats">'+listView(st,isLive?data.chats:data.chats.map(summaryOf))+'</nav><main class="wa-main">'+chatView(st,chat)+'</main></div>';
     return h+'</div>';
   }
-  function render(st){if(S===st&&st)st.root.innerHTML=view(st);}
+  function render(st){
+    if(S!==st||!st)return;
+    const kept=[...(st.root.querySelectorAll?st.root.querySelectorAll('[data-wa-scroll]'):[])].map(n=>[n.dataset.waScroll,n.scrollTop,n.scrollHeight-n.scrollTop-n.clientHeight<8]);
+    st.root.innerHTML=view(st);
+    for(const [name,top,atEnd] of kept){const n=st.root.querySelector?.('[data-wa-scroll="'+name+'"]');if(n)n.scrollTop=name==='thread'&&atEnd?n.scrollHeight:top;}
+    const thread=st.root.querySelector?.('[data-wa-scroll="thread"]');
+    if(thread&&st.threadKey!==st.selected){st.threadKey=st.selected;thread.scrollTop=thread.scrollHeight;}
+  }
 
   /* ── Command intent: find → (choose) → load → reviewing. Each stage runs once; anything stale is ignored. ── */
   const intentChats=st=>st.mode==='live'?(st.data&&st.data.chats)||[]:st.sample.chats.map(summaryOf);
@@ -357,17 +389,20 @@
   /* Live is the default; sample:true is only for fixtures and browser tests and never happens as a fallback. */
   /* host (optional) embeds the same inbox inside another panel, such as the Jarvis desktop; the default is a standalone overlay. */
   /* chat (optional): a stable chat key from the inbox list, opened directly (the dashboard WhatsApp panel). */
-  function open({returnFocus=null,intent=null,sample=false,host=null,onClose=null,chat=''}={}){
+  let kept=null;
+  function open({returnFocus=null,intent=null,sample=false,host=null,onClose=null,chat='',layout=''}={}){
     if(S)return false;
     const embedded=!!(host&&typeof host.appendChild==='function');
     const root=document.createElement('div');root.className=embedded?'wa-root wa-embedded':'wa-root';
     const background=embedded?null:document.querySelector('.app-wrapper');
     const st={root,embedded,onClose:typeof onClose==='function'?onClose:null,mode:sample===true?'sample':'live',tab:'direct',selected:'',data:null,sample:sample===true?sampleInbox():null,token:'',offline:'',error:'',notice:'',outcome:null,review:null,editor:{key:'',version:0,text:'',dirty:false},busy:false,timer:0,seq:0,intent:cleanIntent(intent),returnFocus,background,wasInert:!!(background&&background.hasAttribute('inert'))};
+    st.page=embedded&&layout==='page';
     if(typeof chat==='string'&&/^[A-Za-z0-9_-]{1,64}$/.test(chat)&&!st.intent){st.selected=chat;st.editor={key:chat,version:-1,text:'',dirty:false};}
+    if(kept&&st.mode==='live'&&!st.intent&&(!st.selected||st.selected===kept.key)){st.selected=kept.key;st.editor={key:kept.key,version:kept.version,text:kept.text,dirty:true,typed:true};st.notice='Your unsent reply was kept. Nothing has been sent.';kept=null;}
     S=st;
     root.addEventListener('click',event=>{const target=event.target&&event.target.closest?event.target.closest('[data-wa]'):null;if(target)void act(st,target.dataset.wa,target);});
     /* The editor text belongs to the chat it was typed for (data-key), so it can never move to another recipient. */
-    root.addEventListener('input',event=>{const t=event.target;if(S===st&&t&&t.id==='wa-editor'&&t.dataset&&t.dataset.key===st.editor.key){st.editor.text=String(t.value||'');st.editor.dirty=true;}});
+    root.addEventListener('input',event=>{const t=event.target;if(S===st&&t&&t.id==='wa-editor'&&t.dataset&&t.dataset.key===st.editor.key){st.editor.text=String(t.value||'');st.editor.dirty=true;st.editor.typed=true;}});
     root.addEventListener('keydown',event=>onKey(st,event));
     (embedded?host:document.body).appendChild(root);background?.setAttribute('inert','');
     render(st);q(st,'#wa-title')?.focus?.();
@@ -378,10 +413,13 @@
   /* Closing stops polling, removes the panel, restores the background (standalone only) and focus. */
   function close(){
     if(!S)return;
-    const st=S;S=null;clearTimeout(st.timer);st.root.remove();
+    const st=S;S=null;clearTimeout(st.timer);
+    /* Only text typed by hand is kept; an abandoned dictated message never comes back. */
+    if(st.mode==='live'&&st.editor.key&&st.editor.dirty&&st.editor.typed&&st.editor.text.trim())kept={key:st.editor.key,version:st.editor.version,text:st.editor.text};
+    st.root.remove();
     if(st.background&&!st.wasInert)st.background.removeAttribute('inert');
     st.returnFocus?.focus?.();
     try{st.onClose?.();}catch{}
   }
-  window.SV_JARVIS_WHATSAPP=Object.freeze({open,close,parseCommand,createMonitor,isOpen:()=>!!S,isEmbedded:()=>!!(S&&S.embedded)});
+  window.SV_JARVIS_WHATSAPP=Object.freeze({open,close,parseCommand,createMonitor,isOpen:()=>!!S,isEmbedded:()=>!!(S&&S.embedded),hasKeptReply:()=>!!kept||!!(S&&S.editor.typed&&S.editor.dirty&&S.editor.text.trim())});
 })();

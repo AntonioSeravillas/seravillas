@@ -407,18 +407,18 @@ test('desktop: one tap gives a voice turn; the microphone stays off through ever
   assert.equal(app.recs.length,1);app.runDelay(450);assert.equal(app.recs.length,2);assert.equal(app.phase(),'listening');
   app.click('close');assert.equal(app.recs[1].aborted,true);for(const ms of [450,900,1800,3600])app.runDelay(ms);assert.equal(app.recs.length,2);assert.equal(app.root().removed,true);
 });
-test('desktop: a typed WhatsApp command with no voice loop opens the review in context and shows Paused, not Thinking',async()=>{
+test('desktop: a typed WhatsApp command with no voice loop opens the review on the WhatsApp page and shows Paused, not Thinking',async()=>{
   const app=desktopRuntime();app.run('openJarvis()');await flush();
   await app.run(`SV_JARVIS.send('Write a WhatsApp message to Bex saying This is a dashboard review test.')`);
   assert.equal(app.phase(),'paused');assert.equal(app.el('jarvis-status').textContent,'Paused');assert.equal(app.el('jarvis-mic').attrs['aria-label'],'Start conversation');
-  assert.equal(app.wa.open.length,1);assert.equal(app.recs.length,0);assert.equal(app.el('jarvis-context').hidden,false);
-  app.click('nav-overview');assert.equal(app.wa.close,1);assert.equal(app.el('jarvis-context').hidden,true);
+  assert.equal(app.wa.open.length,1);assert.equal(app.recs.length,0);assert.equal(app.root().dataset.page,'whatsapp');assert.equal(app.el('jarvis-whatsapp-page').hidden,false);assert.equal(app.wa.open[0].layout,'page');
+  app.click('nav-overview');assert.equal(app.wa.close,1);assert.equal(app.el('jarvis-whatsapp-page').hidden,true);assert.equal(app.root().dataset.page,'overview');
 });
 test('desktop: opening WhatsApp pauses, then the mic can resume while the inbox stays visible; close cleans up',async()=>{
   const app=desktopRuntime();app.run('openJarvis()');await flush();
   app.click('mic');assert.equal(app.recs.length,1);
   app.click('nav-whatsapp');
-  assert.equal(app.recs[0].aborted,true);assert.equal(app.wa.open.length,1);assert.equal(app.wa.open[0].host,app.el('jarvis-wa-host'));assert.equal(app.el('jarvis-context').hidden,false);
+  assert.equal(app.recs[0].aborted,true);assert.equal(app.wa.open.length,1);assert.equal(app.wa.open[0].host,app.el('jarvis-whatsapp-page'));assert.equal(app.root().dataset.page,'whatsapp');
   app.click('mic');assert.equal(app.recs.length,2);assert.equal(app.el('jarvis-error').textContent,'');assert.equal(app.phase(),'listening');
   await app.run(`SV_JARVIS.send('What is next?')`);const u=app.utterances.at(-1);u.onstart();u.onend();app.utterances.at(-1).onstart?.();app.utterances.at(-1).onend?.();
   app.runDelay(450);assert.equal(app.recs.length,2);
@@ -1082,5 +1082,35 @@ test('Team, Reports and Issues pages: tabs and the live voice event path open th
   decisions.push({kind:'task',operation:{action:'create',text:'call the boiler engineer'}});await h.user('Add a task to call the boiler engineer');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
   for(const [words,expect] of [['Open reports','reports'],['Open team','team'],['Open issues','issues'],['Close it','overview']]){await h.user(words);assert.equal(page(),expect,words);assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review',words);h.app.finishSpeech();await flush();}
   assert.ok(live());assert.deepEqual(visited,[]);assert.equal(h.app.root().removed,false);
+  h.app.click('close');
+});
+
+test('WhatsApp and Settings pages: tabs and live voice open them inside Jarvis with the existing voice lifecycle; close returns; drafts and settings are untouched',async()=>{
+  for(const desktop of [true,false]){
+    const app=desktopRuntime({desktop}),visited=[];app.context.workspaceNavigate=t=>visited.push(t);app.run('var __writes=[];const __set=SV_STORAGE.setItem;SV_STORAGE.setItem=(k,v)=>{__writes.push(k);return __set(k,v);};openJarvis()');await flush();
+    app.click('nav-tasks');app.click('nav-whatsapp');assert.equal(app.root().dataset.page,'whatsapp');assert.equal(app.el('jarvis-whatsapp-page').hidden,false);
+    assert.equal(app.wa.open.at(-1).layout,'page');assert.equal(app.wa.open.at(-1).host,app.el('jarvis-whatsapp-page'));assert.equal(app.wa.open.at(-1).intent,null,'opening carries no message');
+    app.wa.open.at(-1).onClose();assert.equal(app.root().dataset.page,'tasks','the inbox Close returns to Tasks');
+    const writes=app.run('__writes.length');
+    app.click('settings');assert.equal(app.root().dataset.page,'settings');assert.equal(app.el('jarvis-settings-page').hidden,false);
+    for(const id of ['jarvis-mode-select','jarvis-voice-choice','jarvis-language','jarvis-muted','jarvis-message-alerts','jarvis-relay','jarvis-personal-list','jarvis-data-note'])assert.ok(app.el(id),id);
+    app.click('close-panel');assert.equal(app.root().dataset.page,'tasks','Done returns to Tasks');
+    assert.equal(app.run('__writes.length'),writes,'opening and closing Settings writes nothing');
+    app.click('nav-settings');assert.equal(app.root().dataset.page,'settings','the compact top bar opens Settings too');app.click('nav-whatsapp');assert.equal(app.root().dataset.page,'whatsapp');assert.equal(app.el('jarvis-settings-page').hidden,true,'Settings closes when WhatsApp opens from it');
+    assert.deepEqual(visited,[]);app.click('close');
+  }
+  /* Live voice: "open WhatsApp" pauses the session (as the button does), "open Settings" stops it; a task draft survives both. */
+  const decisions=[];const h=liveInterruptRuntime({desktop:true,decisions});
+  h.app.run(TASK_STORE+"D.tasks=[];openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  decisions.push({kind:'task',operation:{action:'create',text:'check the gate code'}});await h.user('Add a task to check the gate code');await o.clientTools.ask_hermes({request:'task'});await flush();h.app.finishSpeech();await flush();
+  await h.user('Open tasks');h.app.finishSpeech();await flush();
+  await h.user('Open WhatsApp.');assert.equal(h.app.root().dataset.page,'whatsapp');assert.equal(h.app.phase(),'paused','WhatsApp pauses the conversation, as before');assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review');
+  assert.match(await o.clientTools.lookup_records({entity:'tasks',view:'count'}),/paused|superseded/,'the agent cannot act on that turn');
+  /* The paused session ignores speech until the microphone is tapped again, as before. */
+  await h.user('Close it');assert.equal(h.app.root().dataset.page,'whatsapp','a paused session hears nothing');
+  h.app.click('mic');await flush();await h.user('Close it');assert.equal(h.app.root().dataset.page,'tasks');h.app.finishSpeech();await flush();
+  await h.user('Open settings');assert.equal(h.app.root().dataset.page,'settings');assert.notEqual(h.app.phase(),'listening','no microphone session from opening Settings');
+  assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review','the task draft survives');
+  h.app.click('close-panel');assert.equal(h.app.root().dataset.page,'tasks');assert.equal(h.app.run('SV_JARVIS.preview.task().stage'),'review');
   h.app.click('close');
 });

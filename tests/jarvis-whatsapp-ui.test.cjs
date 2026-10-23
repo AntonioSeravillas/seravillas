@@ -308,3 +308,70 @@ test('embedded: duplicate names keep the chat list visible for a deliberate choi
   app2.context.SV_JARVIS_WHATSAPP.open({host:fakeHost()});await settle();
   assert.match(app2.html(),/data-wa="select" data-key="b{20}"/);assert.match(app2.html(),/<summary>Inbox settings<\/summary>/);assert.doesNotMatch(app2.html(),/Send to|role="dialog"/);assert.equal(srv2.posts.length,0);
 });
+
+/* ── Page layout (Jarvis WhatsApp page). Same routes and approvals; fictional chats and a stubbed server only. ── */
+function pageServer({messages,offline=false}={}){
+  const posts=[],chat={key:'p'.repeat(20),kind:'group',name:'Sample <Cleaning> Team',detail:'WhatsApp group',version:3,preview:'Hi'};
+  const handler=async(url,init)=>{
+    if(offline)throw Error('offline');
+    if(url.endsWith('/status'))return reply(200,{available:true,requestToken:'T'});
+    if(url.includes('/inbox')){const data={connection:{state:'open',message:'Connected as a linked device.'},consent:{account:true,model:false,modelAvailable:true},unreadCount:2,chats:[chat]};
+      if(url.includes('?chat='))data.chat={...chat,reviewOpen:posts.some(p=>p.url.endsWith('/review')),messages:messages??[],draft:null,lastSend:null};return reply(200,data);}
+    const body=JSON.parse(init.body);posts.push({url,body});
+    if(url.endsWith('/review'))return reply(200,{reviewToken:'R1',version:3,text:body.text,recipient:{kind:'group',name:chat.name,detail:chat.detail}});
+    if(url.endsWith('/send'))return reply(200,{status:'sent'});
+    return reply(200,{});
+  };
+  return {handler,posts,chat};
+}
+const pageHost={appendChild(){}};
+test('page layout: heading, list beside the chat, full multi-line thread with times and attachments, unchanged review and single send',async()=>{
+  const at=Math.floor(Date.UTC(2026,9,20,9,5)/1000);
+  const srv=pageServer({messages:[{from:'contact',sender:'Sample Cleaner A',text:'Line one\nLine <two>',media:null,at},{from:'contact',sender:'Sample Cleaner B',text:'',media:{label:'Photo (not downloaded)'},at},{from:'owner',text:'Thanks',viaJarvis:true,at}]});
+  const app=runtime(srv.handler);const before=app.data();
+  app.context.SV_JARVIS_WHATSAPP.open({host:pageHost,layout:'page'});await settle();
+  let h=app.html();assert.match(h,/class="wa-panel wa-page/);assert.match(h,/<small class="jv-label">WhatsApp<\/small>/);assert.match(h,/2 unread in Jarvis/);assert.match(h,/data-wa="close"/);assert.doesNotMatch(h,/role="dialog"/);
+  assert.equal(app.background.attrs.has('inert'),false,'a page never makes the app behind it inert');
+  await app.click('select',{key:srv.chat.key});await settle();h=app.html();
+  assert.match(h,/class="wa-panel wa-page has-chat"/);assert.match(h,/<nav class="wa-side"/,'the list stays beside the chat');assert.match(h,/data-wa-scroll="thread"/);assert.doesNotMatch(h,/<details class="wa-history"/,'the thread is shown, not folded away');
+  assert.match(h,/Line one\nLine &lt;two&gt;/,'multi-line text kept and escaped');assert.match(h,/Photo \(not downloaded\)/);assert.match(h,/You · via Jarvis/);assert.match(h,/<time>20 Oct · \d\d:05<\/time>/);
+  assert.match(h,/Sample &lt;Cleaning&gt; Team/);assert.match(h,/‹ Chats/);
+  app.type('Fictional reply\nsecond line',srv.chat.key);assert.equal(srv.posts.length,0,'typing sends nothing');
+  await app.click('review');h=app.html();assert.match(h,/<h3>Review reply<\/h3>/);assert.match(h,/<b>Sample &lt;Cleaning&gt; Team<\/b> · WhatsApp group/);assert.match(h,/<pre>Fictional reply\nsecond line<\/pre>/);
+  assert.match(h,/data-wa="approve">Approve and send</);assert.match(h,/data-wa="back">Edit reply</);
+  await app.click('approve');assert.deepEqual(srv.posts.map(p=>p.url.split('/').pop()),['review','send']);assert.deepEqual(srv.posts[1].body,{chat:srv.chat.key,reviewToken:'R1',text:'Fictional reply\nsecond line'});
+  await app.click('approve');assert.equal(srv.posts.length,2,'the review is single-use');assert.equal(app.data(),before);
+  app.context.SV_JARVIS_WHATSAPP.close();
+});
+test('page layout: empty chat and unreachable server have clear states; the column layout keeps its folded history',async()=>{
+  const srv=pageServer({messages:[]});const app=runtime(srv.handler);
+  app.context.SV_JARVIS_WHATSAPP.open({host:pageHost,layout:'page',chat:srv.chat.key});await settle();assert.match(app.html(),/No messages in this chat yet\./);app.context.SV_JARVIS_WHATSAPP.close();
+  const off=runtime(pageServer({offline:true}).handler);off.context.SV_JARVIS_WHATSAPP.open({host:pageHost,layout:'page'});await settle();
+  assert.match(off.html(),/wa-page/);assert.match(off.html(),/Not connected/);assert.match(off.html(),/not reachable/);off.context.SV_JARVIS_WHATSAPP.close();
+  const col=runtime(pageServer({messages:[{from:'contact',text:'Hi'}]}).handler);col.context.SV_JARVIS_WHATSAPP.open({host:pageHost,chat:'p'.repeat(20)});await settle();
+  assert.match(col.html(),/wa-panel-embedded/);assert.match(col.html(),/Previous messages \(1\)/);assert.doesNotMatch(col.html(),/‹ Chats/);col.context.SV_JARVIS_WHATSAPP.close();
+});
+test('an unsent reply typed by hand is kept for its own chat when the view closes, never reviewed or sent by that',async()=>{
+  const srv=pageServer({messages:[{from:'contact',text:'Hi'}]});const app=runtime(srv.handler),api=app.context.SV_JARVIS_WHATSAPP;
+  api.open({host:pageHost,layout:'page',chat:srv.chat.key});await settle();app.type('Typed but not sent',srv.chat.key);assert.equal(api.hasKeptReply(),true);
+  api.close();assert.equal(api.hasKeptReply(),true);
+  api.open({host:pageHost,layout:'page'});await settle();let h=app.html();
+  assert.match(h,/<textarea id="wa-editor" data-key="p{20}"[^>]*>Typed but not sent<\/textarea>/);assert.match(h,/Your unsent reply was kept\. Nothing has been sent\./);assert.match(h,/Unsent · not reviewed yet/);assert.match(h,/wa-draft is-unsent/);
+  assert.equal(srv.posts.length,0);
+  /* Discarding clears it; nothing is kept afterwards. */
+  await app.click('discard');api.close();assert.equal(api.hasKeptReply(),false);
+  api.open({host:pageHost,layout:'page'});await settle();assert.doesNotMatch(app.html(),/Typed but not sent/);api.close();
+  /* A command naming another chat never picks up the kept text. */
+  api.open({host:pageHost,layout:'page',chat:srv.chat.key});await settle();app.type('Second draft',srv.chat.key);api.close();
+  api.open({host:pageHost,layout:'page',intent:{kind:'open',name:'Someone else'}});await settle();assert.doesNotMatch(app.html(),/Second draft/);assert.equal(api.hasKeptReply(),true,'kept for its own chat');api.close();
+});
+test('the periodic refresh keeps the list scroll position and stays at the newest message when already there',async()=>{
+  const srv=pageServer({messages:[{from:'contact',text:'Hi'}]});const app=runtime(srv.handler);
+  const list={dataset:{waScroll:'list'},scrollTop:137,scrollHeight:900,clientHeight:300},thread={dataset:{waScroll:'thread'},scrollTop:600,scrollHeight:900,clientHeight:300};
+  app.context.SV_JARVIS_WHATSAPP.open({host:pageHost,layout:'page',chat:srv.chat.key});await settle();
+  const freshList={scrollTop:0},freshThread={scrollTop:0,scrollHeight:950};
+  app.root.querySelectorAll=sel=>sel==='[data-wa-scroll]'?[list,thread]:[];app.nodes.set('[data-wa-scroll="list"]',freshList);app.nodes.set('[data-wa-scroll="thread"]',freshThread);
+  await app.click('tab',{tab:'direct'});
+  assert.equal(freshList.scrollTop,137,'list position kept');assert.equal(freshThread.scrollTop,950,'at the newest message, it follows new messages');
+  app.context.SV_JARVIS_WHATSAPP.close();
+});

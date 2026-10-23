@@ -525,6 +525,108 @@ body.jarvis-open #modal-root .rpt-booking{background:transparent;color:var(--jv-
   #jarvis-reports-page .rpt-filters .field{flex:1 1 140px}
 }
 
+/* ── WhatsApp page: the same inbox (list, chat, reply, review), laid out like the other pages. Incoming messages sit on
+   the left, yours on the right in warm tint; an unsent reply has a dashed outline and the review a solid orange edge. ── */
+#jarvis-whatsapp-page .wa-root{display:flex;flex:1;min-height:0;font-family:var(--jv-font)}
+#jarvis-whatsapp-page .wa-page{display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;max-width:none;padding:0;background:none;border:0;border-radius:0;color:var(--jv-text);font-size:var(--jb-font);overflow:visible}
+#jarvis-whatsapp-page .wa-page-head{margin-bottom:0}
+#jarvis-whatsapp-page .wa-banner{flex:none;display:flex;flex-direction:row;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:8px 12px;border:0;border-left:2px solid var(--jv-line-3);border-radius:0;background:rgba(var(--jv-ink,255,255,255),.02);color:var(--jv-text-2)}
+#jarvis-whatsapp-page .wa-banner b{font-weight:500;color:var(--jv-text)}
+#jarvis-whatsapp-page .wa-banner.ok{border-left-color:var(--jv-ok,#6fbf8e)}
+#jarvis-whatsapp-page .wa-banner.warn{border-left-color:var(--jv-accent);background:var(--jv-accent-soft);color:var(--jv-text)}
+#jarvis-whatsapp-page .wa-banner.sample{border-left-style:dashed}
+#jarvis-whatsapp-page .wa-note{margin:0;font-size:var(--jb-small);color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-note.bad{color:var(--jv-danger)}
+#jarvis-whatsapp-page .wa-body{display:grid;grid-template-columns:minmax(240px,.82fr) minmax(0,2fr);gap:clamp(14px,1.1vw,26px);flex:1;min-height:0;border-top:1px solid var(--jv-line);padding-top:12px}
+#jarvis-whatsapp-page .wa-side,#jarvis-whatsapp-page .wa-main{min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px}
+#jarvis-whatsapp-page .wa-main{overflow:auto;overscroll-behavior:contain;padding-right:4px;scrollbar-width:thin}
+#jarvis-whatsapp-page .wa-tabs{display:flex;gap:6px;flex:none}
+#jarvis-whatsapp-page .wa-tabs button{flex:1;height:var(--jv-ctl);min-height:0;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text-2);font-family:var(--jv-font);font-size:var(--jb-font);font-weight:400}
+#jarvis-whatsapp-page .wa-tabs button[aria-selected="true"]{border-color:var(--jv-accent-line);background:var(--jv-accent-soft);color:var(--jv-text)}
+#jarvis-whatsapp-page .wa-list{flex:1;min-height:0;gap:0;overflow:auto;overscroll-behavior:contain;border-top:1px solid var(--jv-line);scrollbar-width:thin}
+#jarvis-whatsapp-page .wa-chat{position:relative;gap:3px;min-height:56px;padding:10px 12px 10px 14px;border:0;border-bottom:1px solid var(--jv-line);border-radius:0;background:transparent;color:var(--jv-text);font-family:var(--jv-font)}
+#jarvis-whatsapp-page .wa-chat:hover{background:rgba(var(--jv-ink,255,255,255),.03)}
+#jarvis-whatsapp-page .wa-chat.on{background:var(--jv-accent-soft);box-shadow:inset 2px 0 0 var(--jv-accent)}
+#jarvis-whatsapp-page .wa-chat b{font-weight:500;overflow-wrap:anywhere}
+#jarvis-whatsapp-page .wa-chat small{font-size:var(--jb-small);color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-chat span{font-size:calc(var(--jb-font) - 1px);color:var(--jv-text-2)}
+#jarvis-whatsapp-page .wa-chat em{font-size:var(--jb-small);font-weight:500;color:var(--jv-accent-text)}
+#jarvis-whatsapp-page .wa-chat em.bad{color:var(--jv-danger)}
+#jarvis-whatsapp-page .wa-chat-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;flex:none}
+#jarvis-whatsapp-page .wa-chat-head b{font-size:calc(var(--jb-font) + 4px);font-weight:400;overflow-wrap:anywhere}
+#jarvis-whatsapp-page .wa-chat-head small{flex-basis:100%;font-size:var(--jb-small);color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-back-list{display:none}
+#jarvis-whatsapp-page .wa-thread{display:flex;flex-direction:column;gap:8px;flex:none;max-height:min(46vh,520px);overflow:auto;overscroll-behavior:contain;padding:4px 2px;scrollbar-width:thin}
+#jarvis-whatsapp-page .wa-msg{max-width:min(80%,640px);padding:8px 12px;border:1px solid var(--jv-line);border-radius:12px 12px 12px 4px;background:rgba(var(--jv-ink,255,255,255),.03);color:var(--jv-text)}
+#jarvis-whatsapp-page .wa-msg.me{align-self:flex-end;border-color:var(--jv-accent-line);border-radius:12px 12px 4px 12px;background:var(--jv-accent-soft)}
+#jarvis-whatsapp-page .wa-msg small{display:flex;gap:10px;font-size:var(--jb-small);font-weight:500;color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-msg time{margin-left:auto;font-weight:400}
+#jarvis-whatsapp-page .wa-msg p{margin:3px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+#jarvis-whatsapp-page .wa-media{font-style:normal;color:var(--jv-text-2)}
+#jarvis-whatsapp-page .wa-media::before{content:'Attachment · ';color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-empty{margin:0;padding:12px 4px;color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-draft,#jarvis-whatsapp-page .wa-review{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--jv-line);border-radius:var(--jv-radius,10px)}
+#jarvis-whatsapp-page .wa-draft.is-unsent{border-style:dashed;border-color:var(--jv-accent-line)}
+#jarvis-whatsapp-page .wa-unsent{color:var(--jv-accent-text)}
+#jarvis-whatsapp-page .wa-draft label[for="wa-editor"]{font-size:var(--jb-small);font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-draft textarea{width:100%;min-height:110px;padding:10px 12px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-family:var(--jv-font);font-size:16px;font-weight:400;line-height:1.5;resize:vertical;scroll-margin-bottom:120px;color-scheme:var(--jv-scheme,dark)}
+#jarvis-whatsapp-page .wa-draft textarea:focus{outline:none;border-color:var(--jv-accent-line);box-shadow:0 0 0 3px rgba(239,122,46,.12)}
+#jarvis-whatsapp-page .wa-review{border-color:var(--jv-accent-line);box-shadow:inset 2px 0 0 var(--jv-accent)}
+#jarvis-whatsapp-page .wa-review h3{margin:0;font-size:var(--jb-small);font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--jv-accent-text)}
+#jarvis-whatsapp-page .wa-review dl{grid-template-columns:max-content 1fr;gap:8px 18px}
+#jarvis-whatsapp-page .wa-review dt{font-weight:400;color:var(--jv-text-3)}
+#jarvis-whatsapp-page .wa-review dd{overflow-wrap:anywhere}
+#jarvis-whatsapp-page .wa-review dd b{font-weight:500}
+#jarvis-whatsapp-page .wa-review pre{padding:10px 12px;border-radius:var(--jv-radius-sm);background:rgba(var(--jv-ink,255,255,255),.03);font-family:var(--jv-font);font-size:calc(var(--jb-font) + 1px);line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}
+#jarvis-whatsapp-page .wa-actions{flex-wrap:wrap;gap:8px}
+#jarvis-whatsapp-page .wa-btn{display:inline-flex;align-items:center;justify-content:center;min-height:var(--jv-ctl);padding:0 14px;border:1px solid var(--jv-accent);border-radius:var(--jv-radius-sm);background:var(--jv-accent);color:#fff;font-family:var(--jv-font);font-size:var(--jb-font);font-weight:500}
+#jarvis-whatsapp-page .wa-btn.ghost{border-color:var(--jv-line-2);background:transparent;color:var(--jv-text)}
+#jarvis-whatsapp-page .wa-btn.ghost:hover{border-color:var(--jv-line-3);background:rgba(var(--jv-ink,255,255,255),.04)}
+#jarvis-whatsapp-page .wa-link,#jarvis-whatsapp-page .wa-text{min-height:36px;padding:6px 2px;color:var(--jv-accent-text);font-family:var(--jv-font);font-size:var(--jb-font);font-weight:400;text-decoration:none}
+#jarvis-whatsapp-page .wa-setup{flex:none;padding:8px 0 0;border:0;border-top:1px solid var(--jv-line);border-radius:0}
+#jarvis-whatsapp-page .wa-setup summary{min-height:36px;align-content:center;color:var(--jv-text-2);font-weight:400}
+#jarvis-whatsapp-page .wa-setup p{color:var(--jv-text-2)}
+#jarvis-whatsapp-page .wa-setup .wa-setup{border-top:0;padding-left:12px;border-left:1px solid var(--jv-line)}
+#jarvis-whatsapp-page .wa-check input{accent-color:var(--jv-accent)}
+#jarvis-whatsapp-page :focus-visible{outline:none;box-shadow:var(--jv-focus)}
+#jarvis-whatsapp-page .wa-qr{background:#fff}
+@media(max-width:767px){
+  #jarvis-whatsapp-page .wa-body{grid-template-columns:1fr}
+  #jarvis-whatsapp-page .wa-page.has-chat:not(.list-open) .wa-side{display:none}
+  #jarvis-whatsapp-page .wa-page.list-open .wa-main{display:none}
+  #jarvis-whatsapp-page .wa-page.has-chat .wa-back-list{display:inline-flex;margin-right:4px}
+  #jarvis-whatsapp-page .wa-list{max-height:62dvh}
+  #jarvis-whatsapp-page .wa-main{overflow:visible}
+  #jarvis-whatsapp-page .wa-thread{max-height:46dvh}
+  #jarvis-whatsapp-page .wa-msg{max-width:88%}
+}
+
+/* ── Settings page: the existing controls grouped as cards; selects, switches and buttons in the Jarvis style. ── */
+#jarvis-settings-page .js-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(300px,24vw,560px),1fr));gap:clamp(12px,1vw,22px);align-items:start;padding:clamp(12px,1vw,18px) 0 16px}
+#jarvis-settings-page .js-group{display:flex;flex-direction:column;gap:12px;min-width:0;padding:clamp(14px,1.1vw,24px);border:1px solid var(--jv-line);border-radius:var(--jv-radius,10px)}
+#jarvis-settings-page .js-group h3{margin:0;font-family:var(--jv-font);font-size:var(--jb-small);font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-settings-page label{display:flex;flex-direction:column;gap:6px;margin:0;font-family:var(--jv-font);font-size:var(--jb-font);font-weight:400;color:var(--jv-text-2)}
+#jarvis-settings-page select,#jarvis-settings-page input:not([type=checkbox]){width:100%;height:var(--jv-ctl);min-height:var(--jv-ctl);padding:0 10px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-family:var(--jv-font);font-size:var(--jb-font);font-weight:400;box-shadow:none;outline:none;color-scheme:var(--jv-scheme,dark);appearance:auto;-webkit-appearance:auto}
+#jarvis-settings-page select option{background:var(--jv-n005,#111);color:var(--jv-n095,#eee)}
+#jarvis-settings-page select:hover{border-color:var(--jv-line-3)}
+#jarvis-settings-page select:focus-visible,#jarvis-settings-page input:focus-visible{border-color:var(--jv-accent-line);box-shadow:0 0 0 3px rgba(239,122,46,.12)}
+#jarvis-settings-page .jarvis-check{flex-direction:row;align-items:center;justify-content:space-between;gap:16px;min-height:var(--jv-ctl);color:var(--jv-text)}
+#jarvis-settings-page .jarvis-check input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--jv-accent);cursor:pointer}
+#jarvis-settings-page .jarvis-wide{display:inline-flex;align-items:center;justify-content:center;gap:8px;align-self:flex-start;width:auto;height:auto;min-height:var(--jv-ctl);margin:0;padding:0 14px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-family:var(--jv-font);font-size:var(--jb-font);font-weight:400;cursor:pointer}
+#jarvis-settings-page .jarvis-wide:hover{border-color:var(--jv-line-3);background:rgba(var(--jv-ink,255,255,255),.04)}
+#jarvis-settings-page .jarvis-wide:focus-visible,#jarvis-settings-page summary:focus-visible{outline:none;box-shadow:var(--jv-focus)}
+#jarvis-settings-page .jarvis-privacy{margin:0;font-size:var(--jb-small);line-height:1.6;color:var(--jv-text-3)}
+#jarvis-settings-page .jarvis-privacy:empty{display:none}
+#jarvis-settings-page .jarvis-connection-detail{margin:0;padding:8px 12px;border:0;border-left:2px solid var(--jv-line-3);border-radius:0;background:rgba(var(--jv-ink,255,255,255),.02);font-size:var(--jb-small);line-height:1.6;color:var(--jv-text-2)}
+#jarvis-settings-page .jarvis-connection-detail:empty{display:none}
+#jarvis-settings-page .jarvis-relay{display:flex;flex-direction:column;gap:10px;margin:0;padding:10px 0 0;border:0;border-top:1px solid var(--jv-line);border-radius:0;background:none}
+#jarvis-settings-page .jarvis-relay[hidden]{display:none}
+#jarvis-settings-page .jarvis-relay summary{min-height:32px;align-content:center;font-size:var(--jb-font);color:var(--jv-text);cursor:pointer}
+#jarvis-settings-page .js-group>.jarvis-relay:first-of-type:not(:first-child){border-top:1px solid var(--jv-line)}
+#jarvis-settings-page #jarvis-personal-list p{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;font-size:var(--jb-font);color:var(--jv-text)}
+#jarvis-settings-page #jarvis-personal-list .jarvis-privacy{display:block}
+@media(max-width:767px){#jarvis-settings-page .js-grid{grid-template-columns:1fr}}
+
 /* ── Light mode (Jarvis only; saved per device). The neutral tones above read var(--jv-nSS / ink / paper / shade, <dark
    original>); these tokens exist only here, so dark mode and everything outside Jarvis keep their exact colours. Orange
    accents, layout and components are shared; accent text is darkened for contrast on light surfaces. ── */
