@@ -1158,3 +1158,22 @@ test('morning briefing by typing: same card and summary, works on a working page
     app.click('close');
   }
 });
+/* ── Uplisting 2027 preview page (FICTIONAL status source; no cloud or Uplisting request, nothing written). ── */
+test('Uplisting preview opens from Settings as a read-only page, checks status only, and returns to Settings and the page before',async()=>{
+  for(const desktop of [true,false]){
+    const app=desktopRuntime({desktop});
+    for(const file of ['src/imports/excel-bookings.js','src/imports/uplisting-bookings.js','src/features/uplisting-board.js'])app.run(fs.readFileSync(path.join(root_,file),'utf8'));
+    app.run(TASK_STORE+"var __writes=[];const __set=SV_STORAGE.setItem;SV_STORAGE.setItem=(k,v)=>{__writes.push(k);return __set(k,v);};var __requests=[];SV_UPLISTING_VIEW.useSource(async p=>{__requests.push(p);return {service:'uplisting',readOnly:true,configured:true,sync:'off'};});openJarvis()");await flush();
+    const records=app.run('JSON.stringify(D)');
+    app.click('nav-tasks');app.click('settings');assert.equal(app.root().dataset.page,'settings');
+    app.click('uplisting-open');await flush();
+    assert.equal(app.root().dataset.page,'uplisting');assert.equal(app.el('jarvis-uplisting-page').hidden,false);assert.equal(app.el('jarvis-settings-page').hidden,true);
+    const html=app.el('jarvis-uplisting-page').innerHTML;
+    assert.match(html,/Uplisting · 2027 preview/);assert.match(html,/read-only · sync off/);assert.match(html,/No retrieval yet\. No successful retrieval yet\./);assert.match(html,/Retrieve 2027 bookings/);
+    assert.doesNotMatch(html,/Apply|Import · not/,'no import action before a retrieval');
+    assert.equal(app.run('JSON.stringify(__requests)'),'["/api/uplisting/status"]','opening checks the cloud status only; Uplisting is not called until asked');
+    app.click('nav-settings');assert.equal(app.root().dataset.page,'settings');app.click('close-panel');assert.equal(app.root().dataset.page,'tasks','Settings still returns to the page it was opened from');
+    assert.equal(app.run('JSON.stringify(__writes.filter(k=>k!=="sv_jarvis_session"))'),'[]','no records or preview choices stored (the conversation session is saved as before)');assert.equal(app.run('JSON.stringify(D)'),records,'no record changed');
+    app.click('close');
+  }
+});

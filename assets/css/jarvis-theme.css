@@ -662,3 +662,47 @@ body.jarvis-open #modal-root .rpt-booking{background:transparent;color:var(--jv-
 /* The ring and the space backdrop keep their motion; in light mode their tones are inverted (orange kept) so the
    particles read as graphite on a pale sky. */
 .jarvis-root.jv-light .jarvis-atmos canvas,.jarvis-root.jv-light .jarvis-ring{filter:invert(1) hue-rotate(180deg)}
+/* ── Uplisting 2027 preview (Settings → Bookings from Uplisting). Read-only review; theme tokens cover both modes. ── */
+#jarvis-uplisting-page .ju-body-wrap{display:flex;flex-direction:column;gap:clamp(12px,1vw,18px);padding:clamp(12px,1vw,18px) 0 18px;font-family:var(--jv-font);font-size:var(--jb-font);color:var(--jv-text)}
+#jarvis-uplisting-page .ju-card,#jarvis-uplisting-page .ju-part{display:flex;flex-direction:column;gap:10px;min-width:0;padding:clamp(14px,1.1vw,22px);border:1px solid var(--jv-line);border-radius:var(--jv-radius,10px)}
+#jarvis-uplisting-page .ju-card.is-warn{border-color:var(--jv-accent-line);border-left:3px solid var(--jv-accent)}
+#jarvis-uplisting-page h3{margin:0;font-size:var(--jb-small);font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-uplisting-page h3 span{margin-left:6px;letter-spacing:0;color:var(--jv-text-2)}
+#jarvis-uplisting-page h4{margin:8px 0 0;font-size:var(--jb-font);font-weight:600;color:var(--jv-text-2)}
+#jarvis-uplisting-page p,#jarvis-uplisting-page ul{margin:0;line-height:1.55}
+#jarvis-uplisting-page ul{padding-left:18px;color:var(--jv-text-2)}
+#jarvis-uplisting-page .ju-line{font-size:var(--jb-small);color:var(--jv-text-2)}
+#jarvis-uplisting-page .is-warn,#jarvis-uplisting-page .ju-warn,#jarvis-uplisting-page .ju-reason{color:var(--jv-accent-text)}
+#jarvis-uplisting-page .ju-note{font-size:var(--jb-small);color:var(--jv-text-2)}
+#jarvis-uplisting-page .ju-map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 16px;align-items:center;padding:10px 0;border-top:1px solid var(--jv-line)}
+#jarvis-uplisting-page .ju-map>div{display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere}
+#jarvis-uplisting-page .ju-map>div span,#jarvis-uplisting-page .ju-map small{font-size:var(--jb-small);color:var(--jv-text-2)}
+#jarvis-uplisting-page .ju-map .ju-basis{grid-column:1/-1}
+#jarvis-uplisting-page .ju-map.is-open{border-left:2px solid var(--jv-accent);padding-left:10px}
+#jarvis-uplisting-page label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:var(--jb-small);color:var(--jv-text-2)}
+#jarvis-uplisting-page select{width:100%;height:var(--jv-ctl);min-height:var(--jv-ctl);padding:0 10px;border:1px solid var(--jv-line-2);border-radius:var(--jv-radius-sm);background:transparent;color:var(--jv-text);font-family:var(--jv-font);font-size:var(--jb-font)}
+#jarvis-uplisting-page select option{background:var(--jv-surface);color:var(--jv-text)}
+#jarvis-uplisting-page select:focus-visible{outline:none;border-color:var(--jv-accent-line);box-shadow:0 0 0 3px rgba(239,122,46,.12)}
+#jarvis-uplisting-page .ju-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+#jarvis-uplisting-page .ju-counts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+#jarvis-uplisting-page .ju-counts div{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--jv-line);border-radius:var(--jv-radius-sm)}
+#jarvis-uplisting-page .ju-counts strong{font-size:calc(var(--jb-font) + 8px);font-weight:500;color:var(--jv-text)}
+#jarvis-uplisting-page .ju-counts span{font-size:var(--jb-small);color:var(--jv-text-2)}
+#jarvis-uplisting-page .ju-counts .is-review{border-color:var(--jv-accent-line)}
+#jarvis-uplisting-page .ju-toolbar{display:flex;flex-wrap:wrap;gap:8px}
+#jarvis-uplisting-page .ju-row{border-top:1px solid var(--jv-line)}
+#jarvis-uplisting-page .ju-row summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:10px 4px;cursor:pointer;list-style:none}
+#jarvis-uplisting-page .ju-row summary::-webkit-details-marker{display:none}
+#jarvis-uplisting-page .ju-row summary:focus-visible{outline:none;box-shadow:var(--jv-focus)}
+#jarvis-uplisting-page .ju-row summary strong{font-weight:500;overflow-wrap:anywhere}
+#jarvis-uplisting-page .ju-row summary>span:last-child{font-size:var(--jb-small);color:var(--jv-text-2)}
+#jarvis-uplisting-page .ju-kind{flex:none;padding:1px 8px;border:1px solid var(--jv-line-2);border-radius:999px;font-size:calc(var(--jb-small) - 1px);color:var(--jv-text-2)}
+#jarvis-uplisting-page .ju-row.is-review .ju-kind,#jarvis-uplisting-page .ju-row.is-cancelled .ju-kind{border-color:var(--jv-accent-line);color:var(--jv-accent-text)}
+#jarvis-uplisting-page .ju-body{display:flex;flex-direction:column;gap:8px;padding:0 4px 14px 12px;border-left:2px solid var(--jv-line-2)}
+#jarvis-uplisting-page .ju-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 18px;margin:0}
+#jarvis-uplisting-page .ju-facts dt{font-size:calc(var(--jb-small) - 1px);letter-spacing:.12em;text-transform:uppercase;color:var(--jv-text-3)}
+#jarvis-uplisting-page .ju-facts dd{margin:0;font-size:var(--jb-small);color:var(--jv-text);overflow-wrap:anywhere}
+#jarvis-uplisting-page .ju-only{font-size:var(--jb-small);color:var(--jv-text-2);padding:6px 0;border-top:1px solid var(--jv-line)}
+#jarvis-uplisting-page .jv-btn[disabled]{opacity:.55;cursor:not-allowed}
+@media(max-width:767px){#jarvis-uplisting-page .ju-counts{grid-template-columns:repeat(3,minmax(0,1fr))}#jarvis-uplisting-page .ju-map{grid-template-columns:1fr}#jarvis-uplisting-page .jb-tools{flex-wrap:wrap}}
+.jarvis-root.jv-light #jarvis-uplisting-page h3,.jarvis-root.jv-light #jarvis-uplisting-page .ju-facts dt{color:var(--jv-text-2)}

@@ -304,11 +304,143 @@ async function relayRoutes(request, env, path, isManager) {
   fail(404, 'Not found');
 }
 
+/* ── Uplisting: manager-only, read-only 2027 preview ───────────────────────────────────────────────────
+   The account API key (Worker secret UPLISTING_API_KEY) is not scoped by Uplisting, so read-only is enforced here:
+   only GET, only the three documented legacy read paths below. Nothing is written to Uplisting or to app data.
+   Only small status metadata (times, outcome, counts; never guest data) is kept, in KV key 'uplisting_status'.
+   Documented limits: 5 requests/s and 100/min per IP, 15/min per property; bookings 50 per page (page is 0-based). */
+const UPLISTING = {base:'https://connect.uplisting.io', perPage:50, maxPages:20, maxRequests:40, gapMs:250, timeoutMs:15000, retries:2, maxWaitMs:8000, cooldownMs:20000, statusKey:'uplisting_status'};
+const UP_READ_PATHS = [/^\/users\/me$/, /^\/properties$/, /^\/bookings\/\d{1,12}$/];
+let upFetch = (...args) => fetch(...args), upSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+/* Tests only: mocked Uplisting responses and an instant clock. Production never calls this. */
+export function setUplistingForTests(options = {}) { upFetch = options.fetch || ((...args) => fetch(...args)); upSleep = options.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))); }
+class UpError extends Error { constructor(kind, message) { super(message); this.kind = kind; } }
+/* Stays overlapping the year (checkout exclusive). Bookings are fetched from three months earlier so stays that
+   arrive in late 2026 and cross into January are found whether Uplisting filters by arrival or by stay. */
+export function uplistingScope(year) {
+  return {year, overlapStart:year + '-01-01', overlapEnd:year + '-12-31', windows:[{from:(year - 1) + '-10-01', to:year + '-07-01'}, {from:year + '-07-01', to:(year + 1) + '-01-01'}]};
+}
+async function upGet(env, path, query, budget) {
+  if (!UP_READ_PATHS.some(rule => rule.test(path))) throw new UpError('blocked', 'Only documented read requests are allowed.');
+  const url = new URL(UPLISTING.base + path);
+  for (const [key, value] of Object.entries(query || {})) url.searchParams.set(key, String(value));
+  for (let attempt = 0; ; attempt++) {
+    if (budget.count >= UPLISTING.maxRequests) throw new UpError('budget', 'The request limit for one retrieval was reached.');
+    if (budget.count) await upSleep(UPLISTING.gapMs);
+    budget.count++;
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), UPLISTING.timeoutMs);
+    let response = null, retry = '', wait = 1000 * (attempt + 1) * (attempt + 1);
+    try { response = await upFetch(url.toString(), {method:'GET', headers:{Authorization:'Basic ' + btoa(String(env.UPLISTING_API_KEY).trim()), 'Content-Type':'application/json', Accept:'application/json'}, signal:controller.signal}); }
+    catch { retry = 'timeout'; }
+    finally { clearTimeout(timer); }
+    if (response) {
+      if (response.status === 200) { try { return await response.json(); } catch { throw new UpError('invalid', 'Uplisting returned an unreadable response.'); } }
+      if (response.status === 401) throw new UpError('auth', 'Uplisting did not accept the API key.');
+      if (response.status === 403) throw new UpError('forbidden', 'Uplisting refused access to this data.');
+      if (response.status === 404) throw new UpError('not_found', 'Uplisting could not find this property.');
+      if (response.status === 429) { retry = 'rate_limited'; const after = Number(response.headers.get('Retry-After')); if (Number.isFinite(after) && after > 0) wait = after * 1000; }
+      else if (response.status >= 500) retry = 'unavailable';
+      else throw new UpError('http', 'Uplisting returned an unexpected response (' + response.status + ').');
+    }
+    if (attempt >= UPLISTING.retries || wait > UPLISTING.maxWaitMs) throw new UpError(retry, retry === 'rate_limited' ? 'Uplisting asked us to slow down. Try again in a minute.' : retry === 'timeout' ? 'Uplisting did not answer in time.' : 'Uplisting is temporarily unavailable.');
+    await upSleep(wait);
+  }
+}
+const upText = value => typeof value === 'string' ? value : value == null ? null : String(value);
+/* Only the fields the preview needs. Guest email, phone and lock codes are never returned. A field absent from the
+   response is left out (missing); null stays null (unknown); 0 stays 0. */
+export function normaliseReservation(raw) {
+  const out = {id:upText(raw?.id), propertyId:upText(raw?.property_id), propertyName:upText(raw?.property_name), checkIn:upText(raw?.check_in), checkOut:upText(raw?.check_out), status:upText(raw?.status), channel:upText(raw?.channel), guestName:upText(raw?.guest_name)};
+  const optional = {arrivalTime:'arrival_time', departureTime:'departure_time', externalReservationId:'external_reservation_id', currency:'currency', bookedAt:'booked_at', multiUnitName:'multi_unit_name'};
+  for (const [key, source] of Object.entries(optional)) if (raw && Object.prototype.hasOwnProperty.call(raw, source)) out[key] = upText(raw[source]);
+  const numbers = {nights:['number_of_nights'], guests:['number_of_guests'], accommodationTotal:['accomodation_total', 'accommodation_total'], cleaningFee:['cleaning_fee'], totalPayout:['total_payout']};
+  for (const [key, sources] of Object.entries(numbers)) {
+    const source = sources.find(name => raw && Object.prototype.hasOwnProperty.call(raw, name)); if (!source) continue;
+    const value = raw[source]; out[key] = value === null ? null : typeof value === 'number' && Number.isFinite(value) ? value : null;
+    if (value !== null && !(typeof value === 'number' && Number.isFinite(value))) (out.invalid = out.invalid || []).push(key);
+  }
+  return out;
+}
+export async function retrieveUplisting(env, year) {
+  const scope = uplistingScope(year), budget = {count:0}, problems = [], byId = new Map();
+  const result = {service:'uplisting', readOnly:true, ok:false, complete:false, retrievedAt:new Date().toISOString(), scope:{year, overlapStart:scope.overlapStart, overlapEnd:scope.overlapEnd, fetchFrom:scope.windows[0].from, fetchTo:scope.windows.at(-1).to}, account:null, properties:[], reservations:[], outsideScope:0, duplicatesMerged:0, problems, requests:0};
+  try {
+    const me = await upGet(env, '/users/me', null, budget);
+    result.account = {name:upText(me?.name) || ''};
+    const listing = await upGet(env, '/properties', null, budget);
+    if (!Array.isArray(listing?.data)) throw new UpError('invalid', 'Uplisting returned no property list.');
+    if (listing.links?.next) problems.push({kind:'incomplete', message:'Uplisting reported more property pages than this preview reads.'});
+    result.properties = listing.data.map(p => ({id:upText(p?.id), name:upText(p?.attributes?.name) || '', nickname:upText(p?.attributes?.nickname) || ''})).filter(p => /^\d{1,12}$/.test(p.id || ''));
+    for (const property of result.properties) {
+      let failed = false;
+      for (const window of scope.windows) {
+        if (failed) break;
+        let received = 0, total = null, pages = null;
+        for (let page = 0; pages === null || page < pages; page++) {
+          if (page >= UPLISTING.maxPages) { problems.push({kind:'incomplete', propertyId:property.id, message:'Too many booking pages for one retrieval.'}); failed = true; break; }
+          let body;
+          try { body = await upGet(env, '/bookings/' + property.id, {from:window.from, to:window.to, page, per_page:UPLISTING.perPage}, budget); }
+          catch (error) { if (error.kind === 'auth' || error.kind === 'budget') throw error; problems.push({kind:error.kind || 'error', propertyId:property.id, message:error.message}); failed = true; break; }
+          const rows = body?.bookings, meta = body?.meta;
+          if (!Array.isArray(rows) || !meta || !Number.isInteger(meta.total_pages) || meta.total_pages < 0) { problems.push({kind:'incomplete', propertyId:property.id, message:'Uplisting did not report how many booking pages there are.'}); failed = true; break; }
+          pages = meta.total_pages; if (Number.isInteger(meta.total)) total = meta.total;
+          if (!rows.length && page < pages - 1) { problems.push({kind:'incomplete', propertyId:property.id, message:'A booking page came back empty before the last page.'}); failed = true; break; }
+          received += rows.length;
+          for (const raw of rows) {
+            const item = normaliseReservation(raw), key = item.id || 'missing:' + property.id + ':' + byId.size;
+            if (!item.propertyId) item.propertyId = property.id;
+            const prior = byId.get(key);
+            if (prior) { if (JSON.stringify(prior) === JSON.stringify(item)) result.duplicatesMerged++; else (prior.conflicts = prior.conflicts || []).push('Uplisting returned this reservation twice with different details.'); }
+            else byId.set(key, item);
+          }
+        }
+        if (!failed && total !== null && received !== total) { problems.push({kind:'incomplete', propertyId:property.id, message:'Uplisting reported ' + total + ' bookings but returned ' + received + '.'}); failed = true; }
+      }
+      if (failed) property.incomplete = true;
+    }
+    const overlaps = r => /^\d{4}-\d{2}-\d{2}$/.test(r.checkIn || '') && /^\d{4}-\d{2}-\d{2}$/.test(r.checkOut || '') && r.checkIn <= scope.overlapEnd && r.checkOut > scope.overlapStart;
+    for (const item of byId.values()) {
+      const datesValid = /^\d{4}-\d{2}-\d{2}$/.test(item.checkIn || '') && /^\d{4}-\d{2}-\d{2}$/.test(item.checkOut || '');
+      if (!datesValid || overlaps(item)) result.reservations.push(item); else result.outsideScope++;
+    }
+    result.ok = true; result.complete = !problems.length;
+  } catch (error) {
+    result.ok = false; result.error = {kind:error instanceof UpError ? error.kind : 'error', message:error instanceof UpError ? error.message : 'The Uplisting retrieval failed.'};
+    result.reservations = []; result.properties = result.properties.map(({id, name, nickname}) => ({id, name, nickname}));
+  }
+  result.requests = budget.count;
+  return result;
+}
+async function upStatus(env) { try { return JSON.parse(await env.DB.get(UPLISTING.statusKey) || 'null') || {}; } catch { return {}; } }
+async function uplistingRoutes(request, env, path, isManager) {
+  if (!path.startsWith('/api/uplisting/')) return null;
+  if (!isManager) fail(401, 'Unauthorized');
+  const configured = !!String(env.UPLISTING_API_KEY || '').trim();
+  if (path === '/api/uplisting/status' && request.method === 'GET') return Response.json({service:'uplisting', readOnly:true, configured, sync:'off', ...(await upStatus(env))});
+  if (path === '/api/uplisting/preview' && request.method === 'GET') {
+    const year = Number(new URL(request.url).searchParams.get('year'));
+    if (year !== 2027) fail(400, 'This preview covers 2027 only');
+    if (!configured) return Response.json({service:'uplisting', readOnly:true, configured:false, ok:false, complete:false, error:{kind:'not_configured', message:'The Uplisting API key has not been added to the cloud service yet.'}});
+    const status = await upStatus(env), now = Date.now();
+    if (status.lastAttemptAt && now - Date.parse(status.lastAttemptAt) < UPLISTING.cooldownMs) fail(429, 'A retrieval ran moments ago. Wait a few seconds and try again.');
+    await env.DB.put(UPLISTING.statusKey, JSON.stringify({...status, lastAttemptAt:new Date(now).toISOString()}));
+    const result = await retrieveUplisting(env, year);
+    const outcome = !result.ok ? (result.error?.kind === 'auth' ? 'auth_failed' : 'failed') : result.complete ? 'complete' : 'incomplete';
+    const next = {...status, lastAttemptAt:new Date(now).toISOString(), lastOutcome:outcome, lastMessage:result.ok ? (result.complete ? '' : 'Retrieval was incomplete.') : result.error.message, lastReservations:result.reservations.length, lastRequests:result.requests};
+    if (outcome === 'complete') next.lastSuccessAt = result.retrievedAt;
+    await env.DB.put(UPLISTING.statusKey, JSON.stringify(next));
+    /* Upstream failures are reported in the body (ok:false) so they cannot be mistaken for a Seravillas sign-in problem. */
+    return Response.json({...result, configured:true, lastSuccessAt:next.lastSuccessAt || ''});
+  }
+  fail(405, 'Method not allowed');
+}
+
 async function routes(request,env) {
   const url=new URL(request.url), path=url.pathname.replace(/\/$/,'') || '/';
   const isManager=manager(request,env);
   if (path==='/' && !isManager) fail(401,'Unauthorized');
   const relay=await relayRoutes(request,env,path,isManager); if(relay) return relay;
+  const uplisting=await uplistingRoutes(request,env,path,isManager); if(uplisting) return uplisting;
   if (path==='/api/admin/capabilities') { if(!isManager) fail(401,'Unauthorized'); return Response.json({cleanerAccess:!!env.STAFF_DB && !!await snapshot(db(env)),versionedSync:!!env.STAFF_DB && !!await snapshot(db(env))}); }
   if (path==='/api/admin/migrate' && request.method==='POST') {
     if(!isManager) fail(401,'Unauthorized');
