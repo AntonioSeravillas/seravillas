@@ -89,7 +89,8 @@ test('duplicate or late recognizer callbacks are consumed once; an empty transcr
 });
 
 /* Desktop overlay with a fake DOM, fake speech recognizer, fake TTS and fake timers. No real microphone or network. */
-function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,fishSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null,voiceChoice=liveSdk?'live':customSpeech?'elevenlabs':null,voiceStorage=null}={}){
+function fixedClock(at){const ms=new Date(at).getTime();return class FixedDate extends Date{constructor(...a){if(a.length)super(...a);else super(ms);}static now(){return ms;}};}
+function desktopRuntime({reply='First sentence. Second sentence.',route=null,desktop=true,reduced=true,geometry=null,speechGate=false,agent=false,customSpeech=false,fishSpeech=false,iosDevice=false,capture=null,unlock=null,whatsappFetch=null,understand=null,speechError='',recognitionStarts=true,liveSdk=null,healthGate=null,voiceChoice=liveSdk?'live':customSpeech?'elevenlabs':null,voiceStorage=null,clock=null}={}){
   const savedVoice=voiceStorage||new Map(voiceChoice?[['sv_jarvis_voice',voiceChoice]]:[]);
   const timers=new Map(),els=new Map(),recs=[],utterances=[],primes=[],spoken=[],audioEvents=[],audios=[],speechRequests=[],wa={open:[],close:0},winListeners={},rafs=[];let n=0,root=null,waOpen=null,isDesktop=desktop,inGesture=false,speechUnlocked=false;
   /* Fake elements; with `geometry` every element reports that rectangle (tests can override single elements). */
@@ -106,7 +107,8 @@ function desktopRuntime({reply='First sentence. Second sentence.',route=null,des
   class FakeSR{constructor(){recs.push(this);this.aborted=false;}start(){audioEvents.push('record');if(recognitionStarts)this.onstart?.();}stop(){this.onend?.();}abort(){this.aborted=true;}}
   class FakeUtterance{constructor(text){this.text=text;(text.trim()?utterances:primes).push(this);}}
   class FakeAudio{constructor(){this.src='';audios.push(this);}setAttribute(){}removeAttribute(){this.src='';}play(){return this.src.startsWith('data:')&&unlock?unlock:Promise.resolve();}pause(){}load(){}}
-  const sandbox={console,Date,Math,AbortController,Audio:FakeAudio,Blob,atob,Uint8Array,URL:{createObjectURL:()=>'blob:test',revokeObjectURL(){}},performance:{now:()=>1},navigator:{userAgent:iosDevice?'iPhone AppleWebKit Safari':'test',...(capture?{mediaDevices:{getUserMedia:capture}}:{})},DEV_MODE:true,
+  /* clock: a fixed local reference time (e.g. '2026-10-25T12:00:00') so date-dependent behaviour is tested deliberately. */
+  const sandbox={console,Date:clock?fixedClock(clock):Date,Math,AbortController,Audio:FakeAudio,Blob,atob,Uint8Array,URL:{createObjectURL:()=>'blob:test',revokeObjectURL(){}},performance:{now:()=>1},navigator:{userAgent:iosDevice?'iPhone AppleWebKit Safari':'test',...(capture?{mediaDevices:{getUserMedia:capture}}:{})},DEV_MODE:true,
     document:{addEventListener(){},createElement:()=>fakeEl(),body:{appendChild(c){if(!root)root=c;}},querySelector:s=>s==='.app-wrapper'?background:null,getElementById:()=>null,activeElement:null,hidden:false},
     setTimeout(fn,ms){timers.set(++n,{fn,ms});return n;},clearTimeout(id){timers.delete(id);},requestAnimationFrame(fn){rafs.push(fn);return rafs.length;},cancelAnimationFrame(){},
     addEventListener(t,f){(winListeners[t]=winListeners[t]||[]).push(f);},removeEventListener(t,f){winListeners[t]=(winListeners[t]||[]).filter(x=>x!==f);},
@@ -920,11 +922,11 @@ test('light/dark toggle: dark by default, switches instantly without touching vo
 });
 
 /* ── Weekly cleaning schedule → WhatsApp group draft (FICTIONAL records and chats; WhatsApp is a stand-in; no real send). ── */
-function scheduleRuntime({decisions=[]}={}){
+function scheduleRuntime({decisions=[],clock=null}={}){
   let options;const reviews=[],sends=[],mic=[],vol=[];
   const chats=[{key:'a'.repeat(20),name:'Bex',kind:'direct',detail:'Direct chat · number ending 0001',version:1},{key:'b'.repeat(20),name:'Sample Cleaning Team',kind:'group',detail:'WhatsApp group · 5 members',version:3},{key:'c'.repeat(20),name:'Family',kind:'group',detail:'WhatsApp group · 4 members',version:1}];
   const liveSdk={Conversation:{startSession:async o=>{options=o;return {endSession:async()=>{},setMicMuted:v=>mic.push(v),setVolume:v=>vol.push(v.volume),getInputVolume:()=>0,getOutputVolume:()=>0,sendContextualUpdate(){},sendUserMessage(){}};}}};
-  const app=desktopRuntime({agent:true,desktop:true,liveSdk,understand:async()=>decisions.shift()||{kind:'reply',text:'Okay.'},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
+  const app=desktopRuntime({agent:true,desktop:true,liveSdk,clock,understand:async()=>decisions.shift()||{kind:'reply',text:'Okay.'},whatsappFetch:async(url,init={})=>({ok:true,status:200,json:async()=>{
     if(url.endsWith('/status'))return {available:true,requestToken:'FICTIONAL_SESSION'};
     if(url.includes('/inbox')){const key=(url.match(/[?&]chat=([a-f0-9]{20})/)||[])[1];return {connection:{state:'open'},chats,chat:key?chats.find(c=>c.key===key):undefined,unreadCount:0};}
     const body=JSON.parse(init.body);const chat=chats.find(c=>c.key===body.chat);
@@ -1002,8 +1004,11 @@ test('schedule draft corrections: narrower days keep the recipient and greeting;
   await h.user('Approve and send');assert.equal(h.sends.length,1);assert.equal(h.sends[0].text,narrow);
   h.app.click('close');
 });
-test('schedule edge cases: an empty week drafts nothing; one day keeps the existing daily format; an unsaved plan is named and left out',async()=>{
-  const h=scheduleRuntime({decisions:[{kind:'operation',operation:{action:'plan_checkout_cleanings',scope:'dates',period:'next_week'}}]});
+/* Reference dates where tomorrow is still in this week: an ordinary Wednesday, the Wednesday before New Year (next week
+   is in 2027) and the Saturday of the year-crossing week. Sunday is tested separately below, because there tomorrow IS next week. */
+for(const clock of ['2026-10-21T12:00:00','2026-12-30T12:00:00','2027-01-02T12:00:00'])
+test('schedule edge cases ('+clock.slice(0,10)+'): an empty week drafts nothing; one day keeps the existing daily format; an unsaved plan is named and left out',async()=>{
+  const h=scheduleRuntime({clock,decisions:[{kind:'operation',operation:{action:'plan_checkout_cleanings',scope:'dates',period:'next_week'}}]});
   h.app.run(TASK_STORE+WEEK+"D.sessions=D.sessions.filter(s=>s.id==='out'||s.date===addDays(today(),1));openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
   await h.user('Send next week’s schedule to Sample Cleaning Team.');
   await o.clientTools.whatsapp_request({kind:'write',name:'Sample Cleaning Team',group:true,text:'',schedule:'next week'});await flush();
@@ -1026,6 +1031,22 @@ test('schedule edge cases: an empty week drafts nothing; one day keeps the exist
   h.app.click('close');
 });
 
+/* On a Sunday, tomorrow (Monday) starts next week: next week's schedule includes it and the following week stays out.
+   Also on the Sunday before New Year, where next week runs from December into January. */
+for(const clock of ['2026-10-25T12:00:00','2026-12-27T12:00:00'])
+test('schedule on a Sunday ('+clock.slice(0,10)+'): tomorrow belongs to next week; the week after is left out',async()=>{
+  const h=scheduleRuntime({clock});
+  h.app.run(TASK_STORE+WEEK+"D.sessions=D.sessions.filter(s=>s.id==='out'||s.date===addDays(today(),1));openJarvis()");await flush();h.app.click('mic');await flush();const o=h.options();
+  assert.equal(h.app.run('__mon'),h.app.run('addDays(today(),1)'),'the reference date is a Sunday');
+  // The fixture's exact duplicate is counted once, as in the main schedule test.
+  const expected=h.app.run("D.sessions.filter(s=>s.id!=='dup'&&s.status!=='cancelled'&&s.date>=__mon&&s.date<=addDays(__mon,6)).length");assert.ok(expected>0);
+  await h.user('Send next week’s schedule to Sample Cleaning Team.');
+  await o.clientTools.whatsapp_request({kind:'write',name:'Sample Cleaning Team',group:true,text:'',schedule:'next week'});await flush();
+  assert.equal(h.reviews.length,1,'Monday’s cleanings make next week non-empty');
+  assert.match(h.app.el('jarvis-review-scope').textContent,new RegExp('Next week, Monday \\d+ \\w+ to Sunday \\d+ \\w+ · '+expected+' saved cleaning'));
+  assert.ok(!h.reviews[0].text.includes(h.app.run("fmtDate(addDays(__mon,7))")),'the following week is not included');
+  assert.equal(h.sends.length,0);h.app.click('close');
+});
 test('Properties page: the tab and the live voice event path open it inside Jarvis, it survives replies, property questions reach the record tool, close returns to Overview, drafts survive',async()=>{
   for(const desktop of [true,false]){
     const app=desktopRuntime({desktop}),visited=[],renders=[];app.context.workspaceNavigate=t=>visited.push(t);let resets=0;

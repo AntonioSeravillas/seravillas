@@ -52,12 +52,19 @@
     const outcome={complete:'Last retrieval was complete.',incomplete:'Last retrieval was incomplete.',failed:'Last retrieval failed.',auth_failed:'Uplisting did not accept the API key at the last retrieval.'}[s.lastOutcome]||'No retrieval yet.';
     return '<p class="ju-line">Connected through the cloud service · read-only · sync off</p><p class="ju-line">'+e(outcome)+(s.lastSuccessAt?' Last successful retrieval: '+e(when(s.lastSuccessAt))+'.':' No successful retrieval yet.')+'</p>';
   }
-  function mappingHtml(p){
+  function mappingHtml(p,plan){
     const props=D.props||[],sel=p.state==='ignored'?'@ignore':p.propId;
+    const count=p.incomplete?' · retrieval incomplete for this listing':plan.complete?' · '+p.inScope+(p.inScope===1?' stay':' stays')+' overlapping 2027 returned':'';
+    if(p.suggestion.basis==='confirmed'){
+      const v=(D.props||[]).find(x=>x.id===p.propId),c=p.confirmed;
+      return '<div class="ju-map'+(p.state==='confirmed'?'':' is-open')+'"><div><strong>'+e(p.name||'Unnamed listing')+'</strong>'+(p.nickname&&p.nickname!==p.name?' <span>('+e(p.nickname)+')</span>':'')+'<small>Uplisting listing ID '+e(p.id)+e(count)+'</small></div>'
+        +'<div><strong>'+(v?e(v.name):'Not bound')+'</strong><small>'+(v?'Seravillas villa ID '+e(v.id):e(c.issue))+'</small></div>'
+        +'<small class="ju-basis'+(p.state==='confirmed'?'':' is-warn')+'">Owner-confirmed: '+e(c.pair[0])+' = '+e(c.pair[1])+(p.state==='conflict'?' · another listing also points to this villa':'')+'</small></div>';
+    }
     const basis={exact:'Exact name match — suggested',likely:'Likely match — choose to confirm',uncertain:'Several possible villas — choose one',none:'No matching villa — choose one'}[p.suggestion.basis];
     const state=p.state==='chosen'?'Chosen by you':p.state==='ignored'?'Excluded by you':p.state==='conflict'?'Two listings point to this villa':basis;
     const hint=p.suggestion.basis==='likely'||p.suggestion.basis==='uncertain'?' · possible: '+p.suggestion.candidates.map(id=>e(villa(id))).join(', '):'';
-    return '<div class="ju-map'+(p.propId&&p.state!=='conflict'?'':' is-open')+'"><div><strong>'+e(p.name||'Unnamed listing')+'</strong>'+(p.nickname&&p.nickname!==p.name?' <span>('+e(p.nickname)+')</span>':'')+'<small>Uplisting listing ID '+e(p.id)+(p.incomplete?' · retrieval incomplete':'')+'</small></div>'
+    return '<div class="ju-map'+(p.propId&&p.state!=='conflict'?'':' is-open')+'"><div><strong>'+e(p.name||'Unnamed listing')+'</strong>'+(p.nickname&&p.nickname!==p.name?' <span>('+e(p.nickname)+')</span>':'')+'<small>Uplisting listing ID '+e(p.id)+e(count)+'</small></div>'
       +'<label><span class="ju-sr">Seravillas villa for '+e(p.name)+'</span><select data-up-map="'+e(p.id)+'"><option value="">Choose a villa…</option>'+props.map(v=>'<option value="'+e(v.id)+'"'+(sel===v.id?' selected':'')+'>'+e(v.name)+' · ID '+e(v.id)+'</option>').join('')+'<option value="@ignore"'+(sel==='@ignore'?' selected':'')+'>Not one of these villas</option></select></label>'
       +'<small class="ju-basis'+(p.state==='conflict'||!p.propId&&p.state!=='ignored'?' is-warn':'')+'">'+e(state)+hint+'</small></div>';
   }
@@ -107,7 +114,10 @@
         +'<p class="ju-line">Retrieved '+e(when(resp.retrievedAt))+(resp.account?.name?' · account '+e(resp.account.name):'')+' · '+e(resp.requests)+' read requests'+(resp.duplicatesMerged?' · '+e(resp.duplicatesMerged)+' repeated results merged':'')+'.</p>'
         +(ageMin>=30?'<p class="ju-line is-warn">This retrieval is '+ageMin+' minutes old. Retrieve again for current Uplisting data.</p>':'')+'</section>';
       if(!plan.complete)h+='<section class="ju-card is-warn" role="alert"><h3>Retrieval incomplete</h3><p>This preview is not complete, so it must not be used as a full list. Bookings missing from it are not treated as cancelled.</p><ul>'+plan.problems.map(p=>'<li>'+(p.propertyId?'Listing '+e(p.propertyId)+': ':'')+e(p.message)+'</li>').join('')+'</ul></section>';
-      h+='<section class="ju-card"><h3>Property mapping</h3><p class="ju-line">Each Uplisting listing must point to one existing villa. Exact names are suggested; anything else needs your choice. Villas and nicknames are never created or renamed. Choices are kept on this device for the preview only.</p>'+plan.properties.map(mappingHtml).join('')+'</section>';
+      const cov=plan.coverage;
+      if(!cov||cov.filter!=='includes-earlier-arrivals')h+='<section class="ju-card is-warn"><h3>Coverage not established</h3><p>'+(cov&&cov.filter==='unexpected'?'Uplisting returned bookings outside the requested dates, so how its date filter works is unclear.':'Uplisting’s documentation does not say how its date filter works, and this retrieval returned no stay that proves it.')+' A stay that began before '+e(day(resp.scope.fetchFrom))+' and continues into 2027 may be missing from this preview.</p></section>';
+      else h+='<section class="ju-card"><h3>Coverage</h3><p class="ju-line">Uplisting returned stays that began before the requested start date, so its date filter matches stays, not only arrivals. Stays that began before '+e(day(resp.scope.fetchFrom))+' and continue into 2027 are therefore included.</p></section>';
+      h+='<section class="ju-card"><h3>Property mapping</h3><p class="ju-line">Each Uplisting listing must point to one existing villa. Your four owner-confirmed pairs are built into the app, so every device uses them. Other choices are kept on this device only. Exact names are suggested; anything else needs your choice. Villas, IDs and nicknames are never created, renamed or changed.</p>'+plan.properties.map(p=>mappingHtml(p,plan)).join('')+plan.confirmed.filter(c=>!c.listingIds.length).map(c=>'<div class="ju-map is-open"><div><strong>'+e(c.pair[0])+' = '+e(c.pair[1])+'</strong><small>Owner-confirmed pair</small></div><small class="ju-basis is-warn">'+e(c.issue)+'</small></div>').join('')+'</section>';
       h+='<div class="ju-counts">'+[['review','Needs review'],['new','New'],['update','Updates'],['unchanged','Unchanged'],['cancelled','Cancelled'],['excluded','Excluded']].map(([k,l])=>'<div class="is-'+k+'"><strong>'+plan.counts[k]+'</strong><span>'+l+'</span></div>').join('')+'</div>';
       h+='<div class="ju-toolbar"><button type="button" class="jv-btn'+(st.filter!=='all'?' is-current':'')+'" data-up-filter="attention">Hide unchanged</button><button type="button" class="jv-btn'+(st.filter==='all'?' is-current':'')+'" data-up-filter="all">Show all</button></div>';
       h+=group(plan.rows.filter(x=>x.segment==='arrives'),'Arriving in 2027');

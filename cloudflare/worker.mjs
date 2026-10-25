@@ -315,10 +315,11 @@ let upFetch = (...args) => fetch(...args), upSleep = ms => new Promise(resolve =
 /* Tests only: mocked Uplisting responses and an instant clock. Production never calls this. */
 export function setUplistingForTests(options = {}) { upFetch = options.fetch || ((...args) => fetch(...args)); upSleep = options.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms))); }
 class UpError extends Error { constructor(kind, message) { super(message); this.kind = kind; } }
-/* Stays overlapping the year (checkout exclusive). Bookings are fetched from three months earlier so stays that
-   arrive in late 2026 and cross into January are found whether Uplisting filters by arrival or by stay. */
+/* Stays overlapping the year (checkout exclusive). Uplisting does not document whether from/to match arrival, departure or
+   the whole stay, so the windows reach three months before and after the year, and each retrieval records evidence of
+   the filter's behaviour (see coverage in retrieveUplisting). Coverage is only called established on that evidence. */
 export function uplistingScope(year) {
-  return {year, overlapStart:year + '-01-01', overlapEnd:year + '-12-31', windows:[{from:(year - 1) + '-10-01', to:year + '-07-01'}, {from:year + '-07-01', to:(year + 1) + '-01-01'}]};
+  return {year, overlapStart:year + '-01-01', overlapEnd:year + '-12-31', windows:[{from:(year - 1) + '-10-01', to:year + '-07-01'}, {from:year + '-07-01', to:(year + 1) + '-04-01'}]};
 }
 async function upGet(env, path, query, budget) {
   if (!UP_READ_PATHS.some(rule => rule.test(path))) throw new UpError('blocked', 'Only documented read requests are allowed.');
@@ -362,7 +363,7 @@ export function normaliseReservation(raw) {
   return out;
 }
 export async function retrieveUplisting(env, year) {
-  const scope = uplistingScope(year), budget = {count:0}, problems = [], byId = new Map();
+  const scope = uplistingScope(year), budget = {count:0}, problems = [], byId = new Map(), evidence = {arrivedBeforeWindow:0, departedAfterWindow:0, outsideWindow:0};
   const result = {service:'uplisting', readOnly:true, ok:false, complete:false, retrievedAt:new Date().toISOString(), scope:{year, overlapStart:scope.overlapStart, overlapEnd:scope.overlapEnd, fetchFrom:scope.windows[0].from, fetchTo:scope.windows.at(-1).to}, account:null, properties:[], reservations:[], outsideScope:0, duplicatesMerged:0, problems, requests:0};
   try {
     const me = await upGet(env, '/users/me', null, budget);
@@ -386,6 +387,7 @@ export async function retrieveUplisting(env, year) {
           pages = meta.total_pages; if (Number.isInteger(meta.total)) total = meta.total;
           if (!rows.length && page < pages - 1) { problems.push({kind:'incomplete', propertyId:property.id, message:'A booking page came back empty before the last page.'}); failed = true; break; }
           received += rows.length;
+          for (const raw of rows) { const ci = upText(raw?.check_in), co = upText(raw?.check_out); if (!ci || !co) continue; if (ci < window.from && co > window.from) evidence.arrivedBeforeWindow++; if (co > window.to && ci < window.to) evidence.departedAfterWindow++; if (co <= window.from || ci >= window.to) evidence.outsideWindow++; }
           for (const raw of rows) {
             const item = normaliseReservation(raw), key = item.id || 'missing:' + property.id + ':' + byId.size;
             if (!item.propertyId) item.propertyId = property.id;
@@ -403,6 +405,9 @@ export async function retrieveUplisting(env, year) {
       const datesValid = /^\d{4}-\d{2}-\d{2}$/.test(item.checkIn || '') && /^\d{4}-\d{2}-\d{2}$/.test(item.checkOut || '');
       if (!datesValid || overlaps(item)) result.reservations.push(item); else result.outsideScope++;
     }
+    /* A returned stay that began before a window's start proves the filter is not arrival-only, so a 2027 stay that began
+       before the earliest fetch date is still returned. Without that evidence, coverage is not claimed. */
+    result.coverage = {evidence, earliestFetch:scope.windows[0].from, filter:evidence.outsideWindow ? 'unexpected' : evidence.arrivedBeforeWindow ? 'includes-earlier-arrivals' : 'unconfirmed'};
     result.ok = true; result.complete = !problems.length;
   } catch (error) {
     result.ok = false; result.error = {kind:error instanceof UpError ? error.kind : 'error', message:error instanceof UpError ? error.message : 'The Uplisting retrieval failed.'};

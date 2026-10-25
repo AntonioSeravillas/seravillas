@@ -41,9 +41,27 @@
     if(partial.length===1)return {propId:'',basis:'likely',candidates:[partial[0].id]};
     return {propId:'',basis:partial.length?'uncertain':'none',candidates:partial.map(p=>p.id)};
   }
-  /* mappings[upId] is a Seravillas property ID, '@ignore' (not one of these villas), or absent (use the exact suggestion). */
+  /* Owner-confirmed equivalent names (25 October 2026). Either name may be the Uplisting one or the Seravillas one, so a
+     pair binds only when exactly one Uplisting listing carries one of its names and exactly one Seravillas villa carries
+     one of its names. A missing or ambiguous name flags that pair; nothing is guessed. Part of the app, so the same on
+     every device; villas, IDs and nickname memory are never changed. */
+  const CONFIRMED=Object.freeze([['Villa Lumina','Villa Mar'],['Villa Escondido','Villa Marjals'],['Villa Terra','La Forca'],['Villa Vertice','Villa Diagonal']]);
+  const same=(a,b)=>!!norm(a)&&norm(a)===norm(b);
+  function confirmedPairs(upProps,props){
+    return CONFIRMED.map(pair=>{
+      const listings=(upProps||[]).filter(up=>pair.some(n=>same(up.name,n)||same(up.nickname,n)));
+      const villas=props.filter(p=>pair.some(n=>same(p.name,n)));
+      const issue=!listings.length?'No Uplisting listing is named '+pair.join(' or ')+'.':listings.length>1?'Several Uplisting listings are named '+pair.join(' or ')+'.':!villas.length?'No Seravillas villa is named '+pair.join(' or ')+'.':villas.length>1?'Several Seravillas villas are named '+pair.join(' or ')+'.':'';
+      return {pair,listingIds:listings.map(x=>x.id),propIds:villas.map(x=>x.id),issue,bound:!issue};
+    });
+  }
+  /* mappings[upId] is a Seravillas property ID, '@ignore' (not one of these villas), or absent (use the exact suggestion).
+     An owner-confirmed pair takes precedence over a device choice. */
   function mapProperties(upProps,props,mappings){
+    const pairs=confirmedPairs(upProps,props);
     const rows=(upProps||[]).map(up=>{
+      const pair=pairs.find(p=>p.listingIds.includes(up.id));
+      if(pair){const propId=pair.bound?pair.propIds[0]:'';return {...up,suggestion:{propId,basis:'confirmed',candidates:pair.propIds},propId,state:pair.bound?'confirmed':'unmapped',confirmed:pair};}
       const s=suggestProperty(up,props),chosen=has(mappings,up.id)?mappings[up.id]:'';
       let propId=chosen==='@ignore'?'':chosen||s.propId,state=chosen==='@ignore'?'ignored':chosen?'chosen':s.propId?'suggested':'unmapped';
       if(propId&&!props.some(p=>p.id===propId)){propId='';state='unmapped';}
@@ -63,6 +81,7 @@
       outsideScope:(response&&response.outsideScope)||0,canApply:false};
     if(!out.ok)return out;
     out.properties=mapProperties(response.properties,props,options.mappings||{});
+    out.confirmed=confirmedPairs(response.properties,props);out.coverage=response.coverage||null;
     const byUp=new Map(out.properties.map(p=>[p.id,p])),incompleteProps=new Set((response.properties||[]).filter(p=>p.incomplete).map(p=>p.id));
     const seen=new Map(),claimed=new Map();
     for(const r of response.reservations||[]){
@@ -81,7 +100,7 @@
       if(Array.isArray(r.conflicts)&&r.conflicts.length){row.kind='review';row.reason=r.conflicts[0];continue;}
       const map=byUp.get(text(r.propertyId));
       if(map&&map.state==='ignored'){row.kind='excluded';row.reason='Listing marked as not one of these villas.';continue;}
-      if(!map||!map.propId){row.kind='review';row.reason='Choose the Seravillas villa for this Uplisting listing.';continue;}
+      if(!map||!map.propId){row.kind='review';row.reason=map&&map.confirmed?map.confirmed.issue:'Choose the Seravillas villa for this Uplisting listing.';continue;}
       if(map.state==='conflict'){row.kind='review';row.reason='Two Uplisting listings point to the same villa. Check the property mapping.';continue;}
       row.propId=map.propId;
       if(Array.isArray(r.invalid)&&r.invalid.length)row.warnings.push('Unreadable value for: '+r.invalid.join(', ')+'. Treated as unknown.');
@@ -133,11 +152,12 @@
       if(!row.platform)row.warnings.push('Uplisting did not say which channel this came from.');
     }
     for(const row of out.rows)out.counts[row.kind]++;
+    for(const p of out.properties)p.inScope=out.rows.filter(x=>text(x.r.propertyId)===p.id&&x.segment).length;
     // Seravillas bookings in scope that Uplisting did not return: information only, never a cancellation.
     const mapped=new Map(out.properties.filter(p=>p.propId&&p.state!=='conflict').map(p=>[p.propId,p.id]));
     out.seravillasOnly=bookings.filter(b=>mapped.has(b.propId)&&b.status!=='cancelled'&&validDate(b.checkIn)&&validDate(b.checkOut)&&b.checkIn<endExclusive&&b.checkOut>start&&!claimed.has(b.id)&&!out.rows.some(x=>x.candidates.includes(b.id)))
       .map(b=>({booking:b,comparable:out.complete&&!incompleteProps.has(mapped.get(b.propId))}));
     return out;
   }
-  root.SV_UPLISTING=Object.freeze({plan,suggestProperty,mapProperties,platform,existingReference,validDate,ACTIVE});
+  root.SV_UPLISTING=Object.freeze({plan,CONFIRMED,confirmedPairs,suggestProperty,mapProperties,platform,existingReference,validDate,ACTIVE});
 })(typeof window!=='undefined'?window:globalThis);

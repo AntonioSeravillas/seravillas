@@ -116,7 +116,7 @@ function records(){
 test('property mapping: exact alias match suggested, partial match needs a choice, explicit choices and conflicts; aliases untouched',()=>{
   const d=records(),before=JSON.stringify(d);
   let p=P.plan(resp([]),d);const by=id=>p.properties.find(x=>x.id===id);
-  assert.deepEqual([by('101').propId,by('101').state],['mar','suggested']);
+  assert.deepEqual([by('101').propId,by('101').state],['mar','confirmed'],'Villa Mar is in an owner-confirmed pair');
   assert.deepEqual([by('102').propId,by('102').suggestion.basis],['marjals','exact'],'Can Marjals is a saved alias of Villa Marjals');
   assert.deepEqual([by('103').propId,by('103').suggestion.basis,by('103').suggestion.candidates],['','likely',['diag']],'a partial name is never applied by itself');
   p=P.plan(resp([r(30,'103','2027-07-01','2027-07-03')]),d);assert.equal(p.rows[0].kind,'review');assert.match(p.rows[0].reason,/Choose the Seravillas villa/);
@@ -175,4 +175,37 @@ test('missing, unknown and zero values stay distinct; prices are not payments; a
   assert.ok(row.warnings.some(w=>/Guest count is unknown/.test(w)));
   assert.equal(p.rows[1].kind,'review');assert.match(p.rows[1].reason,/Guest name is missing/);
   assert.deepEqual(P.platform('booking_dot_com'),{platform:'booking',agencyName:''});assert.deepEqual(P.platform('vrbo'),{platform:'agency',agencyName:'vrbo'});
+});
+test('owner-confirmed pairs bind by exact name in either direction; a missing or ambiguous name is flagged, never guessed',()=>{
+  const props=[{id:'p-mar',name:'Villa Mar'},{id:'p-marjals',name:'Villa Marjals'},{id:'p-forca',name:'La Forca'},{id:'p-diag',name:'Villa Diagonal'},{id:'p-vall',name:'Can Vallori'}];
+  const d={props,bookings:[],sessions:[]},before=JSON.stringify(d);
+  // Uplisting carries the new names; Seravillas the old ones.
+  let p=P.plan(resp([r(1,'201','2027-03-01','2027-03-05')],{properties:[{id:'201',name:'Villa Lumina'},{id:'202',name:'Villa Escondido'},{id:'203',name:'Villa Terra'},{id:'204',name:'Villa Vertice'},{id:'205',name:'Can Vallori'}]}),d,{mappings:{'201':'p-vall'}});
+  const by=id=>p.properties.find(x=>x.id===id);
+  assert.deepEqual(['201','202','203','204'].map(id=>[by(id).propId,by(id).state]),[['p-mar','confirmed'],['p-marjals','confirmed'],['p-forca','confirmed'],['p-diag','confirmed']]);
+  assert.equal(by('201').propId,'p-mar','an owner-confirmed pair outranks an older device choice');
+  assert.deepEqual([by('205').propId,by('205').state],['p-vall','suggested'],'other villas keep the existing mapping flow');
+  assert.ok(p.confirmed.every(c=>c.bound));assert.equal(p.rows[0].propId,'p-mar');assert.equal(by('201').inScope,1);
+  // The other direction: Uplisting uses the old name, Seravillas the new one.
+  p=P.plan(resp([],{properties:[{id:'301',name:'Mar beach house',nickname:'Villa Mar'}]}),{props:[{id:'q',name:'Villa Lumina'}],bookings:[],sessions:[]});
+  assert.deepEqual([p.properties[0].propId,p.properties[0].state],['q','confirmed'],'a nickname counts as the listing name');
+  // Missing and ambiguous names: flagged per pair.
+  p=P.plan(resp([r(2,'401','2027-03-01','2027-03-05')],{properties:[{id:'401',name:'Villa Lumina'},{id:'402',name:'Villa Escondido'},{id:'403',name:'Villa Marjals'}]}),{props:[{id:'a',name:'Villa Mar'},{id:'b',name:'Villa Mar'},{id:'c',name:'Villa Marjals'}],bookings:[],sessions:[]});
+  const c=p.confirmed;
+  assert.match(c[0].issue,/Several Seravillas villas are named Villa Lumina or Villa Mar/);assert.equal(p.properties.find(x=>x.id==='401').propId,'');
+  assert.match(c[1].issue,/Several Uplisting listings are named Villa Escondido or Villa Marjals/);
+  assert.match(c[2].issue,/No Uplisting listing is named Villa Terra or La Forca/);
+  assert.equal(p.rows[0].kind,'review');assert.match(p.rows[0].reason,/Several Seravillas villas/);
+  assert.equal(JSON.stringify(d),before,'no villa, ID or alias changed');
+});
+test('coverage evidence: a returned stay that began before the window start establishes coverage; otherwise it is not claimed',async()=>{
+  const run=async list=>{const h=setup(uplisting({properties:[{id:101,name:'Villa Mar'}],bookings:{101:list}}));return (await(await h.manager('/api/uplisting/preview?year=2027')).json()).coverage;};
+  // The mock filters by overlap, so a stay crossing a window start is returned: established.
+  let cov=await run([reservation(1,101,'2026-09-20','2026-10-04'),reservation(2,101,'2027-03-01','2027-03-05')]);
+  assert.equal(cov.filter,'includes-earlier-arrivals');assert.ok(cov.evidence.arrivedBeforeWindow>=1);assert.equal(cov.earliestFetch,'2026-10-01');
+  cov=await run([reservation(2,101,'2027-03-01','2027-03-05')]);assert.equal(cov.filter,'unconfirmed','no straddling stay: no claim');
+  // Uplisting returning dates outside the request makes the filter unclear.
+  const odd=uplisting({properties:[{id:101,name:'Villa Mar'}],bookings:{}});const base=odd.fetch;
+  const h=setup({calls:odd.calls,fetch:async(url,init)=>{const u=new URL(url);if(u.pathname==='/bookings/101')return Response.json({bookings:[reservation(9,101,'2025-01-01','2025-01-05')],meta:{total_pages:1,total:1}});return base(url,init);}});
+  const body=await(await h.manager('/api/uplisting/preview?year=2027')).json();assert.equal(body.coverage.filter,'unexpected');assert.equal(body.reservations.length,0);
 });

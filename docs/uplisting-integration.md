@@ -31,7 +31,7 @@ The integration uses the **legacy account API key**, sent as `Authorization: Bas
 ## Retrieval rules
 
 - **Account and listings:** `/users/me` verifies the key, then `/properties` lists the listings.
-- **Bookings per listing:** two windows are read, `2026-10-01 → 2027-07-01` and `2027-07-01 → 2028-01-01`. Every page is read: the page number is 0-based, with 50 per page, until `meta.total_pages`.
+- **Bookings per listing:** two windows are read, `2026-10-01 → 2027-07-01` and `2027-07-01 → 2028-04-01`. Every page is read: the page number is 0-based, with 50 per page, until `meta.total_pages`.
   - The received count must equal `meta.total`.
   - Results are merged by Uplisting reservation ID.
   - If the same ID comes back with different details, it is flagged.
@@ -45,18 +45,26 @@ The integration uses the **legacy account API key**, sent as `Authorization: Bas
   - Any other per-listing failure marks the preview **incomplete**. The app then warns that the preview is not complete, and does not use absence as evidence of anything.
 - **Documented limits:** 5 requests per second and 100 per minute per IP, and 15 per minute per property. The Worker's outgoing IP addresses are shared Cloudflare addresses, so a 429 is possible even with careful pacing. It is reported as an incomplete preview.
 
-**Known data-coverage limits:**
-- The documentation does not say whether `from`/`to` filter by arrival, departure or overlapping stay. Fetching from 1 October 2026 covers late-2026 arrivals in every case. A stay arriving before 1 October 2026 and lasting into 2027 would be missed if Uplisting filters by arrival.
+**Coverage evidence:**
+- The documentation (checked again on 25 October 2026) does not say whether `from`/`to` filter by arrival, departure or overlapping stay.
+- Each retrieval therefore records evidence in `coverage`: how many returned stays began before a window's start, ended after its end, or fell outside it.
+- **Established:** at least one returned stay began before a window's start. The filter is then not arrival-only, so a 2027 stay that began before 1 October 2026 is still returned, whether Uplisting filters by overlap or by departure.
+- **Not established:** no such stay was returned, or stays outside the requested dates came back. The preview then shows **Coverage not established** and does not claim completeness.
+- Coverage is separate from retrieval completeness. A complete retrieval with zero stays for a villa is shown as zero. An incomplete one is never shown as zero.
 - `/properties` pagination is not documented. A `links.next` value marks the preview incomplete.
 - The first real retrieval should be compared with the Uplisting calendar for one villa.
 
 ## Preview and matching (`src/imports/uplisting-bookings.js`)
 
 **Property mapping:**
+- **Owner-confirmed pairs** (25 October 2026): Villa Lumina = Villa Mar, Villa Escondido = Villa Marjals, Villa Terra = La Forca, Villa Vertice = Villa Diagonal.
+  - Either name may be the Uplisting or the Seravillas one. A pair binds only when exactly one Uplisting listing (name or nickname) and exactly one Seravillas villa carry one of its names.
+  - A missing or ambiguous name flags that pair and leaves the listing unmapped.
+  - The pairs are part of the app code (`CONFIRMED` in `src/imports/uplisting-bookings.js`), so every device uses them. They outrank any older device choice. Both names and both IDs are shown.
 - An exact name or nickname match is suggested. It is alias-aware: it reads the Excel importer's fixed alias list.
 - A partial match is only "likely" and needs an explicit choice. So does a match to several villas.
 - Two listings mapped to one villa is a conflict.
-- Choices are stored only in this browser (`<DB>_uplistingMappings`). They are never stored in app data, aliases or villas.
+- Other mapping choices are stored only in this browser (`<DB>_uplistingMappings`), so they are device-local. They are never stored in app data, aliases or villas.
 
 **Identity**, strongest first. All years of the same villa are searched.
 1. The stable Uplisting reservation ID (`booking.uplisting.reservationId`). A future approved import will write it.
@@ -113,6 +121,10 @@ Defined conflict resolutions:
    - flags only for cleaning review
 5. **Decide price handling:** which Uplisting amount, if any, maps to `totalPrice`.
 6. **Continuous sync:** Uplisting recommends webhooks (`booking_created`, `booking_updated`, `booking_cancelled`). They are registered with the legacy key, and their signatures must be verified. Each webhook should be stored as a pending review item, not applied directly. A bounded daily reconciliation should only report differences.
+
+## Future guest-service requests
+
+Monitoring guest messages (for example, requests for extra services) is not part of this integration. It would need V3 OAuth with `messaging:read`; the legacy key used here has no messaging endpoints. That access must be requested and checked separately, and its read scope verified on its own, before any such feature is designed.
 
 ## Owner setup (no secrets in chat)
 
